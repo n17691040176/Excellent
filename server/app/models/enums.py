@@ -1,0 +1,138 @@
+﻿from enum import StrEnum
+
+
+class GlobalRole(StrEnum):
+    SUPER_ADMIN = 'SUPER_ADMIN'
+    TEAM_ADMIN = 'TEAM_ADMIN'
+    USER = 'USER'
+
+
+class BusinessIdentity(StrEnum):
+    NORMAL_MEMBER = 'NORMAL_MEMBER'
+    SUPPLIER = 'SUPPLIER'
+    COUNTY_AGENT = 'COUNTY_AGENT'
+    CITY_AGENT = 'CITY_AGENT'
+    LOCAL_MERCHANT = 'LOCAL_MERCHANT'
+
+
+class UserStatus(StrEnum):
+    ENABLED = 'ENABLED'
+    DISABLED = 'DISABLED'
+
+
+class TeamStatus(StrEnum):
+    ACTIVE = 'ACTIVE'
+    DISBANDED = 'DISBANDED'
+
+
+class TeamRole(StrEnum):
+    OWNER = 'OWNER'
+    MEMBER = 'MEMBER'
+
+
+class CommissionStatus(StrEnum):
+    FROZEN = 'FROZEN'
+    SETTLED = 'SETTLED'
+    CANCELED = 'CANCELED'
+
+
+class WithdrawStatus(StrEnum):
+    PENDING = 'PENDING'
+    APPROVED = 'APPROVED'
+    REJECTED = 'REJECTED'
+    PAID = 'PAID'
+
+
+class WithdrawType(StrEnum):
+    COMMISSION = 'COMMISSION'
+    BALANCE = 'BALANCE'
+    POINTS = 'POINTS'
+
+
+class AssetType(StrEnum):
+    BALANCE = 'BALANCE'
+    POINTS = 'POINTS'
+    VOUCHER = 'VOUCHER'
+    AI_COUPON = 'AI_COUPON'
+
+
+class AssetDirection(StrEnum):
+    INCOME = 'INCOME'
+    EXPENSE = 'EXPENSE'
+
+
+class ProductType(StrEnum):
+    PHYSICAL = 'PHYSICAL'
+    PACKAGE = 'PACKAGE'
+    SERVICE = 'SERVICE'
+    ACTIVITY = 'ACTIVITY'
+
+
+class ProductOwnerType(StrEnum):
+    SELF_OPERATED = 'SELF_OPERATED'
+    SUPPLIER = 'SUPPLIER'
+    LOCAL_MERCHANT = 'LOCAL_MERCHANT'
+
+
+class ZoneType(StrEnum):
+    REPURCHASE = 'REPURCHASE'
+    SELF_OPERATED = 'SELF_OPERATED'
+    HOT_SALE = 'HOT_SALE'
+    LOCAL_LIFE = 'LOCAL_LIFE'
+
+
+class ProductStatus(StrEnum):
+    DRAFT = 'DRAFT'
+    PENDING_REVIEW = 'PENDING_REVIEW'
+    APPROVED = 'APPROVED'
+    REJECTED = 'REJECTED'
+    ON_SHELF = 'ON_SHELF'
+    OFF_SHELF = 'OFF_SHELF'
+
+
+class OrderType(StrEnum):
+    NORMAL_PRODUCT = 'NORMAL_PRODUCT'
+    PACKAGE_ORDER = 'PACKAGE_ORDER'
+    REPURCHASE_ORDER = 'REPURCHASE_ORDER'
+    SELF_OPERATED_ORDER = 'SELF_OPERATED_ORDER'
+    HOT_SALE_ORDER = 'HOT_SALE_ORDER'
+    LOCAL_LIFE_ORDER = 'LOCAL_LIFE_ORDER'
+    SUPPLIER_ENTRY_ORDER = 'SUPPLIER_ENTRY_ORDER'
+
+
+class OrderStatus(StrEnum):
+    CREATED = 'CREATED'
+    PAID = 'PAID'
+    CONFIRMED = 'CONFIRMED'
+    CLOSED = 'CLOSED'
+    REFUNDED = 'REFUNDED'
+
+
+class PayStatus(StrEnum):
+    UNPAID = 'UNPAID'
+    PAID = 'PAID'
+    REFUNDED = 'REFUNDED'
+
+
+class QualificationStatus(StrEnum):
+    PENDING = 'PENDING'
+    APPROVED = 'APPROVED'
+    REJECTED = 'REJECTED'
+
+
+class QualificationType(StrEnum):
+    ENTRY_FEE = 'ENTRY_FEE'
+    PACKAGE_QUOTA = 'PACKAGE_QUOTA'
+    AGENT_QUALIFICATION = 'AGENT_QUALIFICATION'
+
+
+class SupplierStatus(StrEnum):
+    PENDING = 'PENDING'
+    APPROVED = 'APPROVED'
+    REJECTED = 'REJECTED'
+    ACTIVE = 'ACTIVE'
+
+
+class AgentLevelCode(StrEnum):
+    COUNTY_AGENT = 'COUNTY_AGENT'
+    CITY_AGENT = 'CITY_AGENT'
