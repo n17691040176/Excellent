@@ -1,0 +1,100 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: excellent-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: excellent_app
+      MYSQL_USER: excellent
+      MYSQL_PASSWORD: excellent123
+    ports:
+      - "3306:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: excellent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  server:
+    build:
+      context: ./server
+    container_name: excellent-server
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: excellent
+      MYSQL_PASSWORD: excellent123
+      MYSQL_DB: excellent_app
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      CORS_ORIGINS: http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+
+  admin-web:
+    build:
+      context: ./admin-web
+      args:
+        VITE_API_BASE_URL: ${PUBLIC_API_BASE_URL:-/}
+    container_name: excellent-admin-web
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "5173:80"
+
+  mobile-h5:
+    build:
+      context: ./mobile-h5
+      args:
+        VITE_API_BASE_URL: ${PUBLIC_API_BASE_URL:-/}
+    container_name: excellent-mobile-h5
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "5174:80"
+
+  mobile-uni:
+    build:
+      context: ./mobile-uni
+    container_name: excellent-mobile-uni
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "5175:80"
+
+volumes:
+  mysql_data:

@@ -70,6 +70,12 @@ D:\Excellent
 - 页面：`mobile-h5/src/views/`
 - rem 适配：`mobile-h5/src/utils/flexible.js`
 
+### 移动端 Uni `mobile-uni/`
+- 技术栈：uni-app Vue 3 + Vite
+- 目录：`mobile-uni/src/`
+- 路由：`mobile-uni/src/pages.json`
+- 说明：当前已完成业务迁移骨架与 H5 构建验证，可继续接 Android / iOS / 小程序
+
 ---
 
 ## 当前业务范围

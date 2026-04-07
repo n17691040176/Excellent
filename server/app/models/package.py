@@ -1,4 +1,6 @@
-﻿from sqlalchemy import BigInteger, DECIMAL, Enum, ForeignKey, String
+﻿from datetime import datetime
+
+from sqlalchemy import BigInteger, DECIMAL, DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -28,4 +30,4 @@ class PackageBenefit(Base):
     benefit_type: Mapped[str] = mapped_column(String(32), nullable=False)
     benefit_value: Mapped[str] = mapped_column(String(255), nullable=False)
     sort_order: Mapped[int] = mapped_column(default=0, nullable=False)
-    created_at: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
