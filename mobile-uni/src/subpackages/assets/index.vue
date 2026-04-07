@@ -1,7 +1,8 @@
 <template>
   <view class="page">
-    <view class="card">
-      <view class="title">四类资产账户</view>
+    <view class="card hero-card">
+      <view class="badge">Asset Center</view>
+      <view class="title">把四类资产拆成可理解、可操作、可追踪的账户视图</view>
       <view class="desc">余额承接设备与广告收益，积分负责补贴与转赠，兑换券用于商城抵扣，AI 券承接自营商城返券与套餐抵扣。</view>
       <view class="metric-grid">
         <view class="metric-card" v-for="item in metrics" :key="item.label">
@@ -13,16 +14,19 @@
     </view>
 
     <view class="card">
-      <view class="section-title">快捷操作</view>
+      <view class="section-head">
+        <view class="section-title">快捷操作</view>
+        <view class="section-link">{{ showTransfer ? '积分转赠已展开' : '常用入口' }}</view>
+      </view>
       <view class="action-row">
-        <button class="secondary-btn" @click="handleSignin">每日签到领券</button>
+        <button class="secondary-btn" @click="handleSignin">{{ signinLoading ? '签到中...' : '每日签到领券' }}</button>
         <button class="primary-btn" @click="showTransfer = !showTransfer">{{ showTransfer ? '收起转赠' : '积分转赠' }}</button>
       </view>
       <view v-if="showTransfer" class="form-box">
         <input v-model="transferForm.to_user_id" class="input" type="number" placeholder="请输入上级或下级用户 ID" />
         <input v-model="transferForm.amount" class="input" type="digit" placeholder="请输入积分数量" />
         <input v-model="transferForm.remark" class="input" placeholder="可选填写转赠说明" />
-        <button class="primary-btn" @click="submitTransfer">提交转赠</button>
+        <button class="primary-btn" @click="submitTransfer">{{ transferLoading ? '提交中...' : '提交转赠' }}</button>
       </view>
     </view>
 
@@ -39,27 +43,43 @@
         </view>
       </scroll-view>
 
-      <view class="section-box">
-        <view class="section-title">{{ currentTab.label }}</view>
-        <view class="section-desc">{{ currentTab.tip }}</view>
-        <view class="info-list">
-          <view class="info-row">可用金额：{{ formatAmount(detail.available_amount) }}</view>
-          <view class="info-row">冻结金额：{{ formatAmount(detail.frozen_amount) }}</view>
-          <view class="info-row">累计收入：{{ formatAmount(detail.total_amount) }}</view>
-          <view class="info-row">累计消耗：{{ formatAmount(detail.consumed_amount) }}</view>
-          <view class="info-row">累计提现：{{ formatAmount(detail.withdrawn_amount) }}</view>
-        </view>
+      <view v-if="loadError" class="status-card">
+        <view class="status-title">资产数据加载失败</view>
+        <view class="status-desc">{{ loadError }}</view>
+        <button class="secondary-btn retry-btn" @click="loadData">重新加载</button>
       </view>
+      <template v-else>
+        <view class="section-box asset-box">
+          <view class="section-title">{{ currentTab.label }}</view>
+          <view class="section-desc">{{ currentTab.tip }}</view>
+          <view class="info-list">
+            <view class="info-row">可用金额：{{ formatAmount(detail.available_amount) }}</view>
+            <view class="info-row">冻结金额：{{ formatAmount(detail.frozen_amount) }}</view>
+            <view class="info-row">累计收入：{{ formatAmount(detail.total_amount) }}</view>
+            <view class="info-row">累计消耗：{{ formatAmount(detail.consumed_amount) }}</view>
+            <view class="info-row">累计提现：{{ formatAmount(detail.withdrawn_amount) }}</view>
+          </view>
+        </view>
 
-      <view class="section-title" style="margin-top: 24rpx;">流水明细</view>
-      <view v-if="ledgers.length">
-        <view class="line-card" v-for="ledger in ledgers" :key="ledger.id">
-          <view class="line-title">{{ ledger.business_type }}</view>
-          <view class="line-meta">{{ formatDate(ledger.created_at) }}</view>
-          <view class="line-meta">{{ ledger.direction }} / {{ formatAmount(ledger.change_amount) }}</view>
+        <view class="section-head ledger-head">
+          <view class="section-title">流水明细</view>
+          <view class="section-link">{{ ledgers.length }} 条</view>
         </view>
-      </view>
-      <view v-else class="empty-text">暂无资产流水</view>
+        <view v-if="assetLoading">
+          <view class="skeleton-block short"></view>
+        </view>
+        <view v-else-if="ledgers.length" class="ledger-list">
+          <view class="ledger-card" v-for="ledger in ledgers" :key="ledger.id">
+            <view class="ledger-top">
+              <view class="line-title">{{ ledger.business_type }}</view>
+              <view class="ledger-direction" :class="assetDirectionTone(ledger.direction)">{{ assetDirectionLabel(ledger.direction) }}</view>
+            </view>
+            <view class="line-meta">{{ formatDate(ledger.created_at) }}</view>
+            <view class="line-meta">变动金额 {{ formatAmount(ledger.change_amount) }}</view>
+          </view>
+        </view>
+        <view v-else class="empty-text">暂无资产流水</view>
+      </template>
     </view>
   </view>
 </template>
@@ -70,6 +90,7 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { assetApi } from '../../api/modules'
 import { ensureLogin } from '../../utils/guard'
+import { assetDirectionLabel, assetDirectionTone, normalizeLoadError } from '../../utils/ui'
 
 const assetTabs = [
   { label: '余额', value: 'BALANCE', tip: '设备流水分佣，可提现或爆款区消费' },
@@ -84,6 +105,10 @@ const ledgers = ref([])
 const activeType = ref('BALANCE')
 const showTransfer = ref(false)
 const transferForm = reactive({ to_user_id: '', amount: '', remark: '' })
+const loadError = ref('')
+const assetLoading = ref(false)
+const transferLoading = ref(false)
+const signinLoading = ref(false)
 
 const metrics = computed(() => [
   { label: '余额', value: formatAmount(summary.value.BALANCE), meta: '设备与广告收益沉淀' },
@@ -107,38 +132,58 @@ async function loadSummary() {
 }
 
 async function loadCurrentAsset() {
-  const [detailData, ledgerData] = await Promise.all([
-    assetApi.detail(activeType.value),
-    assetApi.ledgers(activeType.value)
-  ])
-  detail.value = detailData || {}
-  ledgers.value = ledgerData || []
+  assetLoading.value = true
+  try {
+    const [detailData, ledgerData] = await Promise.all([
+      assetApi.detail(activeType.value),
+      assetApi.ledgers(activeType.value)
+    ])
+    detail.value = detailData || {}
+    ledgers.value = ledgerData || []
+  } finally {
+    assetLoading.value = false
+  }
 }
 
 async function loadData() {
-  await loadSummary()
-  await loadCurrentAsset()
+  loadError.value = ''
+  try {
+    await loadSummary()
+    await loadCurrentAsset()
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  }
 }
 
 async function handleSignin() {
-  await assetApi.signin()
-  uni.showToast({ title: '签到成功，兑换券已到账', icon: 'success' })
-  loadData()
+  signinLoading.value = true
+  try {
+    await assetApi.signin()
+    uni.showToast({ title: '签到成功，兑换券已到账', icon: 'success' })
+    loadData()
+  } finally {
+    signinLoading.value = false
+  }
 }
 
 async function submitTransfer() {
-  await assetApi.transferPoints({
-    to_user_id: Number(transferForm.to_user_id),
-    amount: Number(transferForm.amount),
-    remark: transferForm.remark
-  })
-  transferForm.to_user_id = ''
-  transferForm.amount = ''
-  transferForm.remark = ''
-  showTransfer.value = false
-  activeType.value = 'POINTS'
-  uni.showToast({ title: '积分转赠成功', icon: 'success' })
-  loadData()
+  transferLoading.value = true
+  try {
+    await assetApi.transferPoints({
+      to_user_id: Number(transferForm.to_user_id),
+      amount: Number(transferForm.amount),
+      remark: transferForm.remark
+    })
+    transferForm.to_user_id = ''
+    transferForm.amount = ''
+    transferForm.remark = ''
+    showTransfer.value = false
+    activeType.value = 'POINTS'
+    uni.showToast({ title: '积分转赠成功', icon: 'success' })
+    loadData()
+  } finally {
+    transferLoading.value = false
+  }
 }
 
 watch(activeType, () => {
@@ -154,6 +199,61 @@ onShow(() => {
 </script>
 
 <style scoped>
-.form-box { margin-top: 20rpx; }
-.line-card { margin-top: 16rpx; }
+.hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(62, 152, 108, 0.22), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 246, 0.98) 100%);
+}
+
+.form-box,
+.ledger-head {
+  margin-top: 20rpx;
+}
+
+.asset-box {
+  margin-top: 8rpx;
+}
+
+.ledger-list {
+  display: grid;
+  gap: 16rpx;
+}
+
+.ledger-card {
+  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
+  border-radius: 24rpx;
+  padding: 24rpx;
+  border: 1rpx solid rgba(21, 55, 45, 0.05);
+}
+
+.ledger-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 10rpx;
+}
+
+.ledger-direction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+}
+
+.tone-income {
+  background: #e7f6ef;
+  color: #1e8f64;
+}
+
+.tone-expense {
+  background: #fff2ee;
+  color: #c65a3d;
+}
+
+.retry-btn {
+  margin-top: 20rpx;
+}
 </style>

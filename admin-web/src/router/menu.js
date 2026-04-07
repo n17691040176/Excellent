@@ -56,6 +56,13 @@
     roles: ['SUPER_ADMIN', 'TEAM_ADMIN']
   },
   {
+    path: '/decorations/home',
+    name: 'DecorationHome',
+    title: '页面装修',
+    icon: 'MagicStick',
+    roles: ['SUPER_ADMIN', 'TEAM_ADMIN']
+  },
+  {
     path: '/local-life',
     name: 'LocalLife',
     title: '本地生活',

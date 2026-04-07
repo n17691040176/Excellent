@@ -1,10 +1,19 @@
 <template>
-  <view class="page">
-    <view class="card">
-      <view class="title">订单列表</view>
+  <view class="page orders-page">
+    <view class="card hero-card">
+      <view class="badge">Order Center</view>
+      <view class="title">把不同业务订单收进一套统一的跟进视图</view>
       <view class="desc">
-        展示套餐、商城和本地生活订单；支付后进入待确认或待核销状态，完成后驱动返现结算。
+        当前页面按状态而不是业务类型来组织订单，优先突出支付、完成和关闭动作，减少用户在套餐、商城和本地生活之间来回理解。
       </view>
+      <view class="metric-grid">
+        <view class="metric-card" v-for="item in summaryMetrics" :key="item.label">
+          <view class="metric-label">{{ item.label }}</view>
+          <view class="metric-value">{{ item.value }}</view>
+          <view class="metric-meta">{{ item.meta }}</view>
+        </view>
+      </view>
+
       <scroll-view scroll-x class="tab-row">
         <view
           class="status-tab"
@@ -19,14 +28,23 @@
     </view>
 
     <view class="card">
-      <view v-if="filteredRows.length">
-        <view class="order-card" v-for="item in filteredRows" :key="item.id" @click="goDetail(item.id)">
+      <view v-if="loadError" class="status-card">
+        <view class="status-title">订单加载失败</view>
+        <view class="status-desc">{{ loadError }}</view>
+        <button class="secondary-btn retry-btn" @click="loadData">重新加载</button>
+      </view>
+      <view v-else-if="loading">
+        <view class="skeleton-block"></view>
+        <view class="skeleton-block short"></view>
+      </view>
+      <view v-else-if="filteredRows.length" class="order-list">
+        <view class="order-card tap-item" v-for="item in filteredRows" :key="item.id" @click="goDetail(item.id)">
           <view class="order-top">
             <view class="order-no">{{ item.order_no }}</view>
-            <view class="order-status">{{ item.order_status }}</view>
+            <view class="order-status status-pill" :class="orderStatusTone(item.order_status)">{{ orderStatusLabel(item.order_status) }}</view>
           </view>
-          <view class="order-meta">{{ item.order_type }} / {{ item.zone_type || '--' }}</view>
-          <view class="order-meta">应付金额 {{ item.payable_amount }}</view>
+          <view class="order-meta">业务 {{ item.order_type }} / 分区 {{ item.zone_type || '--' }}</view>
+          <view class="order-meta">应付金额 ¥{{ item.payable_amount }}</view>
           <view class="actions">
             <button v-if="item.order_status === 'CREATED'" class="minor-btn" @click.stop="payDemo(item)">演示支付</button>
             <button v-if="canConfirm(item)" class="success-btn" @click.stop="confirmOrder(item)">确认完成</button>
@@ -45,9 +63,12 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { orderApi } from '../../api/modules'
 import { ensureLogin } from '../../utils/guard'
+import { normalizeLoadError, orderStatusLabel, orderStatusTone } from '../../utils/ui'
 
 const rows = ref([])
 const activeStatus = ref('all')
+const loading = ref(false)
+const loadError = ref('')
 
 const statusTabs = [
   { label: '全部', value: 'all' },
@@ -63,6 +84,13 @@ const filteredRows = computed(() => {
   }
   return rows.value.filter((item) => item.order_status === activeStatus.value)
 })
+
+const summaryMetrics = computed(() => [
+  { label: '全部订单', value: rows.value.length, meta: '统一查看平台交易进度' },
+  { label: '待支付', value: rows.value.filter((item) => item.order_status === 'CREATED').length, meta: '可继续支付或取消' },
+  { label: '待完成', value: rows.value.filter((item) => item.order_status === 'PAID').length, meta: '等待确认或核销完成' },
+  { label: '已完成', value: rows.value.filter((item) => item.order_status === 'CONFIRMED').length, meta: '可驱动返现结算' }
+])
 
 function canConfirm(item) {
   return item.order_status === 'PAID' && item.order_type !== 'LOCAL_LIFE_ORDER'
@@ -85,7 +113,15 @@ function goDetail(id) {
 }
 
 async function loadData() {
-  rows.value = await orderApi.list()
+  loading.value = true
+  loadError.value = ''
+  try {
+    rows.value = await orderApi.list()
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function payDemo(item) {
@@ -124,28 +160,10 @@ onShow(() => {
 </script>
 
 <style scoped>
-.page {
-  min-height: 100vh;
-  padding: 32rpx;
-}
-
-.card {
-  background: #ffffff;
-  border-radius: 24rpx;
-  padding: 32rpx;
-  margin-bottom: 24rpx;
-}
-
-.title {
-  font-size: 40rpx;
-  font-weight: 600;
-  margin-bottom: 16rpx;
-}
-
-.desc {
-  font-size: 28rpx;
-  color: #6b7280;
-  line-height: 1.6;
+.hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(62, 152, 108, 0.2), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 246, 0.98) 100%);
 }
 
 .tab-row {
@@ -160,22 +178,27 @@ onShow(() => {
   height: 64rpx;
   padding: 0 28rpx;
   border-radius: 999rpx;
-  background: #f3f4f6;
-  color: #6b7280;
+  background: #edf2ee;
+  color: #66756f;
   font-size: 24rpx;
   margin-right: 16rpx;
 }
 
 .status-tab.active {
-  background: #0d6efd;
+  background: #1e8f64;
   color: #ffffff;
 }
 
+.order-list {
+  display: grid;
+  gap: 16rpx;
+}
+
 .order-card {
-  background: #f5f7fb;
-  border-radius: 20rpx;
+  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
+  border-radius: 24rpx;
   padding: 24rpx;
-  margin-bottom: 16rpx;
+  border: 1rpx solid rgba(21, 55, 45, 0.05);
 }
 
 .order-top {
@@ -187,17 +210,9 @@ onShow(() => {
 }
 
 .order-no {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #111827;
-}
-
-.order-status,
-.order-meta,
-.empty-text {
-  font-size: 24rpx;
-  color: #6b7280;
-  line-height: 1.6;
+  font-size: 29rpx;
+  font-weight: 700;
+  color: #18342e;
 }
 
 .actions {
@@ -218,18 +233,9 @@ onShow(() => {
   font-size: 24rpx;
 }
 
-.minor-btn {
-  background: #eef4ff;
-  color: #0d6efd;
-}
-
-.success-btn {
-  background: #ecfdf3;
-  color: #16a34a;
-}
-
-.danger-btn {
-  background: #fef2f2;
-  color: #dc2626;
+.order-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

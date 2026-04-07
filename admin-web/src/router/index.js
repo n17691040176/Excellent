@@ -26,6 +26,7 @@ const routes = [
       { path: '/withdraws', component: () => import('@/views/withdraws/WithdrawListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '提现管理' } },
       { path: '/suppliers', component: () => import('@/views/suppliers/SupplierListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '招商中心' } },
       { path: '/assets', component: () => import('@/views/assets/AssetCenterView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '资产中心' } },
+      { path: '/decorations/home', component: () => import('@/views/decorations/DecorationHomeView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '页面装修' } },
       { path: '/local-life', component: () => import('@/views/local-life/LocalLifeView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '本地生活' } },
       { path: '/system/roles', component: () => import('@/views/system/RoleManageView.vue'), meta: { roles: ['SUPER_ADMIN'], title: '权限管理' } },
       { path: '/system/accounts', component: () => import('@/views/system/AccountManageView.vue'), meta: { roles: ['SUPER_ADMIN'], title: '账号管理' } },

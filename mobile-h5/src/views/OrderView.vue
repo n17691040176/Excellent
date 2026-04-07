@@ -2,10 +2,18 @@
   <div class="page safe-bottom">
     <van-nav-bar title="我的订单" fixed placeholder left-arrow @click-left="$router.back()" />
 
-    <div class="page-card">
-      <h2 class="page-title">订单列表</h2>
-      <p class="page-desc">展示套餐、商城和本地生活订单；支付后进入待确认或待核销状态，完成后驱动返现结算。</p>
-      <van-tabs v-model:active="activeStatus">
+    <div class="page-card hero-soft">
+      <div class="hero-badge">Order Center</div>
+      <h2 class="page-title">把不同业务订单收进一套统一的跟进视图</h2>
+      <p class="page-desc">按状态而不是业务类型组织订单，优先突出支付、完成和关闭动作。</p>
+      <div class="metric-grid">
+        <div class="metric-card" v-for="item in metrics" :key="item.label">
+          <div class="metric-label">{{ item.label }}</div>
+          <div class="metric-value">{{ item.value }}</div>
+          <div class="metric-meta">{{ item.meta }}</div>
+        </div>
+      </div>
+      <van-tabs v-model:active="activeStatus" style="margin-top: 0.22rem;">
         <van-tab title="全部" name="all" />
         <van-tab title="待支付" name="CREATED" />
         <van-tab title="待完成" name="PAID" />
@@ -15,27 +23,31 @@
     </div>
 
     <div class="page-card">
-      <van-cell-group inset>
-        <van-cell
-          v-for="item in filteredRows"
-          :key="item.id"
-          is-link
-          @click="goDetail(item.id)"
-          :title="item.order_no"
-          :label="`${item.order_type} / ${item.zone_type || '--'}`"
-        >
-          <template #value>
-            <div>{{ item.payable_amount }}</div>
-            <div>{{ item.order_status }}</div>
-            <div class="inline-actions" style="margin-top: 0.12rem; justify-content: flex-end;">
-              <van-button size="mini" plain type="primary" @click.stop="payDemo(item)" v-if="item.order_status === 'CREATED'">演示支付</van-button>
-              <van-button size="mini" plain type="success" @click.stop="confirmOrder(item)" v-if="canConfirm(item)">确认完成</van-button>
-              <van-button size="mini" plain type="danger" @click.stop="cancelOrder(item)" v-if="item.order_status === 'CREATED'">取消订单</van-button>
-            </div>
-          </template>
-        </van-cell>
-      </van-cell-group>
-      <van-empty v-if="!filteredRows.length" image="search" description="暂无订单记录" />
+      <div v-if="loadError" class="state-card">
+        <div class="state-title">订单加载失败</div>
+        <div class="state-desc">{{ loadError }}</div>
+        <van-button block round plain type="primary" style="margin-top: 0.18rem;" @click="loadData">重新加载</van-button>
+      </div>
+      <div v-else-if="loading" class="card-stack">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card short"></div>
+      </div>
+      <div v-else-if="filteredRows.length" class="card-stack">
+        <div class="soft-section" v-for="item in filteredRows" :key="item.id" @click="goDetail(item.id)">
+          <div class="top-row">
+            <div class="product-name">{{ item.order_no }}</div>
+            <div class="status-capsule" :class="orderStatusClass(item.order_status)">{{ orderStatusLabel(item.order_status) }}</div>
+          </div>
+          <div class="product-meta">业务 {{ item.order_type }} / 分区 {{ item.zone_type || '--' }}</div>
+          <div class="product-meta">应付金额 ¥{{ item.payable_amount }}</div>
+          <div class="inline-actions" style="margin-top: 0.14rem; flex-wrap: wrap;">
+            <van-button size="small" plain type="primary" @click.stop="payDemo(item)" v-if="item.order_status === 'CREATED'">演示支付</van-button>
+            <van-button size="small" plain type="success" @click.stop="confirmOrder(item)" v-if="canConfirm(item)">确认完成</van-button>
+            <van-button size="small" plain type="danger" @click.stop="cancelOrder(item)" v-if="item.order_status === 'CREATED'">取消订单</van-button>
+          </div>
+        </div>
+      </div>
+      <van-empty v-else image="search" description="暂无订单记录" />
     </div>
 
     <AppTabbar />
@@ -49,15 +61,25 @@ import { showConfirmDialog, showSuccessToast } from 'vant'
 
 import AppTabbar from '@/components/AppTabbar.vue'
 import { orderApi } from '@/api/modules'
+import { normalizeLoadError, orderStatusClass, orderStatusLabel } from '@/utils/ui'
 
 const router = useRouter()
 const rows = ref([])
 const activeStatus = ref('all')
+const loading = ref(false)
+const loadError = ref('')
 
 const filteredRows = computed(() => {
   if (activeStatus.value === 'all') return rows.value
   return rows.value.filter((item) => item.order_status === activeStatus.value)
 })
+
+const metrics = computed(() => [
+  { label: '全部订单', value: rows.value.length, meta: '统一查看平台交易进度' },
+  { label: '待支付', value: rows.value.filter((item) => item.order_status === 'CREATED').length, meta: '可继续支付或取消' },
+  { label: '待完成', value: rows.value.filter((item) => item.order_status === 'PAID').length, meta: '等待确认或核销完成' },
+  { label: '已完成', value: rows.value.filter((item) => item.order_status === 'CONFIRMED').length, meta: '可驱动返现结算' }
+])
 
 function canConfirm(item) {
   return item.order_status === 'PAID' && item.order_type !== 'LOCAL_LIFE_ORDER'
@@ -68,7 +90,15 @@ function goDetail(id) {
 }
 
 async function loadData() {
-  rows.value = await orderApi.list()
+  loading.value = true
+  loadError.value = ''
+  try {
+    rows.value = await orderApi.list()
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function payDemo(item) {

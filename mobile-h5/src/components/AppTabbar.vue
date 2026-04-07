@@ -1,9 +1,13 @@
 ﻿<template>
-  <van-tabbar route safe-area-inset-bottom>
+  <van-tabbar
+    route
+    safe-area-inset-bottom
+    active-color="#1f8f6e"
+    inactive-color="rgba(24, 52, 59, 0.52)"
+  >
     <van-tabbar-item replace to="/home" icon="wap-home-o">首页</van-tabbar-item>
-    <van-tabbar-item replace to="/team" icon="friends-o">团队</van-tabbar-item>
-    <van-tabbar-item replace to="/invite" icon="gift-o">邀请</van-tabbar-item>
-    <van-tabbar-item replace to="/commission" icon="balance-o">佣金</van-tabbar-item>
+    <van-tabbar-item replace to="/packages" icon="coupon-o">套餐</van-tabbar-item>
+    <van-tabbar-item replace to="/orders" icon="orders-o">订单</van-tabbar-item>
     <van-tabbar-item replace to="/profile" icon="contact-o">我的</van-tabbar-item>
   </van-tabbar>
 </template>

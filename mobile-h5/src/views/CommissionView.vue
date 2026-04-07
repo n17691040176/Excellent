@@ -2,9 +2,9 @@
   <div class="page safe-bottom">
     <van-nav-bar title="佣金中心" fixed placeholder />
 
-    <div class="page-card hero-card">
+    <div class="page-card hero-soft">
       <div class="hero-badge">Commission Center</div>
-      <h2 class="page-title">佣金结算与提现进度</h2>
+      <h2 class="page-title">把冻结、释放、提现三段佣金流程看清楚</h2>
       <p class="page-desc">下级支付后佣金先冻结，确认收货或服务核销后转入可提现余额；提现申请再进入审核流程。</p>
       <div class="metric-grid">
         <div class="metric-card" v-for="item in metrics" :key="item.label">
@@ -45,30 +45,34 @@
     <div class="page-card">
       <van-tabs v-model:active="activeTab" animated>
         <van-tab title="返现流水" name="flows">
-          <div class="filter-row">
-            <van-button
-              v-for="item in flowFilters"
-              :key="item.value"
-              size="small"
-              :type="flowStatus === item.value ? 'primary' : 'default'"
-              plain
-              @click="flowStatus = item.value"
-            >{{ item.label }}</van-button>
+          <div v-if="loadError" class="state-card">
+            <div class="state-title">佣金数据加载失败</div>
+            <div class="state-desc">{{ loadError }}</div>
+            <van-button block round plain type="primary" style="margin-top: 0.18rem;" @click="loadData">重新加载</van-button>
           </div>
-          <van-cell-group inset>
-            <van-cell
-              v-for="item in filteredFlows"
-              :key="item.id"
-              :title="`订单 ${item.order_id}`"
-              :label="`${item.level} 级返现 / 来源用户 ${item.source_user_id} / 比例 ${item.rate}%`"
-            >
-              <template #value>
-                <div>{{ item.commission_amount }}</div>
-                <div :class="['status-pill', flowStatusClass(item.status)]">{{ flowStatusLabel(item.status) }}</div>
-              </template>
-            </van-cell>
-          </van-cell-group>
-          <van-empty v-if="!filteredFlows.length" image="search" description="当前筛选下暂无返现流水" />
+          <template v-else>
+            <div class="filter-row">
+              <van-button
+                v-for="item in flowFilters"
+                :key="item.value"
+                size="small"
+                :type="flowStatus === item.value ? 'primary' : 'default'"
+                plain
+                @click="flowStatus = item.value"
+              >{{ item.label }}</van-button>
+            </div>
+            <div v-if="filteredFlows.length" class="card-stack">
+              <div class="soft-section" v-for="item in filteredFlows" :key="item.id">
+                <div class="top-row">
+                  <div class="product-name">订单 {{ item.order_id }}</div>
+                  <div class="status-capsule" :class="commissionFlowStatusClass(item.status)">{{ commissionFlowStatusLabel(item.status) }}</div>
+                </div>
+                <div class="product-meta">{{ item.level }} 级返现 / 来源用户 {{ item.source_user_id }} / 比例 {{ item.rate }}%</div>
+                <div class="product-meta">金额 ¥{{ item.commission_amount }}</div>
+              </div>
+            </div>
+            <van-empty v-else image="search" description="当前筛选下暂无返现流水" />
+          </template>
         </van-tab>
 
         <van-tab title="提现记录" name="withdraws">
@@ -82,20 +86,17 @@
               @click="withdrawStatus = item.value"
             >{{ item.label }}</van-button>
           </div>
-          <van-cell-group inset>
-            <van-cell
-              v-for="item in filteredWithdraws"
-              :key="item.id"
-              :title="`${withdrawTypeLabel(item.withdraw_type)} / 申请 #${item.id}`"
-              :label="withdrawRemark(item)"
-            >
-              <template #value>
-                <div>{{ item.amount }}</div>
-                <div :class="['status-pill', withdrawStatusClass(item.status)]">{{ withdrawStatusLabel(item.status) }}</div>
-              </template>
-            </van-cell>
-          </van-cell-group>
-          <van-empty v-if="!filteredWithdraws.length" image="search" description="当前筛选下暂无提现记录" />
+          <div v-if="filteredWithdraws.length" class="card-stack">
+            <div class="soft-section" v-for="item in filteredWithdraws" :key="item.id">
+              <div class="top-row">
+                <div class="product-name">{{ withdrawTypeLabel(item.withdraw_type) }} / 申请 #{{ item.id }}</div>
+                <div class="status-capsule" :class="withdrawStatusClass(item.status)">{{ withdrawStatusLabel(item.status) }}</div>
+              </div>
+              <div class="product-meta">{{ withdrawRemark(item) }}</div>
+              <div class="product-meta">金额 ¥{{ item.amount }}</div>
+            </div>
+          </div>
+          <van-empty v-else image="search" description="当前筛选下暂无提现记录" />
         </van-tab>
       </van-tabs>
     </div>
@@ -108,7 +109,7 @@
           <van-field v-model="withdrawForm.amount" label="提现金额" type="number" placeholder="请输入提现金额" />
           <van-field v-model="withdrawForm.remark" label="备注" placeholder="可填写提现说明" />
           <div class="submit-bar">
-            <van-button block round type="primary" native-type="submit">提交申请</van-button>
+            <van-button block round type="primary" native-type="submit">{{ withdrawLoading ? '提交中...' : '提交申请' }}</van-button>
           </div>
         </van-form>
       </div>
@@ -125,6 +126,13 @@ import { showSuccessToast } from 'vant'
 
 import AppTabbar from '@/components/AppTabbar.vue'
 import { commissionApi } from '@/api/modules'
+import {
+  commissionFlowStatusClass,
+  commissionFlowStatusLabel,
+  normalizeLoadError,
+  withdrawStatusClass,
+  withdrawStatusLabel
+} from '@/utils/ui'
 
 const summary = ref({})
 const flows = ref([])
@@ -137,6 +145,8 @@ const withdrawForm = reactive({
   amount: '',
   remark: ''
 })
+const loadError = ref('')
+const withdrawLoading = ref(false)
 
 const flowFilters = [
   { label: '全部', value: 'ALL' },
@@ -178,40 +188,6 @@ function amount(value) {
   return Number(value || 0).toFixed(2)
 }
 
-function flowStatusLabel(status) {
-  return {
-    FROZEN: '冻结中',
-    SETTLED: '已结算',
-    CANCELED: '已取消'
-  }[status] || status
-}
-
-function flowStatusClass(status) {
-  return {
-    FROZEN: 'status-warning',
-    SETTLED: 'status-success',
-    CANCELED: 'status-muted'
-  }[status] || 'status-muted'
-}
-
-function withdrawStatusLabel(status) {
-  return {
-    PENDING: '待审核',
-    APPROVED: '已通过',
-    REJECTED: '已驳回',
-    PAID: '已打款'
-  }[status] || status
-}
-
-function withdrawStatusClass(status) {
-  return {
-    PENDING: 'status-warning',
-    APPROVED: 'status-success',
-    REJECTED: 'status-danger',
-    PAID: 'status-primary'
-  }[status] || 'status-muted'
-}
-
 function withdrawTypeLabel(type) {
   return {
     COMMISSION: '佣金提现',
@@ -226,29 +202,39 @@ function withdrawRemark(item) {
 }
 
 async function loadData() {
-  const [summaryData, flowData, withdrawData] = await Promise.all([
-    commissionApi.summary(),
-    commissionApi.flows(),
-    commissionApi.withdraws()
-  ])
-  summary.value = summaryData || {}
-  flows.value = flowData || []
-  withdraws.value = withdrawData || []
+  loadError.value = ''
+  try {
+    const [summaryData, flowData, withdrawData] = await Promise.all([
+      commissionApi.summary(),
+      commissionApi.flows(),
+      commissionApi.withdraws()
+    ])
+    summary.value = summaryData || {}
+    flows.value = flowData || []
+    withdraws.value = withdrawData || []
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  }
 }
 
 async function submitWithdraw() {
-  await commissionApi.createWithdraw({
-    withdraw_type: 'COMMISSION',
-    amount: Number(withdrawForm.amount || 0),
-    remark: withdrawForm.remark
-  })
-  withdrawForm.amount = ''
-  withdrawForm.remark = ''
-  showWithdraw.value = false
-  activeTab.value = 'withdraws'
-  withdrawStatus.value = 'PENDING'
-  showSuccessToast('提现申请已提交')
-  await loadData()
+  withdrawLoading.value = true
+  try {
+    await commissionApi.createWithdraw({
+      withdraw_type: 'COMMISSION',
+      amount: Number(withdrawForm.amount || 0),
+      remark: withdrawForm.remark
+    })
+    withdrawForm.amount = ''
+    withdrawForm.remark = ''
+    showWithdraw.value = false
+    activeTab.value = 'withdraws'
+    withdrawStatus.value = 'PENDING'
+    showSuccessToast('提现申请已提交')
+    await loadData()
+  } finally {
+    withdrawLoading.value = false
+  }
 }
 
 onMounted(loadData)

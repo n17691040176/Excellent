@@ -1,8 +1,8 @@
 <template>
   <view class="page">
-    <view class="card">
+    <view class="card hero-card">
       <view class="badge">Commission Center</view>
-      <view class="title">佣金结算与提现进度</view>
+      <view class="title">把冻结、释放、提现三段佣金流程看清楚</view>
       <view class="desc">下级支付后佣金先冻结，确认收货或服务核销后转入可提现余额；提现申请再进入审核流程。</view>
       <view class="metric-grid">
         <view class="metric-card" v-for="item in metrics" :key="item.label">
@@ -38,7 +38,7 @@
       <view v-if="showWithdraw" class="form-box">
         <input v-model="withdrawForm.amount" class="input" type="digit" placeholder="请输入提现金额" />
         <input v-model="withdrawForm.remark" class="input" placeholder="可填写提现说明" />
-        <button class="primary-btn" @click="submitWithdraw">提交申请</button>
+        <button class="primary-btn" @click="submitWithdraw">{{ withdrawLoading ? '提交中...' : '提交申请' }}</button>
       </view>
     </view>
 
@@ -48,7 +48,17 @@
         <view class="switch-tab" :class="{ active: activeTab === 'withdraws' }" @click="activeTab = 'withdraws'">提现记录</view>
       </view>
 
-      <template v-if="activeTab === 'flows'">
+      <view v-if="loadError" class="status-card">
+        <view class="status-title">佣金数据加载失败</view>
+        <view class="status-desc">{{ loadError }}</view>
+        <button class="secondary-btn retry-btn" @click="loadData">重新加载</button>
+      </view>
+      <view v-else-if="loading">
+        <view class="skeleton-block"></view>
+        <view class="skeleton-block short"></view>
+      </view>
+
+      <template v-else-if="activeTab === 'flows'">
         <scroll-view scroll-x class="filter-row">
           <view
             class="filter-pill"
@@ -60,11 +70,14 @@
             {{ item.label }}
           </view>
         </scroll-view>
-        <view v-if="filteredFlows.length">
+        <view v-if="filteredFlows.length" class="list-wrap">
           <view class="line-card" v-for="item in filteredFlows" :key="item.id">
-            <view class="line-title">订单 {{ item.order_id }}</view>
+            <view class="line-head">
+              <view class="line-title">订单 {{ item.order_id }}</view>
+              <view class="status-pill" :class="commissionFlowStatusTone(item.status)">{{ commissionFlowStatusLabel(item.status) }}</view>
+            </view>
             <view class="line-meta">{{ item.level }} 级返现 / 来源用户 {{ item.source_user_id }} / 比例 {{ item.rate }}%</view>
-            <view class="line-meta">金额 {{ item.commission_amount }} / {{ flowStatusLabel(item.status) }}</view>
+            <view class="line-meta">金额 ¥{{ item.commission_amount }}</view>
           </view>
         </view>
         <view v-else class="empty-text">当前筛选下暂无返现流水</view>
@@ -82,11 +95,14 @@
             {{ item.label }}
           </view>
         </scroll-view>
-        <view v-if="filteredWithdraws.length">
+        <view v-if="filteredWithdraws.length" class="list-wrap">
           <view class="line-card" v-for="item in filteredWithdraws" :key="item.id">
-            <view class="line-title">{{ withdrawTypeLabel(item.withdraw_type) }} / 申请 #{{ item.id }}</view>
+            <view class="line-head">
+              <view class="line-title">{{ withdrawTypeLabel(item.withdraw_type) }} / 申请 #{{ item.id }}</view>
+              <view class="status-pill" :class="withdrawStatusTone(item.status)">{{ withdrawStatusLabel(item.status) }}</view>
+            </view>
             <view class="line-meta">{{ withdrawRemark(item) }}</view>
-            <view class="line-meta">金额 {{ item.amount }} / {{ withdrawStatusLabel(item.status) }}</view>
+            <view class="line-meta">金额 ¥{{ item.amount }}</view>
           </view>
         </view>
         <view v-else class="empty-text">当前筛选下暂无提现记录</view>
@@ -101,6 +117,13 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { commissionApi } from '../../api/modules'
 import { ensureLogin } from '../../utils/guard'
+import {
+  commissionFlowStatusLabel,
+  commissionFlowStatusTone,
+  normalizeLoadError,
+  withdrawStatusLabel,
+  withdrawStatusTone
+} from '../../utils/ui'
 
 const summary = ref({})
 const flows = ref([])
@@ -110,6 +133,9 @@ const flowStatus = ref('ALL')
 const withdrawStatus = ref('ALL')
 const showWithdraw = ref(false)
 const withdrawForm = reactive({ amount: '', remark: '' })
+const loading = ref(false)
+const loadError = ref('')
+const withdrawLoading = ref(false)
 
 const flowFilters = [
   { label: '全部', value: 'ALL' },
@@ -143,14 +169,6 @@ function amount(value) {
   return Number(value || 0).toFixed(2)
 }
 
-function flowStatusLabel(status) {
-  return { FROZEN: '冻结中', SETTLED: '已结算', CANCELED: '已取消' }[status] || status
-}
-
-function withdrawStatusLabel(status) {
-  return { PENDING: '待审核', APPROVED: '已通过', REJECTED: '已驳回', PAID: '已打款' }[status] || status
-}
-
 function withdrawTypeLabel(type) {
   return { COMMISSION: '佣金提现', BALANCE: '余额提现', POINTS: '积分提现' }[type] || type
 }
@@ -161,29 +179,42 @@ function withdrawRemark(item) {
 }
 
 async function loadData() {
-  const [summaryData, flowData, withdrawData] = await Promise.all([
-    commissionApi.summary(),
-    commissionApi.flows(),
-    commissionApi.withdraws()
-  ])
-  summary.value = summaryData || {}
-  flows.value = flowData || []
-  withdraws.value = withdrawData || []
+  loading.value = true
+  loadError.value = ''
+  try {
+    const [summaryData, flowData, withdrawData] = await Promise.all([
+      commissionApi.summary(),
+      commissionApi.flows(),
+      commissionApi.withdraws()
+    ])
+    summary.value = summaryData || {}
+    flows.value = flowData || []
+    withdraws.value = withdrawData || []
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function submitWithdraw() {
-  await commissionApi.createWithdraw({
-    withdraw_type: 'COMMISSION',
-    amount: Number(withdrawForm.amount || 0),
-    remark: withdrawForm.remark
-  })
-  withdrawForm.amount = ''
-  withdrawForm.remark = ''
-  showWithdraw.value = false
-  activeTab.value = 'withdraws'
-  withdrawStatus.value = 'PENDING'
-  uni.showToast({ title: '提现申请已提交', icon: 'success' })
-  loadData()
+  withdrawLoading.value = true
+  try {
+    await commissionApi.createWithdraw({
+      withdraw_type: 'COMMISSION',
+      amount: Number(withdrawForm.amount || 0),
+      remark: withdrawForm.remark
+    })
+    withdrawForm.amount = ''
+    withdrawForm.remark = ''
+    showWithdraw.value = false
+    activeTab.value = 'withdraws'
+    withdrawStatus.value = 'PENDING'
+    uni.showToast({ title: '提现申请已提交', icon: 'success' })
+    loadData()
+  } finally {
+    withdrawLoading.value = false
+  }
 }
 
 onShow(() => {
@@ -195,7 +226,30 @@ onShow(() => {
 </script>
 
 <style scoped>
-.section-head { display: flex; justify-content: space-between; gap: 16rpx; align-items: flex-start; margin-bottom: 20rpx; }
-.section-link { font-size: 26rpx; color: #0d6efd; }
-.form-box { margin-top: 20rpx; }
+.hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(62, 152, 108, 0.22), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 246, 0.98) 100%);
+}
+
+.form-box,
+.list-wrap {
+  margin-top: 20rpx;
+}
+
+.line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 10rpx;
+}
+
+.retry-btn {
+  margin-top: 20rpx;
+}
+
+.short {
+  height: 112rpx;
+}
 </style>

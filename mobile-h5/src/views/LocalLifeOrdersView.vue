@@ -2,10 +2,10 @@
   <div class="page safe-bottom">
     <van-nav-bar title="本地生活订单" fixed placeholder left-arrow @click-left="$router.back()" />
 
-    <div class="page-card hero-card">
+    <div class="page-card hero-soft">
       <div class="hero-badge">Local Life Orders</div>
-      <h2 class="page-title">到店服务订单与核销进度</h2>
-      <p class="page-desc">本地生活订单支付后进入待核销状态，门店或后台核销成功后自动完成，并触发分佣结算。</p>
+      <h2 class="page-title">围绕核销节点跟进到店服务订单</h2>
+      <p class="page-desc">本地生活订单支付后进入待核销状态，核销完成后再触发后续佣金结算。</p>
       <div class="metric-grid">
         <div class="metric-card" v-for="item in metrics" :key="item.label">
           <div class="metric-label">{{ item.label }}</div>
@@ -27,22 +27,26 @@
         >{{ item.label }}</van-button>
       </div>
 
-      <van-cell-group inset>
-        <van-cell
-          v-for="item in filteredOrders"
-          :key="item.id"
-          is-link
-          @click="goDetail(item.id)"
-          :title="item.order_no"
-          :label="`${statusDesc(item)} / 应付 ${item.payable_amount}`"
-        >
-          <template #value>
-            <div>{{ item.order_status }}</div>
-            <div :class="['status-pill', statusClass(item)]">{{ statusLabel(item) }}</div>
-          </template>
-        </van-cell>
-      </van-cell-group>
-      <van-empty v-if="!filteredOrders.length" image="search" description="当前状态下暂无本地生活订单" />
+      <div v-if="loadError" class="state-card">
+        <div class="state-title">订单列表加载失败</div>
+        <div class="state-desc">{{ loadError }}</div>
+        <van-button block round plain type="primary" style="margin-top: 0.18rem;" @click="loadData">重新加载</van-button>
+      </div>
+      <div v-else-if="loading" class="card-stack">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card short"></div>
+      </div>
+      <div v-else-if="filteredOrders.length" class="card-stack">
+        <div class="soft-section" v-for="item in filteredOrders" :key="item.id" @click="goDetail(item.id)">
+          <div class="top-row">
+            <div class="product-name">{{ item.order_no }}</div>
+            <div class="status-capsule" :class="orderStatusClass(item.order_status)">{{ statusLabel(item) }}</div>
+          </div>
+          <div class="product-meta">{{ statusDesc(item) }}</div>
+          <div class="product-meta">应付金额 ¥{{ item.payable_amount }}</div>
+        </div>
+      </div>
+      <van-empty v-else image="search" description="当前状态下暂无本地生活订单" />
     </div>
   </div>
 </template>
@@ -52,10 +56,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { localLifeApi } from '@/api/modules'
+import { normalizeLoadError, orderStatusClass, orderStatusLabel } from '@/utils/ui'
 
 const router = useRouter()
 const rows = ref([])
 const activeFilter = ref('ALL')
+const loading = ref(false)
+const loadError = ref('')
 
 const filters = [
   { label: '全部', value: 'ALL' },
@@ -78,21 +85,7 @@ const metrics = computed(() => [
 ])
 
 function statusLabel(item) {
-  return {
-    CREATED: '待支付',
-    PAID: '待核销',
-    CONFIRMED: '已完成',
-    CLOSED: '已关闭'
-  }[item.order_status] || item.order_status
-}
-
-function statusClass(item) {
-  return {
-    CREATED: 'status-warning',
-    PAID: 'status-primary',
-    CONFIRMED: 'status-success',
-    CLOSED: 'status-muted'
-  }[item.order_status] || 'status-muted'
+  return orderStatusLabel(item.order_status, { PAID: '待核销' })
 }
 
 function statusDesc(item) {
@@ -109,7 +102,15 @@ function goDetail(id) {
 }
 
 async function loadData() {
-  rows.value = await localLifeApi.orders()
+  loading.value = true
+  loadError.value = ''
+  try {
+    rows.value = await localLifeApi.orders()
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(loadData)

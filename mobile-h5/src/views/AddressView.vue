@@ -2,21 +2,42 @@
   <div class="page safe-bottom">
     <van-nav-bar title="地址管理" fixed placeholder left-arrow @click-left="$router.back()" />
 
-    <div class="page-card">
-      <h2 class="page-title">收货地址</h2>
+    <div class="page-card hero-soft">
+      <div class="hero-badge">Address Center</div>
+      <h2 class="page-title">把收货地址集中到一个维护入口</h2>
       <p class="page-desc">支持新增、编辑、删除和设为默认地址，用于商城与一件代发履约。</p>
-      <van-button round block type="primary" @click="openPopup()">新增地址</van-button>
+      <div class="metric-grid">
+        <div class="metric-card" v-for="item in metrics" :key="item.label">
+          <div class="metric-label">{{ item.label }}</div>
+          <div class="metric-value">{{ item.value }}</div>
+          <div class="metric-meta">{{ item.meta }}</div>
+        </div>
+      </div>
     </div>
 
     <div class="page-card">
-      <van-address-list
-        v-model="chosenId"
-        :list="list"
-        default-tag-text="默认"
-        @add="openPopup()"
-        @edit="openPopup"
-        @select="handleSelect"
-      />
+      <div class="section-head">
+        <h3 class="cell-group-title" style="margin: 0;">地址列表</h3>
+        <span class="section-link-text" @click="openPopup()">新增地址</span>
+      </div>
+      <div v-if="loadError" class="state-card">
+        <div class="state-title">地址数据加载失败</div>
+        <div class="state-desc">{{ loadError }}</div>
+        <van-button block round plain type="primary" style="margin-top: 0.18rem;" @click="loadData">重新加载</van-button>
+      </div>
+      <div v-else-if="loading" class="card-stack">
+        <div class="skeleton-card short"></div>
+      </div>
+      <div v-else class="soft-section">
+        <van-address-list
+          v-model="chosenId"
+          :list="list"
+          default-tag-text="默认"
+          @add="openPopup()"
+          @edit="openPopup"
+          @select="handleSelect"
+        />
+      </div>
     </div>
 
     <van-popup v-model:show="showPopup" position="bottom" round :style="{ height: '78%' }">
@@ -32,7 +53,7 @@
           <van-switch-cell v-model="form.is_default" title="设为默认地址" />
           <div class="inline-actions submit-bar">
             <van-button v-if="form.id" block round plain type="danger" @click="removeAddress">删除</van-button>
-            <van-button block round type="primary" native-type="submit">保存地址</van-button>
+            <van-button block round type="primary" native-type="submit">{{ saving ? '保存中...' : '保存地址' }}</van-button>
           </div>
         </van-form>
       </div>
@@ -48,10 +69,14 @@ import { showConfirmDialog, showSuccessToast } from 'vant'
 
 import AppTabbar from '@/components/AppTabbar.vue'
 import { addressApi } from '@/api/modules'
+import { normalizeLoadError } from '@/utils/ui'
 
 const chosenId = ref('')
 const rows = ref([])
 const showPopup = ref(false)
+const loading = ref(false)
+const loadError = ref('')
+const saving = ref(false)
 const form = reactive({
   id: null,
   name: '',
@@ -71,6 +96,13 @@ const list = computed(() => rows.value.map((item) => ({
   isDefault: !!item.is_default
 })))
 
+const metrics = computed(() => [
+  { label: '地址数量', value: rows.value.length, meta: '当前已保存地址条数' },
+  { label: '默认地址', value: rows.value.filter((item) => item.is_default).length, meta: '结算时优先使用' },
+  { label: '已选地址', value: chosenId.value || '--', meta: '当前默认选中的地址 ID' },
+  { label: '履约用途', value: '商城', meta: '用于普通商品与代发履约' }
+])
+
 function resetForm() {
   Object.assign(form, {
     id: null,
@@ -85,9 +117,17 @@ function resetForm() {
 }
 
 async function loadData() {
-  rows.value = await addressApi.list()
-  const current = rows.value.find((item) => item.is_default) || rows.value[0]
-  chosenId.value = current ? String(current.id) : ''
+  loading.value = true
+  loadError.value = ''
+  try {
+    rows.value = await addressApi.list()
+    const current = rows.value.find((item) => item.is_default) || rows.value[0]
+    chosenId.value = current ? String(current.id) : ''
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  } finally {
+    loading.value = false
+  }
 }
 
 function openPopup(item) {
@@ -100,26 +140,31 @@ function openPopup(item) {
 }
 
 async function submitForm() {
-  const payload = {
-    name: form.name,
-    phone: form.phone,
-    province: form.province,
-    city: form.city,
-    district: form.district,
-    detail_address: form.detail_address,
-    is_default: form.is_default
+  saving.value = true
+  try {
+    const payload = {
+      name: form.name,
+      phone: form.phone,
+      province: form.province,
+      city: form.city,
+      district: form.district,
+      detail_address: form.detail_address,
+      is_default: form.is_default
+    }
+    if (form.id) {
+      await addressApi.update(form.id, payload)
+    } else {
+      await addressApi.create(payload)
+    }
+    if (form.is_default && form.id) {
+      await addressApi.setDefault(form.id)
+    }
+    showPopup.value = false
+    showSuccessToast('地址已保存')
+    await loadData()
+  } finally {
+    saving.value = false
   }
-  if (form.id) {
-    await addressApi.update(form.id, payload)
-  } else {
-    await addressApi.create(payload)
-  }
-  if (form.is_default && form.id) {
-    await addressApi.setDefault(form.id)
-  }
-  showPopup.value = false
-  showSuccessToast('地址已保存')
-  await loadData()
 }
 
 async function removeAddress() {

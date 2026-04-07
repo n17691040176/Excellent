@@ -24,6 +24,9 @@ export const homeApi = {
   },
   hotSale() {
     return request.get('/api/v1/app/zones/hot-sale/products')
+  },
+  decoration() {
+    return request.get('/api/v1/app/decorations/mobile-home', { hideLoading: true })
   }
 }
 

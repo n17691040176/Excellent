@@ -25,6 +25,8 @@ export const PERMISSION_MATRIX = {
     'withdraws:review',
     'suppliers:view',
     'assets:view',
+    'decoration:view',
+    'decoration:edit',
     'local-life:view',
     'local-life:create',
     'local-life:edit',

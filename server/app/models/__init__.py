@@ -6,6 +6,7 @@ from app.models.commission import CommissionConfig, CommissionFlow, UserCommissi
 from app.models.local_life import AdRevenueFlow, DeviceRevenueFlow, LocalLifeMerchant, LocalLifeOrder, LocalLifeService, MerchantCommissionRule, MerchantStore
 from app.models.order import Order, OrderAssetDeduction, OrderItem
 from app.models.package import Package, PackageBenefit
+from app.models.page_decoration import PageDecoration
 from app.models.product import Product, ProductQualification, ProductSku, ProductZoneConfig
 from app.models.supplier import AgentLevel, AgentQualification, Supplier, SupplierAgreement, SupplierEntryOrder, SupplierReferralReward
 from app.models.team import Team, TeamMember
@@ -18,5 +19,6 @@ __all__ = [
     'DailySigninRecord', 'Order', 'OrderItem', 'OrderAssetDeduction', 'UserAddress', 'Supplier',
     'SupplierEntryOrder', 'SupplierAgreement', 'SupplierReferralReward', 'AgentLevel',
     'AgentQualification', 'LocalLifeMerchant', 'MerchantStore', 'LocalLifeService',
-    'LocalLifeOrder', 'MerchantCommissionRule', 'DeviceRevenueFlow', 'AdRevenueFlow'
+    'LocalLifeOrder', 'MerchantCommissionRule', 'DeviceRevenueFlow', 'AdRevenueFlow',
+    'PageDecoration'
 ]

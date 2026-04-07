@@ -6,6 +6,15 @@ export const dashboardApi = {
   }
 }
 
+export const decorationApi = {
+  mobileHome() {
+    return request.get('/api/v1/admin/decorations/mobile-home')
+  },
+  updateMobileHome(payload) {
+    return request.put('/api/v1/admin/decorations/mobile-home', { payload })
+  }
+}
+
 export const userApi = {
   list() {
     return request.get('/api/v1/admin/users')

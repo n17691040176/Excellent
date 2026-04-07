@@ -1,9 +1,9 @@
 <template>
   <view class="page">
-    <view class="card">
+    <view class="card hero-card">
       <view class="badge">Local Life Orders</view>
-      <view class="title">到店服务订单与核销进度</view>
-      <view class="desc">本地生活订单支付后进入待核销状态，门店或后台核销成功后自动完成，并触发分佣结算。</view>
+      <view class="title">围绕核销节点跟进到店服务订单</view>
+      <view class="desc">本地生活订单支付后进入待核销状态，核销完成后再触发后续佣金结算。</view>
       <view class="metric-grid">
         <view class="metric-card" v-for="item in metrics" :key="item.label">
           <view class="metric-label">{{ item.label }}</view>
@@ -26,11 +26,23 @@
         </view>
       </scroll-view>
 
-      <view v-if="filteredOrders.length">
-        <view class="line-card" v-for="item in filteredOrders" :key="item.id" @click="goDetail(item.id)">
-          <view class="line-title">{{ item.order_no }}</view>
-          <view class="line-meta">{{ statusDesc(item) }} / 应付 {{ item.payable_amount }}</view>
-          <view class="line-meta">{{ statusLabel(item) }}</view>
+      <view v-if="loadError" class="status-card">
+        <view class="status-title">订单列表加载失败</view>
+        <view class="status-desc">{{ loadError }}</view>
+        <button class="secondary-btn retry-btn" @click="loadData">重新加载</button>
+      </view>
+      <view v-else-if="loading">
+        <view class="skeleton-block"></view>
+        <view class="skeleton-block short"></view>
+      </view>
+      <view v-else-if="filteredOrders.length" class="order-list">
+        <view class="order-card tap-item" v-for="item in filteredOrders" :key="item.id" @click="goDetail(item.id)">
+          <view class="order-top">
+            <view class="line-title">{{ item.order_no }}</view>
+            <view class="order-pill" :class="orderStatusTone(item.order_status)">{{ statusLabel(item) }}</view>
+          </view>
+          <view class="line-meta">{{ statusDesc(item) }}</view>
+          <view class="line-meta">应付金额 ¥{{ item.payable_amount }}</view>
         </view>
       </view>
       <view v-else class="empty-text">当前状态下暂无本地生活订单</view>
@@ -44,9 +56,12 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { localLifeApi } from '../../api/modules'
 import { ensureLogin } from '../../utils/guard'
+import { normalizeLoadError, orderStatusLabel, orderStatusTone } from '../../utils/ui'
 
 const rows = ref([])
 const activeFilter = ref('ALL')
+const loading = ref(false)
+const loadError = ref('')
 
 const filters = [
   { label: '全部', value: 'ALL' },
@@ -56,7 +71,9 @@ const filters = [
   { label: '已关闭', value: 'CLOSED' }
 ]
 
-const filteredOrders = computed(() => (activeFilter.value === 'ALL' ? rows.value : rows.value.filter((item) => item.order_status === activeFilter.value)))
+const filteredOrders = computed(() => (
+  activeFilter.value === 'ALL' ? rows.value : rows.value.filter((item) => item.order_status === activeFilter.value)
+))
 
 const metrics = computed(() => [
   { label: '本地生活订单', value: rows.value.length, meta: '到店服务总订单数' },
@@ -66,7 +83,7 @@ const metrics = computed(() => [
 ])
 
 function statusLabel(item) {
-  return { CREATED: '待支付', PAID: '待核销', CONFIRMED: '已完成', CLOSED: '已关闭' }[item.order_status] || item.order_status
+  return orderStatusLabel(item.order_status, { PAID: '待核销' })
 }
 
 function statusDesc(item) {
@@ -83,7 +100,15 @@ function goDetail(id) {
 }
 
 async function loadData() {
-  rows.value = await localLifeApi.orders()
+  loading.value = true
+  loadError.value = ''
+  try {
+    rows.value = await localLifeApi.orders()
+  } catch (error) {
+    loadError.value = normalizeLoadError(error)
+  } finally {
+    loading.value = false
+  }
 }
 
 onShow(() => {
@@ -95,4 +120,30 @@ onShow(() => {
 </script>
 
 <style scoped>
+.hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(62, 152, 108, 0.2), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 246, 0.98) 100%);
+}
+
+.order-list {
+  display: grid;
+  gap: 16rpx;
+}
+
+.order-card {
+  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
+  border-radius: 24rpx;
+  padding: 24rpx;
+  border: 1rpx solid rgba(21, 55, 45, 0.05);
+}
+
+.order-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 10rpx;
+}
+
 </style>

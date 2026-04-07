@@ -234,9 +234,6 @@ onShow(() => {
   justify-content: center;
   padding: 10rpx 18rpx;
   border-radius: 999rpx;
-}
-
-.service-tag {
   background: #e7f6ef;
   color: #1e8f64;
   font-size: 22rpx;

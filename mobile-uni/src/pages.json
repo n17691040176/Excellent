@@ -9,13 +9,20 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "商城首页"
+        "navigationBarTitleText": "商城首页",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/packages/list",
       "style": {
         "navigationBarTitleText": "套餐中心"
+      }
+    },
+    {
+      "path": "pages/local-life/index",
+      "style": {
+        "navigationBarTitleText": "本地生活"
       }
     },
     {
@@ -133,11 +140,16 @@
       ]
     }
   ],
+  "globalStyle": {
+    "backgroundColor": "#f7f2e9",
+    "navigationBarBackgroundColor": "#f7f2e9",
+    "navigationBarTextStyle": "black"
+  },
   "tabBar": {
-    "color": "#7A7E83",
-    "selectedColor": "#0D6EFD",
+    "color": "#6B7A74",
+    "selectedColor": "#1E8F64",
     "borderStyle": "black",
-    "backgroundColor": "#FFFFFF",
+    "backgroundColor": "#FFFDF9",
     "list": [
       {
         "pagePath": "pages/home/index",
@@ -148,8 +160,8 @@
         "text": "套餐"
       },
       {
-        "pagePath": "pages/orders/list",
-        "text": "订单"
+        "pagePath": "pages/local-life/index",
+        "text": "本地生活"
       },
       {
         "pagePath": "pages/profile/index",
