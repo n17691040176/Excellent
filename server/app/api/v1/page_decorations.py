@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_roles
@@ -32,3 +32,17 @@ def admin_save_mobile_home_decoration(
     current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     return {'code': 0, 'message': 'success', 'data': PageDecorationService.save_mobile_uni_home_for_admin(db, current_user, payload.payload)}
+
+
+@admin_router.post('/mobile-home/upload-image')
+async def admin_upload_mobile_home_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    del current_user
+    try:
+        data = await file.read()
+        result = PageDecorationService.store_mobile_home_image(file.filename or '', file.content_type or '', data)
+        return {'code': 0, 'message': 'success', 'data': result}
+    finally:
+        await file.close()

@@ -26,9 +26,13 @@
       >
         <swiper-item v-for="(item, index) in heroSwiperItems" :key="`${item.title}-${index}`">
           <view class="swiper-slide tap-item" @click="openConfiguredLink(item)">
-            <view class="slide-badge">{{ item.badge || '精选会场' }}</view>
-            <view class="slide-title">{{ item.title || '首页活动' }}</view>
-            <view class="slide-desc">{{ item.desc || '请在后台补充轮播文案' }}</view>
+            <image v-if="item.image_url" class="slide-image" :src="item.image_url" mode="aspectFill" />
+            <view class="slide-mask"></view>
+            <view class="slide-content">
+              <view class="slide-badge">{{ item.badge || '精选会场' }}</view>
+              <view class="slide-title">{{ item.title || '首页活动' }}</view>
+              <view class="slide-desc">{{ item.desc || '请在后台补充轮播文案' }}</view>
+            </view>
           </view>
         </swiper-item>
       </swiper>
@@ -58,6 +62,10 @@
         </view>
         <view class="zone-grid">
           <view class="zone-nav-card tap-item" v-for="item in zoneItems" :key="item.key || item.title" @click="openZone(item)">
+            <view class="nav-icon-shell zone-icon-shell">
+              <image v-if="item.icon_url" class="nav-icon-image" :src="item.icon_url" mode="aspectFill" />
+              <view v-else class="nav-icon-text">{{ navItemFallbackText(item, '分区') }}</view>
+            </view>
             <view class="zone-card-top">
               <view class="zone-card-title">{{ item.title }}</view>
               <view class="zone-card-count">{{ zoneCount(item.key) }}</view>
@@ -154,6 +162,10 @@
         </view>
         <view class="quick-grid">
           <view class="quick-entry tap-item" v-for="(item, index) in quickItems" :key="`${item.title}-${index}`" @click="openConfiguredLink(item)">
+            <view class="nav-icon-shell quick-icon-shell">
+              <image v-if="item.icon_url" class="nav-icon-image" :src="item.icon_url" mode="aspectFill" />
+              <view v-else class="nav-icon-text">{{ navItemFallbackText(item, '入口') }}</view>
+            </view>
             <view class="quick-entry-title">{{ item.title }}</view>
             <view class="quick-entry-desc">{{ item.desc }}</view>
           </view>
@@ -174,6 +186,10 @@
         </view>
         <view class="quick-grid">
           <view class="quick-entry tap-item" v-for="(item, index) in customGridItems(customBlockFromLayout(sectionKey))" :key="`${sectionKey}-${index}`" @click="openConfiguredLink(item)">
+            <view class="nav-icon-shell quick-icon-shell">
+              <image v-if="item.icon_url" class="nav-icon-image" :src="item.icon_url" mode="aspectFill" />
+              <view v-else class="nav-icon-text">{{ navItemFallbackText(item, '宫格') }}</view>
+            </view>
             <view class="quick-entry-title">{{ item.title }}</view>
             <view class="quick-entry-desc">{{ item.desc }}</view>
           </view>
@@ -212,9 +228,13 @@
         <swiper class="module-swiper" circular :autoplay="customBlockFromLayout(sectionKey)?.autoplay !== false" :indicator-dots="customSwiperItems(customBlockFromLayout(sectionKey)).length > 1">
           <swiper-item v-for="(item, index) in customSwiperItems(customBlockFromLayout(sectionKey))" :key="`${sectionKey}-swiper-${index}`">
             <view class="module-swiper-card tap-item" @click="openConfiguredLink(item)">
-              <view class="promo-badge">{{ item.badge || '轮播图' }}</view>
-              <view class="promo-title">{{ item.title }}</view>
-              <view class="promo-desc">{{ item.desc }}</view>
+              <image v-if="item.image_url" class="slide-image" :src="item.image_url" mode="aspectFill" />
+              <view class="slide-mask"></view>
+              <view class="slide-content">
+                <view class="promo-badge">{{ item.badge || '轮播图' }}</view>
+                <view class="promo-title">{{ item.title }}</view>
+                <view class="promo-desc">{{ item.desc }}</view>
+              </view>
             </view>
           </swiper-item>
         </swiper>
@@ -277,6 +297,7 @@ function createDefaultHomeSwiper() {
         badge: '商城主推',
         title: '热门专区与首单权益一起前置',
         desc: '参考主流电商首页，把主推活动、分区会场和转化入口收进首屏轮播。',
+        image_url: '',
         path: '/pages/packages/list',
         open_type: 'switchTab'
       },
@@ -285,6 +306,7 @@ function createDefaultHomeSwiper() {
         badge: '本地生活',
         title: '到店服务和联盟商家进入底部导航',
         desc: '把本地生活从二级入口抬升到底部栏，门店服务触达更直接。',
+        image_url: '',
         path: '/pages/local-life/index',
         open_type: 'switchTab'
       },
@@ -293,6 +315,7 @@ function createDefaultHomeSwiper() {
         badge: '爆款专区',
         title: '首页下滑直达双列瀑布商品流',
         desc: '支持下拉刷新和继续加载，持续承接爆款、自营和本地生活内容。',
+        image_url: '',
         path: '/pages/packages/list',
         open_type: 'switchTab'
       }
@@ -324,10 +347,10 @@ function createDefaultDecoration() {
       title: '四区导航',
       subtitle: '热门分区',
       items: [
-        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', path: '/pages/local-life/index', open_type: 'switchTab' }
+        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', path: '/pages/local-life/index', open_type: 'switchTab' }
       ]
     },
     waterfall_section: {
@@ -370,12 +393,12 @@ function createDefaultDecoration() {
       title: '我的常用',
       subtitle: '个人中心',
       items: [
-        { enabled: true, title: '套餐中心', desc: '查看入场资格与权益档位', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, title: '我的团队', desc: '管理归属与成员结构', path: '/subpackages/team/index', open_type: 'navigate' },
-        { enabled: true, title: '邀请好友', desc: '分享邀请码完成绑定', path: '/subpackages/invite/index', open_type: 'navigate' },
-        { enabled: true, title: '佣金中心', desc: '跟进冻结与可提现状态', path: '/subpackages/commission/index', open_type: 'navigate' },
-        { enabled: true, title: '资产中心', desc: '查看余额、积分与券资产', path: '/subpackages/assets/index', open_type: 'navigate' },
-        { enabled: true, title: '个人中心', desc: '维护资料、签到和账号设置', path: '/pages/profile/index', open_type: 'switchTab' }
+        { enabled: true, title: '套餐中心', desc: '查看入场资格与权益档位', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, title: '我的团队', desc: '管理归属与成员结构', icon_url: '', path: '/subpackages/team/index', open_type: 'navigate' },
+        { enabled: true, title: '邀请好友', desc: '分享邀请码完成绑定', icon_url: '', path: '/subpackages/invite/index', open_type: 'navigate' },
+        { enabled: true, title: '佣金中心', desc: '跟进冻结与可提现状态', icon_url: '', path: '/subpackages/commission/index', open_type: 'navigate' },
+        { enabled: true, title: '资产中心', desc: '查看余额、积分与券资产', icon_url: '', path: '/subpackages/assets/index', open_type: 'navigate' },
+        { enabled: true, title: '个人中心', desc: '维护资料、签到和账号设置', icon_url: '', path: '/pages/profile/index', open_type: 'switchTab' }
       ]
     }
   }
@@ -386,9 +409,9 @@ function createFallbackItem(type) {
     return { enabled: true, badge: '', title: '', desc: '', path: '', open_type: 'navigate' }
   }
   if (type === 'zone') {
-    return { enabled: true, key: '', title: '', tip: '', path: '', open_type: 'navigate' }
+    return { enabled: true, key: '', title: '', tip: '', icon_url: '', path: '', open_type: 'navigate' }
   }
-  return { enabled: true, title: '', desc: '', path: '', open_type: 'navigate' }
+  return { enabled: true, title: '', desc: '', icon_url: '', path: '', open_type: 'navigate' }
 }
 
 function normalizeEnabled(value, fallback = true) {
@@ -483,6 +506,7 @@ function normalizeCustomBlock(block, index = 0) {
             badge: item?.badge || '',
             title: item?.title || '',
             desc: item?.desc || '',
+            image_url: item?.image_url || '',
             path: item?.path || '',
             open_type: item?.open_type || 'navigate'
           }))
@@ -639,11 +663,16 @@ function customBlockFromLayout(sectionKey) {
 }
 
 function customGridItems(block) {
-  return (block?.items || []).filter((item) => item?.enabled !== false && (item?.title || item?.desc))
+  return (block?.items || []).filter((item) => item?.enabled !== false && (item?.title || item?.desc || item?.icon_url))
+}
+
+function navItemFallbackText(item, fallback = '入口') {
+  const source = String(item?.title || item?.key || fallback).trim()
+  return source.slice(0, 2) || fallback
 }
 
 function customSwiperItems(block) {
-  return (block?.items || []).filter((item) => item?.enabled !== false && (item?.badge || item?.title || item?.desc))
+  return (block?.items || []).filter((item) => item?.enabled !== false && (item?.badge || item?.title || item?.desc || item?.image_url))
 }
 
 function customMixedGoodsItems(block) {
@@ -830,7 +859,7 @@ const customSectionEnabledMap = computed(() => {
 const sectionEnabledMap = computed(() => ({
   announcement: announcementEnabled.value,
   zone_section: decoration.value.zone_section?.enabled !== false && zoneItems.value.length > 0,
-  waterfall_section: decoration.value.waterfall_section?.enabled !== false && waterfallAllItems.value.length > 0,
+  waterfall_section: decoration.value.waterfall_section?.enabled !== false,
   package_section: decoration.value.package_section?.enabled !== false,
   promo_section: decoration.value.promo_section?.enabled !== false && promoCards.value.length > 0,
   quick_section: decoration.value.quick_section?.enabled !== false && quickItems.value.length > 0,
@@ -862,23 +891,27 @@ async function loadData({ resetWaterfall = false } = {}) {
   loading.value = true
   loadError.value = ''
   try {
-    const decorationPromise = homeApi.decoration().catch(() => ({ payload: createDefaultDecoration() }))
-    const [packageRows, repurchase, selfOperated, hotSale, localLife, decorationRes] = await Promise.all([
+    const results = await Promise.allSettled([
       packageApi.list(),
       homeApi.repurchase(),
       homeApi.selfOperated(),
       homeApi.hotSale(),
       localLifeApi.services(),
-      decorationPromise
+      homeApi.decoration()
     ])
-    const normalizedDecoration = normalizeDecoration(decorationRes?.payload)
-    packages.value = packageRows || []
+    const [packageRows, repurchase, selfOperated, hotSale, localLife, decorationRes] = results
+    const normalizedDecoration = normalizeDecoration(decorationRes.status === 'fulfilled' ? decorationRes.value?.payload : createDefaultDecoration())
+    packages.value = packageRows.status === 'fulfilled' ? (packageRows.value || []) : []
     decorationData.value = normalizedDecoration
     lists.value = {
-      repurchase: repurchase || [],
-      selfOperated: selfOperated || [],
-      hotSale: hotSale || [],
-      localLife: localLife || []
+      repurchase: repurchase.status === 'fulfilled' ? (repurchase.value || []) : [],
+      selfOperated: selfOperated.status === 'fulfilled' ? (selfOperated.value || []) : [],
+      hotSale: hotSale.status === 'fulfilled' ? (hotSale.value || []) : [],
+      localLife: localLife.status === 'fulfilled' ? (localLife.value || []) : []
+    }
+    const failedCount = results.filter((item) => item.status === 'rejected').length
+    if (failedCount === results.length) {
+      throw packageRows.reason || repurchase.reason || selfOperated.reason || hotSale.reason || localLife.reason || decorationRes.reason
     }
     if (resetWaterfall || !waterfallVisibleCount.value) {
       waterfallVisibleCount.value = Number(normalizedDecoration.waterfall_section?.page_size || 8)
@@ -992,6 +1025,8 @@ onReachBottom(() => {
 
 .swiper-slide,
 .module-swiper-card {
+  position: relative;
+  overflow: hidden;
   height: 100%;
   padding: 30rpx;
   border-radius: 28rpx;
@@ -1000,6 +1035,24 @@ onReachBottom(() => {
     radial-gradient(circle at top right, rgba(208, 163, 80, 0.18), transparent 30%),
     linear-gradient(145deg, #18343b 0%, #275d57 58%, #1f8f64 100%);
   color: #ffffff;
+}
+
+.slide-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.slide-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 20, 25, 0.12) 0%, rgba(11, 20, 25, 0.62) 100%);
+}
+
+.slide-content {
+  position: relative;
+  z-index: 1;
 }
 
 .slide-title {
@@ -1070,6 +1123,44 @@ onReachBottom(() => {
 .zone-nav-card {
   min-height: 200rpx;
   box-sizing: border-box;
+}
+
+.nav-icon-shell {
+  width: 74rpx;
+  height: 74rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18rpx;
+  background:
+    radial-gradient(circle at top right, rgba(209, 163, 79, 0.2), transparent 36%),
+    linear-gradient(145deg, rgba(30, 143, 100, 0.16), rgba(24, 52, 46, 0.08));
+  color: #18342e;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.zone-icon-shell {
+  box-shadow: 0 12rpx 26rpx rgba(30, 143, 100, 0.12);
+}
+
+.quick-icon-shell {
+  width: 66rpx;
+  height: 66rpx;
+  border-radius: 22rpx;
+  margin-bottom: 14rpx;
+}
+
+.nav-icon-image {
+  width: 100%;
+  height: 100%;
+}
+
+.nav-icon-text {
+  padding: 0 8rpx;
+  text-align: center;
 }
 
 .zone-card-top,

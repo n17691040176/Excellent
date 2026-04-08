@@ -1,7 +1,11 @@
+from datetime import datetime
+from pathlib import Path
 from copy import deepcopy
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import AppError
 from app.models.page_decoration import PageDecoration
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
@@ -11,6 +15,15 @@ MOBILE_UNI_HOME_TITLE = 'uni 首页装修'
 
 
 class PageDecorationService:
+    IMAGE_SUFFIX_MAP = {
+        'image/jpeg': '.jpg',
+        'image/jpg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+        'image/gif': '.gif',
+    }
+    MAX_UPLOAD_SIZE = 5 * 1024 * 1024
+
     @staticmethod
     def supported_custom_block_types() -> set[str]:
         return {'banner', 'grid', 'coupon_strip', 'zone_feed', 'image_swiper', 'mixed_goods'}
@@ -18,6 +31,12 @@ class PageDecorationService:
     @staticmethod
     def supported_zone_keys() -> set[str]:
         return {'repurchase', 'selfOperated', 'hotSale', 'localLife'}
+
+    @staticmethod
+    def upload_root() -> Path:
+        path = Path(__file__).resolve().parents[2] / 'uploads'
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @staticmethod
     def mobile_uni_home_layout() -> list[str]:
@@ -37,6 +56,7 @@ class PageDecorationService:
                     'badge': '商城主推',
                     'title': '热门专区与首单权益一起前置',
                     'desc': '参考主流电商首页，把主推活动、分区会场和转化入口收进首屏轮播。',
+                    'image_url': '',
                     'path': '/pages/packages/list',
                     'open_type': 'switchTab',
                 },
@@ -45,6 +65,7 @@ class PageDecorationService:
                     'badge': '本地生活',
                     'title': '到店服务和联盟商家进入底部导航',
                     'desc': '把本地生活从二级入口抬升到底部栏，门店服务触达更直接。',
+                    'image_url': '',
                     'path': '/pages/local-life/index',
                     'open_type': 'switchTab',
                 },
@@ -53,6 +74,7 @@ class PageDecorationService:
                     'badge': '爆款专区',
                     'title': '首页下滑直达双列瀑布商品流',
                     'desc': '支持下拉刷新和继续加载，持续承接爆款、自营和本地生活内容。',
+                    'image_url': '',
                     'path': '/pages/packages/list',
                     'open_type': 'switchTab',
                 },
@@ -119,10 +141,10 @@ class PageDecorationService:
                 'title': '四区导航',
                 'subtitle': '热门分区',
                 'items': [
-                    {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-                    {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-                    {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-                    {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'icon_url': '', 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
                 ],
             },
             'quick_section': {
@@ -130,12 +152,12 @@ class PageDecorationService:
                 'title': '我的常用',
                 'subtitle': '个人中心',
                 'items': [
-                    {'enabled': True, 'title': '套餐中心', 'desc': '查看入场资格与权益档位', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-                    {'enabled': True, 'title': '我的团队', 'desc': '管理归属团队与成员结构', 'path': '/subpackages/team/index', 'open_type': 'navigate'},
-                    {'enabled': True, 'title': '邀请好友', 'desc': '分享邀请码完成绑定', 'path': '/subpackages/invite/index', 'open_type': 'navigate'},
-                    {'enabled': True, 'title': '佣金中心', 'desc': '跟进冻结与可提现状态', 'path': '/subpackages/commission/index', 'open_type': 'navigate'},
-                    {'enabled': True, 'title': '资产中心', 'desc': '查看余额、积分与券资产', 'path': '/subpackages/assets/index', 'open_type': 'navigate'},
-                    {'enabled': True, 'title': '个人中心', 'desc': '维护资料、签到和账号设置', 'path': '/pages/profile/index', 'open_type': 'switchTab'},
+                    {'enabled': True, 'title': '套餐中心', 'desc': '查看入场资格与权益档位', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+                    {'enabled': True, 'title': '我的团队', 'desc': '管理归属团队与成员结构', 'icon_url': '', 'path': '/subpackages/team/index', 'open_type': 'navigate'},
+                    {'enabled': True, 'title': '邀请好友', 'desc': '分享邀请码完成绑定', 'icon_url': '', 'path': '/subpackages/invite/index', 'open_type': 'navigate'},
+                    {'enabled': True, 'title': '佣金中心', 'desc': '跟进冻结与可提现状态', 'icon_url': '', 'path': '/subpackages/commission/index', 'open_type': 'navigate'},
+                    {'enabled': True, 'title': '资产中心', 'desc': '查看余额、积分与券资产', 'icon_url': '', 'path': '/subpackages/assets/index', 'open_type': 'navigate'},
+                    {'enabled': True, 'title': '个人中心', 'desc': '维护资料、签到和账号设置', 'icon_url': '', 'path': '/pages/profile/index', 'open_type': 'switchTab'},
                 ],
             },
         }
@@ -205,10 +227,10 @@ class PageDecorationService:
             },
         ]
         payload['zone_section']['items'] = [
-            {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
-            {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-            {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-            {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'icon_url': '', 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
         ]
         payload['waterfall_section'] = {
             'enabled': True,
@@ -306,10 +328,11 @@ class PageDecorationService:
                 'enabled': PageDecorationService._clean_bool(item.get('enabled'), True),
                 'title': PageDecorationService._clean_text(item.get('title')),
                 'desc': PageDecorationService._clean_text(item.get('desc')),
+                'icon_url': PageDecorationService._clean_text(item.get('icon_url')),
                 'path': PageDecorationService._clean_text(item.get('path')),
                 'open_type': PageDecorationService._clean_text(item.get('open_type'), 'navigate'),
             }
-            if row['enabled'] or row['title'] or row['desc'] or row['path']:
+            if row['enabled'] or row['title'] or row['desc'] or row['icon_url'] or row['path']:
                 rows.append(row)
         return rows
 
@@ -324,10 +347,11 @@ class PageDecorationService:
                 'badge': PageDecorationService._clean_text(item.get('badge')),
                 'title': PageDecorationService._clean_text(item.get('title')),
                 'desc': PageDecorationService._clean_text(item.get('desc')),
+                'image_url': PageDecorationService._clean_text(item.get('image_url')),
                 'path': PageDecorationService._clean_text(item.get('path')),
                 'open_type': PageDecorationService._clean_text(item.get('open_type'), 'navigate'),
             }
-            if row['enabled'] or row['badge'] or row['title'] or row['desc'] or row['path']:
+            if row['enabled'] or row['badge'] or row['title'] or row['desc'] or row['image_url'] or row['path']:
                 rows.append(row)
         return rows
 
@@ -428,6 +452,35 @@ class PageDecorationService:
         return rows
 
     @staticmethod
+    def store_mobile_home_image(filename: str, content_type: str, data: bytes) -> dict:
+        if not data:
+            raise AppError('上传图片不能为空')
+        if len(data) > PageDecorationService.MAX_UPLOAD_SIZE:
+            raise AppError('图片不能超过 5MB')
+        if not str(content_type or '').startswith('image/'):
+            raise AppError('仅支持上传图片文件')
+
+        suffix = Path(filename or '').suffix.lower()
+        if suffix not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
+            suffix = PageDecorationService.IMAGE_SUFFIX_MAP.get(content_type, '.jpg')
+
+        month_dir = datetime.utcnow().strftime('%Y%m')
+        target_dir = PageDecorationService.upload_root() / 'decorations' / 'mobile-home' / month_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_name = f'{uuid4().hex}{suffix}'
+        target_path = target_dir / target_name
+        target_path.write_bytes(data)
+
+        relative_path = target_path.relative_to(PageDecorationService.upload_root()).as_posix()
+        return {
+            'path': relative_path,
+            'url': f'/uploads/{relative_path}',
+            'filename': target_name,
+            'size': len(data),
+            'content_type': content_type,
+        }
+
+    @staticmethod
     def normalize_mobile_uni_home_payload(payload: dict | None) -> dict:
         defaults = PageDecorationService.default_mobile_uni_home_payload()
         source = payload if isinstance(payload, dict) else {}
@@ -480,7 +533,7 @@ class PageDecorationService:
             'items': PageDecorationService._normalize_item_list(
                 zone_section.get('items'),
                 defaults['zone_section']['items'],
-                {'key': '', 'title': '', 'tip': '', 'path': '', 'open_type': 'navigate'},
+                {'key': '', 'title': '', 'tip': '', 'icon_url': '', 'path': '', 'open_type': 'navigate'},
             ),
         }
         normalized['waterfall_section'] = {
@@ -504,7 +557,7 @@ class PageDecorationService:
             'items': PageDecorationService._normalize_item_list(
                 quick_section.get('items'),
                 defaults['quick_section']['items'],
-                {'title': '', 'desc': '', 'path': '', 'open_type': 'navigate'},
+                {'title': '', 'desc': '', 'icon_url': '', 'path': '', 'open_type': 'navigate'},
             ),
         }
         return normalized

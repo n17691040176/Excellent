@@ -12,6 +12,15 @@ export const decorationApi = {
   },
   updateMobileHome(payload) {
     return request.put('/api/v1/admin/decorations/mobile-home', { payload })
+  },
+  uploadMobileHomeImage(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request.post('/api/v1/admin/decorations/mobile-home/upload-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
   }
 }
 

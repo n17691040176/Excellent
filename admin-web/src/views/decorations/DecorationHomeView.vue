@@ -203,6 +203,22 @@
                     <el-input v-model="item.desc" />
                   </el-form-item>
                 </div>
+                <el-form-item label="图标地址">
+                  <el-input v-model="item.icon_url" placeholder="https:// 或后台上传后的图标地址" />
+                </el-form-item>
+                <div class="item-upload-row">
+                  <el-upload
+                    :show-file-list="false"
+                    accept="image/*"
+                    :http-request="(options) => uploadDecorationItemImage(options, item, itemImageUploadKey(block.id, 'grid', itemIndex))"
+                  >
+                    <el-button :loading="uploadingImageKey === itemImageUploadKey(block.id, 'grid', itemIndex)">上传图标</el-button>
+                  </el-upload>
+                  <el-button v-if="item.icon_url" plain @click="item.icon_url = ''">清空图标</el-button>
+                </div>
+                <div v-if="item.icon_url" class="item-image-preview-shell">
+                  <img :src="item.icon_url" alt="宫格图标预览" class="item-image-preview" />
+                </div>
                 <div class="form-split">
                   <el-form-item label="跳转地址">
                     <el-input v-model="item.path" />
@@ -328,6 +344,30 @@
                 <el-form-item label="描述">
                   <el-input v-model="item.desc" type="textarea" :rows="2" />
                 </el-form-item>
+                <el-form-item label="图片地址">
+                  <el-input v-model="item.image_url" placeholder="https:// 或后台上传后的图片地址" />
+                </el-form-item>
+                <div class="swiper-upload-row">
+                  <el-upload
+                    :show-file-list="false"
+                    accept="image/*"
+                    :http-request="(options) => uploadSwiperImage(options, block, item, itemIndex)"
+                  >
+                    <el-button :loading="uploadingSwiperImageKey === swiperImageUploadKey(block.id, itemIndex)">
+                      上传图片
+                    </el-button>
+                  </el-upload>
+                  <el-button
+                    v-if="item.image_url"
+                    plain
+                    @click="item.image_url = ''"
+                  >
+                    清空图片
+                  </el-button>
+                </div>
+                <div v-if="item.image_url" class="swiper-image-preview-shell">
+                  <img :src="item.image_url" alt="轮播图预览" class="swiper-image-preview" />
+                </div>
                 <div class="form-split">
                   <el-form-item label="跳转地址">
                     <el-input v-model="item.path" />
@@ -665,6 +705,22 @@
           <el-form-item label="说明">
             <el-input v-model="item.tip" />
           </el-form-item>
+          <el-form-item label="图标地址">
+            <el-input v-model="item.icon_url" placeholder="https:// 或后台上传后的图标地址" />
+          </el-form-item>
+          <div class="item-upload-row">
+            <el-upload
+              :show-file-list="false"
+              accept="image/*"
+              :http-request="(options) => uploadDecorationItemImage(options, item, itemImageUploadKey('zone_section', 'zone', index))"
+            >
+              <el-button :loading="uploadingImageKey === itemImageUploadKey('zone_section', 'zone', index)">上传图标</el-button>
+            </el-upload>
+            <el-button v-if="item.icon_url" plain @click="item.icon_url = ''">清空图标</el-button>
+          </div>
+          <div v-if="item.icon_url" class="item-image-preview-shell">
+            <img :src="item.icon_url" alt="分区图标预览" class="item-image-preview" />
+          </div>
           <div class="form-split">
             <el-form-item label="跳转地址">
               <el-input v-model="item.path" />
@@ -736,6 +792,22 @@
               <el-input v-model="item.desc" />
             </el-form-item>
           </div>
+          <el-form-item label="图标地址">
+            <el-input v-model="item.icon_url" placeholder="https:// 或后台上传后的图标地址" />
+          </el-form-item>
+          <div class="item-upload-row">
+            <el-upload
+              :show-file-list="false"
+              accept="image/*"
+              :http-request="(options) => uploadDecorationItemImage(options, item, itemImageUploadKey('quick_section', 'quick', index))"
+            >
+              <el-button :loading="uploadingImageKey === itemImageUploadKey('quick_section', 'quick', index)">上传图标</el-button>
+            </el-upload>
+            <el-button v-if="item.icon_url" plain @click="item.icon_url = ''">清空图标</el-button>
+          </div>
+          <div v-if="item.icon_url" class="item-image-preview-shell">
+            <img :src="item.icon_url" alt="快捷图标预览" class="item-image-preview" />
+          </div>
           <div class="form-split">
             <el-form-item label="跳转地址">
               <el-input v-model="item.path" />
@@ -768,19 +840,27 @@
           </div>
         </div>
 
-        <div v-if="previewPrimarySwiperItems.length" class="preview-card preview-banner-card">
-          <div class="preview-head">
-            <strong>{{ previewPrimarySwiperBlock?.title || '首页轮播' }}</strong>
-            <span>{{ previewPrimarySwiperItems.length }} 张</span>
-          </div>
-          <div class="preview-grid">
-            <div v-for="(item, index) in previewPrimarySwiperItems" :key="`preview-top-swiper-${index}`" class="preview-mini-card">
-              <div class="preview-badge muted">{{ item.badge || '轮播图' }}</div>
-              <strong>{{ item.title || '未命名轮播' }}</strong>
-              <p>{{ item.desc || '请补充轮播说明' }}</p>
+          <div v-if="previewPrimarySwiperItems.length" class="preview-card preview-banner-card">
+            <div class="preview-head">
+              <strong>{{ previewPrimarySwiperBlock?.title || '首页轮播' }}</strong>
+              <span>{{ previewPrimarySwiperItems.length }} 张</span>
+            </div>
+            <div class="preview-grid">
+              <div
+                v-for="(item, index) in previewPrimarySwiperItems"
+                :key="`preview-top-swiper-${index}`"
+                class="preview-mini-card preview-swiper-mini-card"
+                :style="previewSwiperStyle(item)"
+              >
+                <div class="preview-swiper-mask"></div>
+                <div class="preview-swiper-content">
+                  <div class="preview-badge muted">{{ item.badge || '轮播图' }}</div>
+                  <strong>{{ item.title || '未命名轮播' }}</strong>
+                  <p>{{ item.desc || '请补充轮播说明' }}</p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
         <template v-for="sectionKey in orderedPreviewKeys" :key="sectionKey">
           <div v-if="sectionKey === 'announcement'" class="preview-card">
@@ -822,6 +902,10 @@
             </div>
             <div class="preview-grid">
               <div v-for="(item, index) in previewZoneItems" :key="`preview-zone-${index}`" class="preview-mini-card">
+                <div class="preview-item-icon">
+                  <img v-if="item.icon_url" :src="item.icon_url" alt="分区图标" class="preview-item-icon-image" />
+                  <span v-else>{{ navItemFallbackText(item, '分区') }}</span>
+                </div>
                 <strong>{{ item.title || item.key || '未命名分区' }}</strong>
                 <p>{{ item.tip || '请补充分区说明' }}</p>
               </div>
@@ -853,6 +937,10 @@
             </div>
             <div class="preview-grid">
               <div v-for="(item, index) in previewQuickItems" :key="`preview-quick-${index}`" class="preview-mini-card">
+                <div class="preview-item-icon">
+                  <img v-if="item.icon_url" :src="item.icon_url" alt="快捷图标" class="preview-item-icon-image" />
+                  <span v-else>{{ navItemFallbackText(item, '入口') }}</span>
+                </div>
                 <strong>{{ item.title || '未命名入口' }}</strong>
                 <p>{{ item.desc || '请补充入口说明' }}</p>
               </div>
@@ -877,6 +965,10 @@
                 :key="`preview-custom-grid-${sectionKey}-${index}`"
                 class="preview-mini-card"
               >
+                <div class="preview-item-icon">
+                  <img v-if="item.icon_url" :src="item.icon_url" alt="宫格图标" class="preview-item-icon-image" />
+                  <span v-else>{{ navItemFallbackText(item, '宫格') }}</span>
+                </div>
                 <strong>{{ item.title || '未命名入口' }}</strong>
                 <p>{{ item.desc || '请补充说明' }}</p>
               </div>
@@ -915,11 +1007,15 @@
               <div
                 v-for="(item, index) in customSwiperItems(customBlockFromLayout(sectionKey))"
                 :key="`preview-swiper-${sectionKey}-${index}`"
-                class="preview-mini-card"
+                class="preview-mini-card preview-swiper-mini-card"
+                :style="previewSwiperStyle(item)"
               >
-                <div class="preview-badge muted">{{ item.badge || '轮播图' }}</div>
-                <strong>{{ item.title || '未命名轮播' }}</strong>
-                <p>{{ item.desc || '请补充轮播说明' }}</p>
+                <div class="preview-swiper-mask"></div>
+                <div class="preview-swiper-content">
+                  <div class="preview-badge muted">{{ item.badge || '轮播图' }}</div>
+                  <strong>{{ item.title || '未命名轮播' }}</strong>
+                  <p>{{ item.desc || '请补充轮播说明' }}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -1043,19 +1139,19 @@ function createPromoCard() {
 }
 
 function createZoneItem() {
-  return { enabled: true, key: '', title: '', tip: '', path: '', open_type: 'navigate' }
+  return { enabled: true, key: '', title: '', tip: '', icon_url: '', path: '', open_type: 'navigate' }
 }
 
 function createQuickItem() {
-  return { enabled: true, title: '', desc: '', path: '', open_type: 'navigate' }
+  return { enabled: true, title: '', desc: '', icon_url: '', path: '', open_type: 'navigate' }
 }
 
 function createGridItem() {
-  return { enabled: true, title: '', desc: '', path: '', open_type: 'navigate' }
+  return { enabled: true, title: '', desc: '', icon_url: '', path: '', open_type: 'navigate' }
 }
 
 function createSwiperItem() {
-  return { enabled: true, badge: '', title: '', desc: '', path: '', open_type: 'navigate' }
+  return { enabled: true, badge: '', title: '', desc: '', image_url: '', path: '', open_type: 'navigate' }
 }
 
 function createMixedGoodsItem() {
@@ -1075,6 +1171,7 @@ function createDefaultHomeSwiper() {
         badge: '商城主推',
         title: '热门专区与首单权益一起前置',
         desc: '参考主流电商首页，把主推活动、分区会场和转化入口收进首屏轮播。',
+        image_url: '',
         path: '/pages/packages/list',
         open_type: 'switchTab'
       },
@@ -1083,6 +1180,7 @@ function createDefaultHomeSwiper() {
         badge: '本地生活',
         title: '到店服务和联盟商家进入底部导航',
         desc: '把本地生活从二级入口抬升到底部栏，门店服务触达更直接。',
+        image_url: '',
         path: '/pages/local-life/index',
         open_type: 'switchTab'
       },
@@ -1091,6 +1189,7 @@ function createDefaultHomeSwiper() {
         badge: '爆款专区',
         title: '首页下滑直达双列瀑布商品流',
         desc: '支持下拉刷新和继续加载，持续承接爆款、自营和本地生活内容。',
+        image_url: '',
         path: '/pages/packages/list',
         open_type: 'switchTab'
       }
@@ -1376,10 +1475,10 @@ function createDefaultPayload() {
       title: '四区导航',
       subtitle: '热门分区',
       items: [
-        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', path: '/pages/local-life/index', open_type: 'switchTab' }
+        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', path: '/pages/local-life/index', open_type: 'switchTab' }
       ]
     },
     quick_section: {
@@ -1387,12 +1486,12 @@ function createDefaultPayload() {
       title: '我的常用',
       subtitle: '个人中心',
       items: [
-        { enabled: true, title: '套餐中心', desc: '查看入场资格与权益档位', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, title: '我的团队', desc: '管理归属与成员结构', path: '/subpackages/team/index', open_type: 'navigate' },
-        { enabled: true, title: '邀请好友', desc: '分享邀请码完成绑定', path: '/subpackages/invite/index', open_type: 'navigate' },
-        { enabled: true, title: '佣金中心', desc: '跟进冻结与可提现状态', path: '/subpackages/commission/index', open_type: 'navigate' },
-        { enabled: true, title: '资产中心', desc: '查看余额、积分与券资产', path: '/subpackages/assets/index', open_type: 'navigate' },
-        { enabled: true, title: '个人中心', desc: '维护资料、签到和账号设置', path: '/pages/profile/index', open_type: 'switchTab' }
+        { enabled: true, title: '套餐中心', desc: '查看入场资格与权益档位', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, title: '我的团队', desc: '管理归属与成员结构', icon_url: '', path: '/subpackages/team/index', open_type: 'navigate' },
+        { enabled: true, title: '邀请好友', desc: '分享邀请码完成绑定', icon_url: '', path: '/subpackages/invite/index', open_type: 'navigate' },
+        { enabled: true, title: '佣金中心', desc: '跟进冻结与可提现状态', icon_url: '', path: '/subpackages/commission/index', open_type: 'navigate' },
+        { enabled: true, title: '资产中心', desc: '查看余额、积分与券资产', icon_url: '', path: '/subpackages/assets/index', open_type: 'navigate' },
+        { enabled: true, title: '个人中心', desc: '维护资料、签到和账号设置', icon_url: '', path: '/pages/profile/index', open_type: 'switchTab' }
       ]
     }
   }
@@ -1464,10 +1563,10 @@ function createLocalLifePayload() {
     }
   ]
   payload.zone_section.items = [
-    { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', path: '/pages/local-life/index', open_type: 'switchTab' },
-    { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', path: '/pages/packages/list', open_type: 'switchTab' },
-    { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', path: '/pages/packages/list', open_type: 'switchTab' },
-    { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', path: '/pages/packages/list', open_type: 'switchTab' }
+    { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', path: '/pages/local-life/index', open_type: 'switchTab' },
+    { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+    { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
+    { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' }
   ]
   payload.waterfall_section = {
     enabled: true,
@@ -1712,6 +1811,8 @@ const exportDialogVisible = ref(false)
 const importDialogVisible = ref(false)
 const exportJsonText = ref('')
 const importJsonText = ref('')
+const uploadingImageKey = ref('')
+const uploadingSwiperImageKey = ref('')
 const collapsedCustomBlocks = ref({})
 const dragState = reactive({
   type: '',
@@ -1732,9 +1833,9 @@ const customBlockMap = computed(() => {
 const previewHeroTags = computed(() => splitLines(heroTagsText.value))
 const previewAnnouncementLines = computed(() => splitLines(announcementLinesText.value))
 const previewPromoCards = computed(() => form.promo_section.items.filter((item) => item.enabled !== false && (item.badge || item.title || item.desc)))
-const previewZoneItems = computed(() => form.zone_section.items.filter((item) => item.enabled !== false && (item.key || item.title || item.tip)))
+const previewZoneItems = computed(() => form.zone_section.items.filter((item) => item.enabled !== false && (item.key || item.title || item.tip || item.icon_url)))
 const previewWaterfallSources = computed(() => (form.waterfall_section.source_keys || []).map((item) => zoneSourceLabel(item)).join(' / '))
-const previewQuickItems = computed(() => form.quick_section.items.filter((item) => item.enabled !== false && (item.title || item.desc)))
+const previewQuickItems = computed(() => form.quick_section.items.filter((item) => item.enabled !== false && (item.title || item.desc || item.icon_url)))
 const previewPrimarySwiperBlock = computed(() => {
   return form.custom_blocks.find((block) => block.type === 'image_swiper' && block.enabled !== false && customSwiperItems(block).length > 0) || null
 })
@@ -1798,11 +1899,24 @@ function isCustomBlockCollapsed(blockId) {
 }
 
 function customGridItems(block) {
-  return (block?.items || []).filter((item) => item.enabled !== false && (item.title || item.desc))
+  return (block?.items || []).filter((item) => item.enabled !== false && (item.title || item.desc || item.icon_url))
+}
+
+function navItemFallbackText(item, fallback = '入口') {
+  const title = String(item?.title || item?.key || fallback).trim()
+  return title.slice(0, 2) || fallback
 }
 
 function customSwiperItems(block) {
-  return (block?.items || []).filter((item) => item.enabled !== false && (item.badge || item.title || item.desc))
+  return (block?.items || []).filter((item) => item.enabled !== false && (item.badge || item.title || item.desc || item.image_url))
+}
+
+function previewSwiperStyle(item) {
+  const imageUrl = String(item?.image_url || '').trim()
+  const imageLayer = imageUrl ? `linear-gradient(180deg, rgba(18, 31, 35, 0.08) 0%, rgba(18, 31, 35, 0.38) 100%), url("${imageUrl}") center / cover no-repeat` : ''
+  return {
+    background: imageLayer || 'linear-gradient(145deg, #18343b 0%, #275d57 58%, #1f8f64 100%)'
+  }
 }
 
 function customMixedGoodsItems(block) {
@@ -1878,6 +1992,7 @@ function buildPayload() {
             enabled: !!item.enabled,
             title: item.title,
             desc: item.desc,
+            icon_url: item.icon_url,
             path: item.path,
             open_type: item.open_type
           }))
@@ -1920,6 +2035,7 @@ function buildPayload() {
             badge: item.badge,
             title: item.title,
             desc: item.desc,
+            image_url: item.image_url,
             path: item.path,
             open_type: item.open_type
           }))
@@ -1987,6 +2103,7 @@ function buildPayload() {
         key: item.key,
         title: item.title,
         tip: item.tip,
+        icon_url: item.icon_url,
         path: item.path,
         open_type: item.open_type
       }))
@@ -2006,6 +2123,7 @@ function buildPayload() {
         enabled: !!item.enabled,
         title: item.title,
         desc: item.desc,
+        icon_url: item.icon_url,
         path: item.path,
         open_type: item.open_type
       }))
@@ -2254,6 +2372,55 @@ function removeGridItem(block, index) {
 
 function addSwiperItem(block) {
   block.items.push(createSwiperItem())
+}
+
+function swiperImageUploadKey(blockId, itemIndex) {
+  return `${blockId}:${itemIndex}`
+}
+
+function itemImageUploadKey(sectionKey, itemType, itemIndex) {
+  return `${sectionKey}:${itemType}:${itemIndex}`
+}
+
+async function uploadDecorationItemImage(options, item, uploadKey) {
+  const file = options?.file
+  if (!file) {
+    ElMessage.error('未选择图片文件')
+    return
+  }
+  uploadingImageKey.value = uploadKey
+  try {
+    const data = await decorationApi.uploadMobileHomeImage(file)
+    item.icon_url = data?.url || ''
+    ElMessage.success('图标已上传')
+    options?.onSuccess?.(data)
+  } catch (error) {
+    console.error(error)
+    options?.onError?.(error)
+  } finally {
+    uploadingImageKey.value = ''
+  }
+}
+
+async function uploadSwiperImage(options, block, item, itemIndex) {
+  const file = options?.file
+  if (!file) {
+    ElMessage.error('未选择图片文件')
+    return
+  }
+  const uploadKey = swiperImageUploadKey(block.id, itemIndex)
+  uploadingSwiperImageKey.value = uploadKey
+  try {
+    const data = await decorationApi.uploadMobileHomeImage(file)
+    item.image_url = data?.url || ''
+    ElMessage.success('轮播图已上传')
+    options?.onSuccess?.(data)
+  } catch (error) {
+    console.error(error)
+    options?.onError?.(error)
+  } finally {
+    uploadingSwiperImageKey.value = ''
+  }
 }
 
 function duplicateSwiperItem(block, item) {
@@ -2519,6 +2686,51 @@ onMounted(loadData)
   margin-bottom: 14px;
 }
 
+.swiper-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.item-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.swiper-image-preview-shell {
+  margin-bottom: 14px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(24, 52, 59, 0.08);
+  background: rgba(24, 52, 59, 0.03);
+}
+
+.swiper-image-preview {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+}
+
+.item-image-preview-shell {
+  width: 120px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(24, 52, 59, 0.08);
+  background: rgba(24, 52, 59, 0.03);
+}
+
+.item-image-preview {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+}
+
 .mobile-preview {
   width: 420px;
   max-width: 100%;
@@ -2628,9 +2840,49 @@ onMounted(loadData)
 }
 
 .preview-mini-card {
+  position: relative;
+  overflow: hidden;
   padding: 12px;
   border-radius: 14px;
   background: rgba(24, 52, 59, 0.04);
+}
+
+.preview-item-icon {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(24, 52, 59, 0.1), rgba(30, 143, 100, 0.16));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #18343b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preview-item-icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-swiper-mini-card {
+  min-height: 132px;
+  background: linear-gradient(145deg, #18343b 0%, #275d57 58%, #1f8f64 100%);
+  color: #fff;
+}
+
+.preview-swiper-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 22, 27, 0.12) 0%, rgba(11, 22, 27, 0.56) 100%);
+}
+
+.preview-swiper-content {
+  position: relative;
+  z-index: 1;
 }
 
 .preview-mini-card strong {
@@ -2641,6 +2893,15 @@ onMounted(loadData)
 .preview-mini-card p {
   margin: 0;
   line-height: 1.6;
+}
+
+.preview-swiper-mini-card .preview-badge.muted {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.preview-swiper-mini-card p {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .preview-empty {

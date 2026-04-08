@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import api_router
 from app.core.config import settings
@@ -13,11 +14,13 @@ from app.core.logger import configure_logging
 from app.db.init_db import init_db
 from app.db.session import SessionLocal
 from app.db.seed import seed_defaults
+from app.services.page_decoration_service import PageDecorationService
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
+    PageDecorationService.upload_root()
     init_db()
     db = SessionLocal()
     try:
@@ -28,6 +31,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, debug=settings.app_debug, lifespan=lifespan)
+app.mount('/uploads', StaticFiles(directory=str(PageDecorationService.upload_root())), name='uploads')
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,4 +83,3 @@ def health():
 
 
 app.include_router(api_router)
-
