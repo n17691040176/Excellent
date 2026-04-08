@@ -1,5 +1,5 @@
-﻿<template>
-  <div>
+<template>
+  <div class="commission-view">
     <div class="page-heading">
       <div>
         <h2>返现管理</h2>
@@ -16,7 +16,7 @@
       </div>
     </div>
 
-    <div class="split-grid" style="margin-top: 18px;">
+    <div class="split-grid block-gap">
       <div class="panel-card data-card">
         <div class="section-title">
           <div>
@@ -67,7 +67,7 @@
       </div>
     </div>
 
-    <div class="panel-card data-card" style="margin-top: 18px;">
+    <div class="panel-card data-card block-gap">
       <div class="toolbar-row">
         <el-input v-model="keyword" placeholder="搜索用户 ID / 订单 ID" clearable style="max-width: 260px;" />
         <el-select v-model="statusFilter" placeholder="流水状态" clearable style="width: 180px;">
@@ -217,3 +217,14 @@ async function loadData() {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.commission-view {
+  display: grid;
+  gap: 18px;
+}
+
+.block-gap {
+  margin-top: 18px;
+}
+</style>

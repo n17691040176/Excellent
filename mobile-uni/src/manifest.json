@@ -1,85 +1,83 @@
 {
-  "name": "Excellent Mall",
-  "appid": "__UNI__EXCELLENT_APP",
-  "description": "Excellent App uni-app client",
-  "versionName": "0.1.0",
-  "versionCode": "100",
-  "transformPx": false,
-  "networkTimeout": {
-    "request": 60000,
-    "connectSocket": 60000,
-    "uploadFile": 60000,
-    "downloadFile": 60000
-  },
-  "uniStatistics": {
-    "enable": false
-  },
-  "app-plus": {
-    "usingComponents": true,
-    "nvueStyleCompiler": "uni-app",
-    "compilerVersion": 3,
-    "optimization": {
-      "subPackages": true
+    "name" : "Excellent Mall",
+    "appid" : "__UNI__279342C",
+    "description" : "Excellent App uni-app client",
+    "versionName" : "0.1.0",
+    "versionCode" : "100",
+    "transformPx" : false,
+    "networkTimeout" : {
+        "request" : 60000,
+        "connectSocket" : 60000,
+        "uploadFile" : 60000,
+        "downloadFile" : 60000
     },
-    "screenOrientation": [
-      "portrait-primary"
+    "uniStatistics" : {
+        "enable" : false
+    },
+    "app-plus" : {
+        "usingComponents" : true,
+        "nvueStyleCompiler" : "uni-app",
+        "compilerVersion" : 3,
+        "optimization" : {
+            "subPackages" : true
+        },
+        "screenOrientation" : [ "portrait-primary" ],
+        "splashscreen" : {
+            "alwaysShowBeforeRender" : true,
+            "waiting" : true,
+            "autoclose" : true,
+            "delay" : 0
+        },
+        "distribute" : {
+            "android" : {
+                "packagename" : "com.excellent.mall",
+                "keystore" : "src/static/certs/android/release.keystore",
+                "password" : "CHANGE_ME",
+                "aliasname" : "excellent-release",
+                "abiFilters" : [ "armeabi-v7a", "arm64-v8a" ],
+                "schemes" : "excellent",
+                "custompermissions" : false,
+                "hasTaskAffinity" : true,
+                "permissions" : [
+                    "<uses-permission android:name=\"android.permission.INTERNET\" />",
+                    "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />"
+                ]
+            },
+            "ios" : {
+                "dSYMs" : false
+            }
+        }
+    },
+    "h5" : {
+        "title" : "Excellent Mobile Uni",
+        "router" : {
+            "mode" : "hash"
+        }
+    },
+    "mp-weixin" : {
+        "appid" : "wxYOUR_APP_ID"
+    },
+    "channel_list" : [
+        {
+            "id" : "google",
+            "description" : "Google Play"
+        },
+        {
+            "id" : "huawei",
+            "description" : "Huawei AppGallery"
+        },
+        {
+            "id" : "xiaomi",
+            "description" : "Xiaomi Market"
+        },
+        {
+            "id" : "vivo",
+            "description" : "Vivo Store"
+        },
+        {
+            "id" : "oppo",
+            "description" : "Oppo Store"
+        }
     ],
-    "splashscreen": {
-      "alwaysShowBeforeRender": true,
-      "waiting": true,
-      "autoclose": true,
-      "delay": 0
-    },
-    "distribute": {
-      "android": {
-        "packagename": "com.excellent.mall",
-        "keystore": "src/static/certs/android/release.keystore",
-        "password": "CHANGE_ME",
-        "aliasname": "excellent-release",
-        "abiFilters": [
-          "armeabi-v7a",
-          "arm64-v8a"
-        ],
-        "schemes": "excellent",
-        "custompermissions": false,
-        "hasTaskAffinity": true,
-        "permissions": [
-          "<uses-permission android:name=\"android.permission.INTERNET\" />",
-          "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />"
-        ]
-      }
-    }
-  },
-  "h5": {
-    "title": "Excellent Mobile Uni",
-    "router": {
-      "mode": "hash"
-    }
-  },
-  "mp-weixin": {
-    "appid": "wxYOUR_APP_ID"
-  },
-  "channel_list": [
-    {
-      "id": "google",
-      "description": "Google Play"
-    },
-    {
-      "id": "huawei",
-      "description": "Huawei AppGallery"
-    },
-    {
-      "id": "xiaomi",
-      "description": "Xiaomi Market"
-    },
-    {
-      "id": "vivo",
-      "description": "Vivo Store"
-    },
-    {
-      "id": "oppo",
-      "description": "Oppo Store"
-    }
-  ],
-  "locale": "zh-Hans"
+    "locale" : "zh-Hans"
 }

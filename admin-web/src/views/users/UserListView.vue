@@ -1,5 +1,5 @@
-﻿<template>
-  <div>
+<template>
+  <div class="user-list-view">
     <div class="page-heading">
       <div>
         <h2>用户管理</h2>
@@ -108,3 +108,18 @@ async function toggleStatus(row) {
 
 onMounted(fetchUsers)
 </script>
+
+<style scoped>
+.user-list-view {
+  display: grid;
+  gap: 18px;
+}
+
+:deep(.el-table .el-button.is-link) {
+  padding: 0;
+}
+
+:deep(.el-drawer__header) {
+  margin-bottom: 0;
+}
+</style>

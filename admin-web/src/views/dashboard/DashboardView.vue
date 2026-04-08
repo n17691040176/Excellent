@@ -1,5 +1,5 @@
-﻿<template>
-  <div>
+<template>
+  <div class="dashboard-view">
     <div class="page-heading">
       <div>
         <h2>经营总览</h2>
@@ -16,13 +16,11 @@
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:16px;margin-top:18px;">
+    <div class="dashboard-grid">
       <div class="panel-card data-card">
-        <div class="page-heading" style="margin-bottom:14px;">
-          <div>
-            <h2 style="font-size:22px;">运营关注点</h2>
-            <p>当前版本建议持续盯住招商、提现和本地生活履约。</p>
-          </div>
+        <div class="section-title-lite">
+          <h3>运营关注点</h3>
+          <p>当前版本建议持续盯住招商、提现和本地生活履约。</p>
         </div>
         <el-timeline>
           <el-timeline-item timestamp="今日重点" type="primary">
@@ -38,13 +36,11 @@
       </div>
 
       <div class="panel-card data-card">
-        <div class="page-heading" style="margin-bottom:14px;">
-          <div>
-            <h2 style="font-size:22px;">快捷入口</h2>
-            <p>高频操作一键直达。</p>
-          </div>
+        <div class="section-title-lite">
+          <h3>快捷入口</h3>
+          <p>高频操作一键直达。</p>
         </div>
-        <div class="form-grid">
+        <div class="quick-grid">
           <el-button plain @click="$router.push('/withdraws')">提现审核</el-button>
           <el-button plain @click="$router.push('/suppliers')">招商中心</el-button>
           <el-button plain @click="$router.push('/commission')">返现管理</el-button>
@@ -83,3 +79,48 @@ async function loadData() {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.dashboard-view {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+}
+
+.section-title-lite {
+  margin-bottom: 14px;
+}
+
+.section-title-lite h3 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--brand-deep);
+}
+
+.section-title-lite p {
+  margin: 6px 0 0;
+  color: rgba(58, 45, 36, 0.62);
+}
+
+.quick-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-grid .el-button {
+  justify-content: flex-start;
+  border-color: rgba(166, 126, 91, 0.24);
+  background: linear-gradient(180deg, #fff, #fbf5ec);
+}
+
+@media (max-width: 1100px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

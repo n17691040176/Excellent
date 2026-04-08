@@ -23,7 +23,8 @@
     "@dcloudio/uni-h5": "3.0.0-3080720230703001",
     "@dcloudio/uni-mp-weixin": "3.0.0-3080720230703001",
     "vue": "^3.2.45",
-    "vue-i18n": "^9.1.9"
+    "vue-i18n": "^9.1.9",
+    "vue-router": "^4.2.5"
   },
   "devDependencies": {
     "@dcloudio/types": "^3.3.2",

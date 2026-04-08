@@ -1,5 +1,5 @@
-﻿<template>
-  <div>
+<template>
+  <div class="withdraw-view">
     <div class="page-heading">
       <div>
         <h2>提现管理</h2>
@@ -16,7 +16,7 @@
       </div>
     </div>
 
-    <div class="panel-card data-card" style="margin-top: 18px;">
+    <div class="panel-card data-card block-gap">
       <div class="toolbar-row">
         <el-input v-model="keyword" placeholder="搜索用户 ID / 备注" clearable style="max-width: 260px;" />
         <el-select v-model="statusFilter" placeholder="审核状态" clearable style="width: 180px;">
@@ -159,3 +159,14 @@ async function review(row, action) {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.withdraw-view {
+  display: grid;
+  gap: 18px;
+}
+
+.block-gap {
+  margin-top: 18px;
+}
+</style>

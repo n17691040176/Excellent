@@ -33,7 +33,7 @@
         <view class="status-desc">{{ loadError }}</view>
         <button class="secondary-btn retry-btn" @click="loadData">重新加载</button>
       </view>
-      <view v-else-if="loading">
+      <view v-else-if="loading" class="skeleton-wrap">
         <view class="skeleton-block"></view>
         <view class="skeleton-block short"></view>
       </view>
@@ -162,9 +162,9 @@ onShow(() => {
 <style scoped>
 .hero-card {
   background:
-    radial-gradient(circle at 100% 0%, rgba(232, 192, 149, 0.24), transparent 34%),
-    radial-gradient(circle at 0% 12%, rgba(208, 220, 244, 0.28), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 241, 0.98) 100%);
+    radial-gradient(circle at 100% 0%, rgba(238, 198, 152, 0.28), transparent 34%),
+    radial-gradient(circle at 0% 12%, rgba(245, 223, 197, 0.35), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(251, 246, 239, 0.98) 100%);
 }
 
 .tab-row {
@@ -179,15 +179,25 @@ onShow(() => {
   height: 64rpx;
   padding: 0 28rpx;
   border-radius: 999rpx;
-  background: #f5efe7;
+  background: #f7efe5;
   color: var(--theme-text-muted);
   font-size: 24rpx;
   margin-right: 16rpx;
 }
 
 .status-tab.active {
-  background: linear-gradient(180deg, #d7793e 0%, #c96a32 100%);
+  background: linear-gradient(180deg, #d79a63 0%, #c6844f 100%);
   color: #ffffff;
+}
+
+.skeleton-wrap {
+  display: grid;
+  gap: 14rpx;
+}
+
+.skeleton-wrap .skeleton-block,
+.skeleton-wrap .skeleton-block.short {
+  border-radius: 22rpx;
 }
 
 .order-list {
@@ -200,6 +210,7 @@ onShow(() => {
   border-radius: 24rpx;
   padding: 24rpx;
   border: 1rpx solid var(--theme-border);
+  box-shadow: 0 10rpx 22rpx rgba(145, 131, 112, 0.08);
 }
 
 .order-top {
@@ -238,5 +249,14 @@ onShow(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.empty-text {
+  min-height: 160rpx;
+  border-radius: 22rpx;
+  border: 1rpx dashed rgba(202, 171, 140, 0.42);
+  background: rgba(255, 255, 255, 0.56);
+  display: grid;
+  place-items: center;
 }
 </style>

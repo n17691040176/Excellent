@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="login-shell">
     <div class="login-backdrop"></div>
     <div class="login-panel panel-card">
@@ -69,9 +69,9 @@ async function handleSubmit() {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 15% 20%, rgba(216, 155, 43, 0.26), transparent 22%),
-    radial-gradient(circle at 85% 18%, rgba(28, 143, 132, 0.2), transparent 26%),
-    linear-gradient(135deg, #fcfaf4, #eef5f2 48%, #f3ead9 100%);
+    radial-gradient(circle at 12% 16%, rgba(226, 185, 128, 0.3), transparent 24%),
+    radial-gradient(circle at 88% 18%, rgba(198, 132, 79, 0.22), transparent 28%),
+    linear-gradient(135deg, #fdf8ef, #f6efe3 48%, #f1e6d7 100%);
 }
 
 .login-panel {
@@ -87,14 +87,14 @@ async function handleSubmit() {
   padding: 56px;
   color: #fff;
   background:
-    linear-gradient(145deg, rgba(15, 47, 47, 0.98), rgba(28, 143, 132, 0.88)),
-    linear-gradient(90deg, rgba(216, 155, 43, 0.18), transparent 55%);
+    radial-gradient(circle at top right, rgba(255, 234, 205, 0.16), transparent 30%),
+    linear-gradient(145deg, #3d2e24, #6a4f3b 58%, #8f694c 100%);
 }
 
 .copy-badge {
   display: inline-flex;
   padding: 8px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
   font-size: 12px;
   letter-spacing: 0.1em;
@@ -110,7 +110,7 @@ async function handleSubmit() {
 .login-copy p {
   max-width: 460px;
   line-height: 1.8;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 246, 236, 0.82);
 }
 
 .login-form {
@@ -132,7 +132,7 @@ async function handleSubmit() {
 
 .hint-text {
   margin-top: 14px;
-  color: rgba(15, 47, 47, 0.58);
+  color: rgba(58, 45, 36, 0.58);
   font-size: 13px;
 }
 

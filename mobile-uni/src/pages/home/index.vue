@@ -1412,9 +1412,16 @@ onReachBottom(() => {
 
 .waterfall-card {
   overflow: hidden;
+  border: 1rpx solid rgba(232, 223, 214, 0.9);
+  box-shadow: 0 12rpx 28rpx rgba(145, 131, 112, 0.1);
+}
+
+.waterfall-card:active {
+  transform: scale(0.985);
 }
 
 .waterfall-cover {
+  position: relative;
   height: 220rpx;
   background:
     radial-gradient(circle at top right, rgba(245, 205, 169, 0.36), transparent 28%),
@@ -1425,6 +1432,13 @@ onReachBottom(() => {
   height: 300rpx;
 }
 
+.waterfall-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(19, 15, 12, 0.02), rgba(19, 15, 12, 0.14));
+}
+
 .waterfall-image {
   width: 100%;
   height: 100%;
@@ -1433,6 +1447,8 @@ onReachBottom(() => {
 }
 
 .waterfall-cover-fallback {
+  position: relative;
+  z-index: 1;
   height: 100%;
   padding: 22rpx;
   box-sizing: border-box;
@@ -1460,10 +1476,22 @@ onReachBottom(() => {
 
 .waterfall-body {
   padding: 20rpx 22rpx 24rpx;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 247, 240, 0.98));
 }
 
 .waterfall-title {
   margin-bottom: 8rpx;
+  font-size: 28rpx;
+}
+
+.waterfall-desc,
+.quick-entry-desc,
+.feed-desc,
+.promo-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .waterfall-price-row {
@@ -1538,6 +1566,7 @@ onReachBottom(() => {
 
 .section-link {
   color: #b86f39;
+  font-weight: 600;
 }
 
 .section-desc,
@@ -1545,6 +1574,15 @@ onReachBottom(() => {
 .empty-text,
 .status-desc {
   color: #7a726a;
+}
+
+.empty-text {
+  min-height: 160rpx;
+  border-radius: 22rpx;
+  border: 1rpx dashed rgba(202, 171, 140, 0.42);
+  background: rgba(255, 255, 255, 0.56);
+  display: grid;
+  place-items: center;
 }
 
 .status-card {

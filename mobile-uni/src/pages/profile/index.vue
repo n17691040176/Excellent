@@ -192,9 +192,9 @@ onShow(() => {
 <style scoped>
 .hero-card {
   background:
-    radial-gradient(circle at 100% 0%, rgba(232, 192, 149, 0.24), transparent 34%),
-    radial-gradient(circle at 0% 12%, rgba(208, 220, 244, 0.28), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 241, 0.98) 100%);
+    radial-gradient(circle at 100% 0%, rgba(238, 198, 152, 0.28), transparent 34%),
+    radial-gradient(circle at 0% 12%, rgba(245, 223, 197, 0.35), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(251, 246, 239, 0.98) 100%);
 }
 
 .profile-top {

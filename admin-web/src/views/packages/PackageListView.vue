@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="packages-view">
     <div class="page-heading">
       <div>
         <h2>套餐管理</h2>
@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <div class="panel-card data-card" style="margin-bottom: 18px;">
+    <div class="panel-card data-card block-gap">
       <el-table :data="packages" border>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="package_name" label="套餐名称" min-width="180" />
@@ -41,11 +41,9 @@
     </div>
 
     <div class="panel-card data-card">
-      <div class="page-heading" style="margin-bottom: 14px;">
-        <div>
-          <h2 style="font-size:22px;">我的套餐资格</h2>
-          <p>用于核查复购区准入与商品上架资格来源。</p>
-        </div>
+      <div class="section-title-lite">
+        <h3>我的套餐资格</h3>
+        <p>用于核查复购区准入与商品上架资格来源。</p>
       </div>
       <el-table :data="qualifications" border>
         <el-table-column prop="order_id" label="订单 ID" width="90" />
@@ -225,6 +223,30 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+.packages-view {
+  display: grid;
+  gap: 18px;
+}
+
+.block-gap {
+  margin-bottom: 18px;
+}
+
+.section-title-lite {
+  margin-bottom: 14px;
+}
+
+.section-title-lite h3 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--brand-deep);
+}
+
+.section-title-lite p {
+  margin: 6px 0 0;
+  color: rgba(58, 45, 36, 0.62);
+}
+
 .form-split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -234,9 +256,9 @@ onMounted(loadData)
 .config-tips {
   margin-top: 12px;
   padding: 14px 16px;
-  background: rgba(15, 76, 129, 0.06);
+  background: rgba(198, 132, 79, 0.1);
   border-radius: 14px;
-  color: var(--el-text-color-secondary);
+  color: rgba(58, 45, 36, 0.78);
   line-height: 1.7;
 }
 

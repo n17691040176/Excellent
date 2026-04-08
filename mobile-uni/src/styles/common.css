@@ -1,30 +1,30 @@
 :root,
 page {
   --theme-page-bg:
-    radial-gradient(circle at 0% 0%, rgba(233, 176, 120, 0.18), transparent 24%),
-    radial-gradient(circle at 100% 8%, rgba(208, 220, 244, 0.56), transparent 24%),
-    linear-gradient(180deg, #fbf8f3 0%, #f6f4ef 42%, #f3f1ec 100%);
+    radial-gradient(circle at 4% 0%, rgba(233, 187, 133, 0.2), transparent 24%),
+    radial-gradient(circle at 100% 8%, rgba(244, 216, 181, 0.26), transparent 26%),
+    linear-gradient(180deg, #fdf9f3 0%, #f8f2e9 44%, #f5eee4 100%);
   --theme-hero-bg:
-    radial-gradient(circle at 100% 0%, rgba(232, 192, 149, 0.26), transparent 34%),
-    radial-gradient(circle at 0% 12%, rgba(208, 220, 244, 0.38), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 241, 0.98) 100%);
-  --theme-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(252, 250, 246, 0.96) 100%);
-  --theme-surface-muted: linear-gradient(180deg, #ffffff 0%, #faf8f4 100%);
-  --theme-surface-soft: linear-gradient(180deg, #fbfaf7 0%, #f7f3ed 100%);
-  --theme-dark-panel: linear-gradient(150deg, #2a241f 0%, #513d2f 56%, #8a6448 100%);
-  --theme-dark-solid: #2a241f;
-  --theme-text: #191613;
-  --theme-text-muted: #7a726a;
-  --theme-text-soft: #91877d;
-  --theme-accent: #c96a32;
-  --theme-accent-deep: #7d5633;
-  --theme-accent-soft: rgba(210, 108, 50, 0.08);
-  --theme-accent-border: rgba(210, 108, 50, 0.14);
-  --theme-border: rgba(238, 229, 219, 0.9);
-  --theme-border-strong: rgba(232, 223, 214, 0.9);
+    radial-gradient(circle at 100% 0%, rgba(232, 192, 149, 0.3), transparent 34%),
+    radial-gradient(circle at 0% 12%, rgba(245, 223, 197, 0.4), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(251, 246, 239, 0.98) 100%);
+  --theme-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(252, 248, 242, 0.97) 100%);
+  --theme-surface-muted: linear-gradient(180deg, #ffffff 0%, #fbf7f1 100%);
+  --theme-surface-soft: linear-gradient(180deg, #fcfaf6 0%, #f8f2ea 100%);
+  --theme-dark-panel: linear-gradient(150deg, #3a2b22 0%, #5d4534 58%, #946d50 100%);
+  --theme-dark-solid: #382a21;
+  --theme-text: #211912;
+  --theme-text-muted: #746759;
+  --theme-text-soft: #938375;
+  --theme-accent: #c6844f;
+  --theme-accent-deep: #a96936;
+  --theme-accent-soft: rgba(198, 132, 79, 0.1);
+  --theme-accent-border: rgba(198, 132, 79, 0.2);
+  --theme-border: rgba(215, 189, 162, 0.5);
+  --theme-border-strong: rgba(202, 171, 140, 0.48);
   --theme-shadow:
-    0 18rpx 42rpx rgba(136, 124, 107, 0.1),
-    inset 0 1rpx 0 rgba(255, 255, 255, 0.75);
+    0 18rpx 42rpx rgba(124, 94, 68, 0.12),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
 }
 
 .page {
@@ -40,7 +40,7 @@ page {
 .card {
   background: var(--theme-surface);
   border: 1rpx solid var(--theme-border);
-  border-radius: 30rpx;
+  border-radius: 32rpx;
   padding: 30rpx;
   margin-bottom: 24rpx;
   box-shadow: var(--theme-shadow);
@@ -91,9 +91,9 @@ page {
 .input {
   width: 100%;
   height: 92rpx;
-  background: #fbfaf7;
-  border: 2rpx solid rgba(232, 223, 214, 0.76);
-  border-radius: 20rpx;
+  background: #fdfaf6;
+  border: 2rpx solid rgba(214, 186, 159, 0.55);
+  border-radius: 22rpx;
   padding: 0 26rpx;
   font-size: 28rpx;
   margin-bottom: 20rpx;
@@ -102,7 +102,7 @@ page {
 }
 
 .input:focus {
-  border-color: rgba(201, 106, 50, 0.28);
+  border-color: rgba(169, 105, 54, 0.35);
   background: #ffffff;
 }
 
@@ -113,7 +113,7 @@ page {
 .success-btn {
   height: 88rpx;
   line-height: 88rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   font-size: 29rpx;
   font-weight: 600;
   margin: 0;
@@ -139,15 +139,15 @@ page {
 }
 
 .primary-btn {
-  background: linear-gradient(180deg, #d7793e 0%, #c96a32 100%);
+  background: linear-gradient(180deg, #d79a63 0%, #c6844f 100%);
   color: #ffffff;
-  box-shadow: 0 16rpx 32rpx rgba(201, 106, 50, 0.22);
+  box-shadow: 0 14rpx 30rpx rgba(169, 105, 54, 0.26);
 }
 
 .secondary-btn {
-  background: linear-gradient(180deg, #ffffff 0%, #f7f2eb 100%);
-  color: #3b3129;
-  border: 1rpx solid rgba(232, 222, 212, 0.92);
+  background: linear-gradient(180deg, #ffffff 0%, #faf3ea 100%);
+  color: #46382d;
+  border: 1rpx solid rgba(214, 186, 159, 0.7);
 }
 
 .danger-btn {
@@ -156,12 +156,12 @@ page {
 }
 
 .minor-btn {
-  background: #f5efe7;
-  color: #6f5a48;
+  background: #f7efe5;
+  color: #6c5441;
 }
 
 .success-btn {
-  background: #f5ede4;
+  background: #f7ede2;
   color: var(--theme-accent-deep);
 }
 
@@ -187,7 +187,7 @@ page {
 .list-card,
 .qualification-card {
   background: var(--theme-surface-muted);
-  border-radius: 24rpx;
+  border-radius: 26rpx;
   padding: 24rpx;
   border: 1rpx solid var(--theme-border);
   box-sizing: border-box;
@@ -265,14 +265,14 @@ page {
   height: 64rpx;
   padding: 0 24rpx;
   border-radius: 999rpx;
-  background: #f5efe7;
+  background: #f7efe5;
   color: var(--theme-text-muted);
   font-size: 24rpx;
   margin-right: 12rpx;
 }
 
 .filter-pill.active {
-  background: rgba(201, 106, 50, 0.12);
+  background: rgba(198, 132, 79, 0.14);
   color: var(--theme-accent);
 }
 
@@ -287,19 +287,19 @@ page {
   text-align: center;
   font-size: 28rpx;
   padding: 16rpx 0;
-  border-radius: 18rpx;
-  background: #f5efe7;
+  border-radius: 20rpx;
+  background: #f7efe5;
   color: var(--theme-text-muted);
 }
 
 .switch-tab.active {
-  background: linear-gradient(180deg, #d7793e 0%, #c96a32 100%);
+  background: linear-gradient(180deg, #d79a63 0%, #c6844f 100%);
   color: #ffffff;
 }
 
 .status-card {
-  background: linear-gradient(180deg, #ffffff 0%, #faf7f2 100%);
-  border-radius: 24rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fcf7ef 100%);
+  border-radius: 26rpx;
   padding: 26rpx;
   border: 1rpx solid var(--theme-border);
 }
@@ -321,7 +321,7 @@ page {
   height: 140rpx;
   border-radius: 24rpx;
   margin-bottom: 16rpx;
-  background: linear-gradient(90deg, #f4eee6 25%, #fcfaf6 50%, #f4eee6 75%);
+  background: linear-gradient(90deg, #f5ecdf 25%, #fdf9f2 50%, #f5ecdf 75%);
 }
 
 .skeleton-block.short {
@@ -344,18 +344,18 @@ page {
 }
 
 .tone-paid {
-  background: #e8f4ff;
+  background: #edf4ff;
   color: #2a75ba;
 }
 
 .tone-confirmed {
-  background: rgba(201, 106, 50, 0.12);
+  background: rgba(198, 132, 79, 0.14);
   color: var(--theme-accent);
 }
 
 .tone-closed,
 .tone-default {
-  background: #f1ece5;
+  background: #f3ebe1;
   color: var(--theme-text-muted);
 }
 

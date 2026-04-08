@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="admin-shell page-shell">
     <aside class="admin-sidebar">
       <div class="brand-block">
@@ -21,7 +21,7 @@
           class="admin-menu"
           router
           background-color="transparent"
-          text-color="#dcebe8"
+          text-color="#f7efe8"
           active-text-color="#ffffff"
         >
           <el-menu-item v-for="item in visibleMenus" :key="item.path" :index="item.path">
@@ -36,11 +36,11 @@
       <header class="admin-header panel-card">
         <div>
           <div class="header-title">{{ route.meta.title || '管理后台' }}</div>
-          <div class="header-subtitle">轻量、聚焦、可追踪的企业运营视图</div>
+          <div class="header-subtitle">轻奢视觉风格 · 高效运营工作台</div>
         </div>
         <div class="header-actions">
           <el-button text @click="router.push('/profile')">个人中心</el-button>
-          <el-button type="primary" plain @click="handleLogout">退出登录</el-button>
+          <el-button type="primary" @click="handleLogout">退出登录</el-button>
         </div>
       </header>
 
@@ -91,8 +91,8 @@ function handleLogout() {
   height: 100vh;
   padding: 24px 18px;
   background:
-    linear-gradient(180deg, rgba(11, 32, 39, 0.98), rgba(20, 58, 69, 0.96)),
-    linear-gradient(135deg, rgba(216, 155, 43, 0.08), transparent 40%);
+    radial-gradient(circle at 20% 0%, rgba(226, 185, 128, 0.24), transparent 35%),
+    linear-gradient(180deg, #3b2c24, #5a4132 62%, #6e4f3a 100%);
 }
 
 .brand-block {
@@ -110,8 +110,9 @@ function handleLogout() {
   border-radius: 18px;
   font-weight: 800;
   letter-spacing: 0.08em;
-  background: linear-gradient(135deg, #d89b2b, #f2c96c);
-  color: #163840;
+  background: linear-gradient(135deg, #e2b980, #f8dfbc);
+  color: #5a3a24;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
 .brand-title {
@@ -122,19 +123,19 @@ function handleLogout() {
 .brand-subtitle {
   margin-top: 2px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgba(255, 245, 236, 0.74);
 }
 
 .brand-ribbon {
   padding: 16px;
-  color: #f7fbfa;
-  background: linear-gradient(135deg, rgba(28, 143, 132, 0.4), rgba(216, 155, 43, 0.3));
-  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff7ef;
+  background: linear-gradient(135deg, rgba(226, 185, 128, 0.32), rgba(198, 132, 79, 0.38));
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .ribbon-label {
   font-size: 12px;
-  opacity: 0.72;
+  opacity: 0.78;
 }
 
 .ribbon-value {
@@ -146,7 +147,7 @@ function handleLogout() {
 .ribbon-meta {
   margin-top: 4px;
   font-size: 13px;
-  opacity: 0.8;
+  opacity: 0.84;
 }
 
 .menu-scroll {
@@ -163,8 +164,12 @@ function handleLogout() {
   border-radius: 14px;
 }
 
+.admin-menu :deep(.el-menu-item:hover) {
+  background: rgba(255, 245, 236, 0.12);
+}
+
 .admin-menu :deep(.el-menu-item.is-active) {
-  background: linear-gradient(90deg, rgba(28, 143, 132, 0.78), rgba(216, 155, 43, 0.54));
+  background: linear-gradient(90deg, rgba(198, 132, 79, 0.76), rgba(226, 185, 128, 0.62));
 }
 
 .admin-main {
@@ -188,7 +193,7 @@ function handleLogout() {
 .header-subtitle {
   margin-top: 6px;
   font-size: 13px;
-  color: rgba(15, 47, 47, 0.64);
+  color: rgba(58, 45, 36, 0.62);
 }
 
 .header-actions {

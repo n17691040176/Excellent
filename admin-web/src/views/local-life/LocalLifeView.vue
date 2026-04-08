@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="local-life-view">
     <div class="page-heading">
       <div>
         <h2>本地生活</h2>
@@ -22,7 +22,7 @@
       </div>
     </div>
 
-    <div class="split-grid" style="margin-top: 18px;">
+    <div class="split-grid block-gap">
       <div class="panel-card data-card">
         <div class="section-title">
           <div>
@@ -71,7 +71,7 @@
       </div>
     </div>
 
-    <div class="panel-card data-card" style="margin-top: 18px;">
+    <div class="panel-card data-card block-gap">
       <el-tabs v-model="activeTab">
         <el-tab-pane label="商家列表" name="merchants">
           <el-table :data="merchants" border>
@@ -600,6 +600,15 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+.local-life-view {
+  display: grid;
+  gap: 18px;
+}
+
+.block-gap {
+  margin-top: 18px;
+}
+
 .form-split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
