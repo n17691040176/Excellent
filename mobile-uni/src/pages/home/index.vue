@@ -1,21 +1,14 @@
 <template>
   <view class="page home-page">
-    <view class="hero-panel">
-      <view class="hero-kicker-row">
-        <view class="badge">{{ heroConfig.badge }}</view>
-        <view class="hero-refresh">下拉可刷新</view>
-      </view>
-      <view class="title">{{ heroConfig.title }}</view>
-      <view class="desc">{{ heroConfig.desc }}</view>
-      <view class="hero-tags">
-        <view class="hero-tag" v-for="item in heroConfig.tags" :key="item">{{ item }}</view>
-      </view>
-    </view>
-
     <view v-if="heroSwiperItems.length" class="swiper-panel">
-      <view class="section-head compact">
-        <view class="section-title">{{ primarySwiperBlock?.title || '首页轮播' }}</view>
-        <view class="section-link">{{ heroSwiperItems.length }} 张</view>
+      <view v-if="primarySwiperMeta.kicker || primarySwiperMeta.desc || primarySwiperMeta.tags.length" class="visual-strip">
+        <view class="visual-copy-block">
+          <view v-if="primarySwiperMeta.kicker" class="badge cinematic-badge">{{ primarySwiperMeta.kicker }}</view>
+          <view v-if="primarySwiperMeta.desc" class="visual-copy">{{ primarySwiperMeta.desc }}</view>
+        </view>
+        <view v-if="primarySwiperMeta.tags.length" class="visual-pill-stack">
+          <view v-for="item in primarySwiperMeta.tags" :key="item" class="mini-pill">{{ item }}</view>
+        </view>
       </view>
       <swiper
         class="hero-swiper"
@@ -25,20 +18,28 @@
         indicator-active-color="#ffffff"
       >
         <swiper-item v-for="(item, index) in heroSwiperItems" :key="`${item.title}-${index}`">
-          <view class="swiper-slide tap-item" @click="openConfiguredLink(item)">
+          <view class="swiper-slide tap-item" :class="{ 'with-image': !!item.image_url }" @click="openConfiguredLink(item)">
             <image v-if="item.image_url" class="slide-image" :src="item.image_url" mode="aspectFill" />
+            <view class="slide-grid"></view>
+            <view class="slide-glow"></view>
             <view class="slide-mask"></view>
             <view class="slide-content">
-              <view class="slide-badge">{{ item.badge || '精选会场' }}</view>
+              <view class="slide-topline">
+                <view class="slide-badge">{{ item.badge || '精选会场' }}</view>
+                <view class="slide-series">S{{ formatSeriesIndex(index) }}</view>
+              </view>
               <view class="slide-title">{{ item.title || '首页活动' }}</view>
               <view class="slide-desc">{{ item.desc || '请在后台补充轮播文案' }}</view>
+              <view v-if="primarySwiperMeta.slideTags.length" class="slide-footer">
+                <view v-for="tag in primarySwiperMeta.slideTags" :key="tag" class="slide-chip">{{ tag }}</view>
+              </view>
             </view>
           </view>
         </swiper-item>
       </swiper>
     </view>
 
-    <view v-if="loadError" class="card status-card">
+      <view v-if="loadError" class="card status-card">
       <view class="status-title">首页数据加载失败</view>
       <view class="status-desc">{{ loadError }}</view>
       <button class="secondary-btn retry-btn" @click="loadData({ resetWaterfall: true })">重新加载</button>
@@ -46,7 +47,7 @@
 
     <block v-for="sectionKey in orderedSectionKeys" :key="sectionKey">
       <view v-if="sectionKey === 'announcement'" class="card notice-card">
-        <view class="section-head compact">
+        <view v-if="decoration.announcement.title" class="section-head compact">
           <view class="section-title">{{ decoration.announcement.title }}</view>
           <view class="section-link">首页公告</view>
         </view>
@@ -56,30 +57,27 @@
       </view>
 
       <view v-else-if="sectionKey === 'zone_section'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ decoration.zone_section.title }}</view>
-          <view class="section-link">{{ decoration.zone_section.subtitle }}</view>
+        <view v-if="decoration.zone_section.title || decoration.zone_section.subtitle" class="section-head">
+          <view v-if="decoration.zone_section.title" class="section-title">{{ decoration.zone_section.title }}</view>
+          <view v-if="decoration.zone_section.subtitle" class="section-link">{{ decoration.zone_section.subtitle }}</view>
         </view>
         <view class="zone-grid">
           <view class="zone-nav-card tap-item" v-for="item in zoneItems" :key="item.key || item.title" @click="openZone(item)">
-            <view class="nav-icon-shell zone-icon-shell">
-              <image v-if="item.icon_url" class="nav-icon-image" :src="item.icon_url" mode="aspectFill" />
-              <view v-else class="nav-icon-text">{{ navItemFallbackText(item, '分区') }}</view>
-            </view>
+            <image v-if="zoneVisualImage(item)" class="zone-card-art" :src="zoneVisualImage(item)" mode="aspectFill" />
             <view class="zone-card-top">
               <view class="zone-card-title">{{ item.title }}</view>
-              <view class="zone-card-count">{{ zoneCount(item.key) }}</view>
+              <view v-if="item.show_count !== false" class="zone-card-count">{{ zoneCount(item.key) }}</view>
             </view>
             <view class="zone-card-tip">{{ item.tip }}</view>
-            <view class="zone-card-link">进入专区</view>
+            <view v-if="item.link_text" class="zone-card-link">{{ item.link_text }}</view>
           </view>
         </view>
       </view>
 
       <view v-else-if="sectionKey === 'waterfall_section'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ decoration.waterfall_section.title }}</view>
-          <view class="section-link">{{ decoration.waterfall_section.subtitle }}</view>
+        <view v-if="decoration.waterfall_section.title || decoration.waterfall_section.subtitle" class="section-head">
+          <view v-if="decoration.waterfall_section.title" class="section-title">{{ decoration.waterfall_section.title }}</view>
+          <view v-if="decoration.waterfall_section.subtitle" class="section-link">{{ decoration.waterfall_section.subtitle }}</view>
         </view>
         <view class="waterfall-meta">
           <view class="waterfall-chip" v-for="item in waterfallSourceLabels" :key="item">{{ item }}</view>
@@ -91,7 +89,7 @@
         <view v-else-if="waterfallVisibleItems.length" class="waterfall-columns">
           <view class="waterfall-column" v-for="(column, columnIndex) in waterfallColumns" :key="`column-${columnIndex}`">
             <view class="waterfall-card tap-item" v-for="item in column" :key="item.uniqueKey" @click="openWaterfallItem(item)">
-              <view class="waterfall-cover" :class="{ tall: item.coverTall }">
+              <view class="waterfall-cover" :class="{ tall: item.coverTall, 'with-image': !!item.image }">
                 <image v-if="item.image" class="waterfall-image" :src="item.image" mode="aspectFill" />
                 <view v-else class="waterfall-cover-fallback">
                   <view class="waterfall-cover-badge">{{ item.badge }}</view>
@@ -114,8 +112,8 @@
       </view>
 
       <view v-else-if="sectionKey === 'package_section'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ decoration.package_section.title }}</view>
+        <view v-if="decoration.package_section.title || packages.length" class="section-head">
+          <view v-if="decoration.package_section.title" class="section-title">{{ decoration.package_section.title }}</view>
           <view class="section-link" @click="goPackages">查看全部</view>
         </view>
         <view class="section-desc">{{ decoration.package_section.desc }}</view>
@@ -142,9 +140,9 @@
       </view>
 
       <view v-else-if="sectionKey === 'promo_section'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ decoration.promo_section.title }}</view>
-          <view class="section-link">运营精选</view>
+        <view v-if="decoration.promo_section.title || promoSectionSubtitle" class="section-head">
+          <view v-if="decoration.promo_section.title" class="section-title">{{ decoration.promo_section.title }}</view>
+          <view v-if="promoSectionSubtitle" class="section-link">{{ promoSectionSubtitle }}</view>
         </view>
         <view class="promo-grid">
           <view class="promo-card tap-item" v-for="(item, index) in promoCards" :key="`${item.title}-${index}`" @click="openConfiguredLink(item)">
@@ -156,9 +154,9 @@
       </view>
 
       <view v-else-if="sectionKey === 'quick_section'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ decoration.quick_section.title }}</view>
-          <view class="section-link" @click="goProfile">{{ decoration.quick_section.subtitle }}</view>
+        <view v-if="decoration.quick_section.title || decoration.quick_section.subtitle" class="section-head">
+          <view v-if="decoration.quick_section.title" class="section-title">{{ decoration.quick_section.title }}</view>
+          <view v-if="decoration.quick_section.subtitle" class="section-link" @click="goProfile">{{ decoration.quick_section.subtitle }}</view>
         </view>
         <view class="quick-grid">
           <view class="quick-entry tap-item" v-for="(item, index) in quickItems" :key="`${item.title}-${index}`" @click="openConfiguredLink(item)">
@@ -174,15 +172,15 @@
 
       <view v-else-if="customBlockFromLayout(sectionKey)?.type === 'banner'" class="card custom-banner-card tap-item" @click="openConfiguredLink(customBlockFromLayout(sectionKey))">
         <view class="promo-badge">{{ customBlockFromLayout(sectionKey)?.badge || '活动横幅' }}</view>
-        <view class="promo-title">{{ customBlockFromLayout(sectionKey)?.title || '未命名横幅' }}</view>
+        <view v-if="customBlockFromLayout(sectionKey)?.title" class="promo-title">{{ customBlockFromLayout(sectionKey)?.title }}</view>
         <view class="promo-desc">{{ customBlockFromLayout(sectionKey)?.desc || '请补充活动说明' }}</view>
         <view class="banner-action">{{ customBlockFromLayout(sectionKey)?.button_text || '立即查看' }}</view>
       </view>
 
       <view v-else-if="customBlockFromLayout(sectionKey)?.type === 'grid'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ customBlockFromLayout(sectionKey)?.title || '专题导航' }}</view>
-          <view class="section-link">{{ customBlockFromLayout(sectionKey)?.subtitle || '运营专区' }}</view>
+        <view v-if="customBlockFromLayout(sectionKey)?.title || customBlockFromLayout(sectionKey)?.subtitle" class="section-head">
+          <view v-if="customBlockFromLayout(sectionKey)?.title" class="section-title">{{ customBlockFromLayout(sectionKey)?.title }}</view>
+          <view v-if="customBlockFromLayout(sectionKey)?.subtitle" class="section-link">{{ customBlockFromLayout(sectionKey)?.subtitle }}</view>
         </view>
         <view class="quick-grid">
           <view class="quick-entry tap-item" v-for="(item, index) in customGridItems(customBlockFromLayout(sectionKey))" :key="`${sectionKey}-${index}`" @click="openConfiguredLink(item)">
@@ -197,16 +195,16 @@
       </view>
 
       <view v-else-if="customBlockFromLayout(sectionKey)?.type === 'coupon_strip'" class="card coupon-strip-card tap-item" @click="openConfiguredLink(customBlockFromLayout(sectionKey))">
-        <view class="section-head">
-          <view class="section-title">{{ customBlockFromLayout(sectionKey)?.title || '券权益条' }}</view>
-          <view class="section-link">{{ customBlockFromLayout(sectionKey)?.badge || '权益专区' }}</view>
+        <view v-if="customBlockFromLayout(sectionKey)?.title || customBlockFromLayout(sectionKey)?.badge" class="section-head">
+          <view v-if="customBlockFromLayout(sectionKey)?.title" class="section-title">{{ customBlockFromLayout(sectionKey)?.title }}</view>
+          <view v-if="customBlockFromLayout(sectionKey)?.badge" class="section-link">{{ customBlockFromLayout(sectionKey)?.badge }}</view>
         </view>
         <view class="section-desc">{{ customBlockFromLayout(sectionKey)?.desc }}</view>
       </view>
 
       <view v-else-if="customBlockFromLayout(sectionKey)?.type === 'zone_feed'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ customBlockFromLayout(sectionKey)?.title || '专区商品流' }}</view>
+        <view v-if="customBlockFromLayout(sectionKey)?.title || customBlockFromLayout(sectionKey)?.subtitle || customBlockFromLayout(sectionKey)?.source_key" class="section-head">
+          <view v-if="customBlockFromLayout(sectionKey)?.title" class="section-title">{{ customBlockFromLayout(sectionKey)?.title }}</view>
           <view class="section-link" @click="openZoneFeed(customBlockFromLayout(sectionKey))">
             {{ customBlockFromLayout(sectionKey)?.subtitle || zoneSourceLabel(customBlockFromLayout(sectionKey)?.source_key) }}
           </view>
@@ -220,15 +218,13 @@
         </view>
       </view>
 
-      <view v-else-if="customBlockFromLayout(sectionKey)?.type === 'image_swiper'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ customBlockFromLayout(sectionKey)?.title || '轮播海报' }}</view>
-          <view class="section-link">{{ customBlockFromLayout(sectionKey)?.autoplay ? '自动轮播' : '手动切换' }}</view>
-        </view>
+      <view v-else-if="customBlockFromLayout(sectionKey)?.type === 'image_swiper'" class="image-swiper-module">
         <swiper class="module-swiper" circular :autoplay="customBlockFromLayout(sectionKey)?.autoplay !== false" :indicator-dots="customSwiperItems(customBlockFromLayout(sectionKey)).length > 1">
           <swiper-item v-for="(item, index) in customSwiperItems(customBlockFromLayout(sectionKey))" :key="`${sectionKey}-swiper-${index}`">
-            <view class="module-swiper-card tap-item" @click="openConfiguredLink(item)">
+            <view class="module-swiper-card tap-item" :class="{ 'with-image': !!item.image_url }" @click="openConfiguredLink(item)">
               <image v-if="item.image_url" class="slide-image" :src="item.image_url" mode="aspectFill" />
+              <view class="slide-grid"></view>
+              <view class="slide-glow"></view>
               <view class="slide-mask"></view>
               <view class="slide-content">
                 <view class="promo-badge">{{ item.badge || '轮播图' }}</view>
@@ -241,9 +237,9 @@
       </view>
 
       <view v-else-if="customBlockFromLayout(sectionKey)?.type === 'mixed_goods'" class="card">
-        <view class="section-head">
-          <view class="section-title">{{ customBlockFromLayout(sectionKey)?.title || '混合商品' }}</view>
-          <view class="section-link">{{ customBlockFromLayout(sectionKey)?.subtitle || '人工编排' }}</view>
+        <view v-if="customBlockFromLayout(sectionKey)?.title || customBlockFromLayout(sectionKey)?.subtitle" class="section-head">
+          <view v-if="customBlockFromLayout(sectionKey)?.title" class="section-title">{{ customBlockFromLayout(sectionKey)?.title }}</view>
+          <view v-if="customBlockFromLayout(sectionKey)?.subtitle" class="section-link">{{ customBlockFromLayout(sectionKey)?.subtitle }}</view>
         </view>
         <view class="feed-list">
           <view class="feed-card tap-item" v-for="(item, index) in customMixedGoodsItems(customBlockFromLayout(sectionKey))" :key="`${sectionKey}-mixed-${index}`" @click="openConfiguredLink(item)">
@@ -267,10 +263,16 @@ import { ensureLogin } from '../../utils/guard'
 import { normalizeLoadError } from '../../utils/ui'
 
 const SECTION_ORDER = ['announcement', 'zone_section', 'waterfall_section', 'package_section', 'promo_section', 'quick_section']
+const ZONE_VISUAL_MAP = Object.freeze({
+  repurchase: '/static/zone-posters/zone-repurchase.svg',
+  selfOperated: '/static/zone-posters/zone-self-operated.svg',
+  hotSale: '/static/zone-posters/zone-hot-sale.svg',
+  localLife: '/static/zone-posters/zone-local-life.svg'
+})
 const ZONE_SOURCE_OPTIONS = [
-  { value: 'repurchase', label: '复购区' },
-  { value: 'selfOperated', label: '自营商城' },
-  { value: 'hotSale', label: '爆款区' },
+  { value: 'repurchase', label: '复购来源' },
+  { value: 'selfOperated', label: '商城来源' },
+  { value: 'hotSale', label: '热卖来源' },
   { value: 'localLife', label: '本地生活' }
 ]
 const TAB_PATHS = new Set([
@@ -279,6 +281,10 @@ const TAB_PATHS = new Set([
   '/pages/local-life/index',
   '/pages/profile/index'
 ])
+
+function formatSeriesIndex(index = 0) {
+  return String(index + 1).padStart(2, '0')
+}
 
 function customLayoutKey(id) {
   return `custom:${id}`
@@ -290,6 +296,12 @@ function createDefaultHomeSwiper() {
     type: 'image_swiper',
     enabled: true,
     title: '首页轮播',
+    section_kicker: 'Featured',
+    count_suffix: '张',
+    kicker: '精选活动',
+    desc: '主推活动、重点分区和新内容统一展示。',
+    tags: ['当日精选', '持续上新'],
+    slide_tags: ['专题推荐', '立即进入'],
     autoplay: true,
     items: [
       {
@@ -326,12 +338,6 @@ function createDefaultHomeSwiper() {
 function createDefaultDecoration() {
   const homeSwiper = createDefaultHomeSwiper()
   return {
-    hero: {
-      badge: 'Excellent Mall',
-      title: '把轮播会场、四区导航和商品瀑布流放进统一首页',
-      desc: '参考热门电商项目的首页结构，先展示首屏轮播和四区分流，再用可下拉刷新的瀑布流持续承接商城、本地生活和复购内容。',
-      tags: ['首页轮播', '四区导航', '瀑布流', '本地生活', '我的订单', '装修配置']
-    },
     layout: [customLayoutKey(homeSwiper.id), ...SECTION_ORDER],
     custom_blocks: [homeSwiper],
     announcement: {
@@ -347,10 +353,10 @@ function createDefaultDecoration() {
       title: '四区导航',
       subtitle: '热门分区',
       items: [
-        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', path: '/pages/local-life/index', open_type: 'switchTab' }
+        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/local-life/index', open_type: 'switchTab' }
       ]
     },
     waterfall_section: {
@@ -369,6 +375,7 @@ function createDefaultDecoration() {
     promo_section: {
       enabled: true,
       title: '会场推荐',
+      subtitle: '运营精选',
       items: [
         {
           enabled: true,
@@ -409,7 +416,7 @@ function createFallbackItem(type) {
     return { enabled: true, badge: '', title: '', desc: '', path: '', open_type: 'navigate' }
   }
   if (type === 'zone') {
-    return { enabled: true, key: '', title: '', tip: '', icon_url: '', path: '', open_type: 'navigate' }
+    return { enabled: true, key: '', title: '', tip: '', icon_url: '', link_text: '进入专区', show_count: true, path: '', open_type: 'navigate' }
   }
   return { enabled: true, title: '', desc: '', icon_url: '', path: '', open_type: 'navigate' }
 }
@@ -425,6 +432,10 @@ function normalizeEnabled(value, fallback = true) {
     return true
   }
   return fallback
+}
+
+function fieldOrDefault(source, field, fallback = '') {
+  return Object.prototype.hasOwnProperty.call(source || {}, field) ? String(source?.[field] || '').trim() : fallback
 }
 
 function normalizeLayout(layout, fallback = SECTION_ORDER, customBlocks = []) {
@@ -494,11 +505,18 @@ function normalizeCustomBlock(block, index = 0) {
     }
   }
   if (type === 'image_swiper') {
+    const fallbackBlock = block?.id === 'home_swiper_main' ? createDefaultHomeSwiper() : {}
     return {
       id: block?.id || `swiper_${index}`,
       type,
       enabled: normalizeEnabled(block?.enabled, true),
-      title: block?.title || '',
+      title: fieldOrDefault(block, 'title', fallbackBlock.title || ''),
+      section_kicker: fieldOrDefault(block, 'section_kicker', fallbackBlock.section_kicker || ''),
+      count_suffix: fieldOrDefault(block, 'count_suffix', fallbackBlock.count_suffix || ''),
+      kicker: fieldOrDefault(block, 'kicker', fallbackBlock.kicker || ''),
+      desc: fieldOrDefault(block, 'desc', fallbackBlock.desc || ''),
+      tags: Array.isArray(block?.tags) ? block.tags.filter(Boolean) : (fallbackBlock.tags || []),
+      slide_tags: Array.isArray(block?.slide_tags) ? block.slide_tags.filter(Boolean) : (fallbackBlock.slide_tags || []),
       autoplay: normalizeEnabled(block?.autoplay, true),
       items: Array.isArray(block?.items) && block.items.length
         ? block.items.map((item) => ({
@@ -510,7 +528,7 @@ function normalizeCustomBlock(block, index = 0) {
             path: item?.path || '',
             open_type: item?.open_type || 'navigate'
           }))
-        : []
+        : (fallbackBlock.items || [])
     }
   }
   if (type === 'mixed_goods') {
@@ -549,40 +567,35 @@ function normalizeCustomBlock(block, index = 0) {
 function normalizeDecoration(payload) {
   const defaults = createDefaultDecoration()
   const next = payload || {}
-  const customBlocks = Array.isArray(next.custom_blocks)
-    ? next.custom_blocks.map((block, index) => normalizeCustomBlock(block, index))
-    : []
+  const customBlocksSource = Array.isArray(next.custom_blocks) ? next.custom_blocks : defaults.custom_blocks
+  const customBlocks = customBlocksSource.map((block, index) => normalizeCustomBlock(block, index))
 
   return {
-    hero: {
-      badge: next.hero?.badge || defaults.hero.badge,
-      title: next.hero?.title || defaults.hero.title,
-      desc: next.hero?.desc || defaults.hero.desc,
-      tags: Array.isArray(next.hero?.tags) && next.hero.tags.length ? next.hero.tags.filter(Boolean) : defaults.hero.tags
-    },
     layout: normalizeLayout(next.layout, defaults.layout, customBlocks),
     custom_blocks: customBlocks,
     announcement: {
       enabled: normalizeEnabled(next.announcement?.enabled, defaults.announcement.enabled),
-      title: next.announcement?.title || defaults.announcement.title,
+      title: fieldOrDefault(next.announcement, 'title', defaults.announcement.title),
       lines: Array.isArray(next.announcement?.lines) && next.announcement.lines.length ? next.announcement.lines.filter(Boolean) : defaults.announcement.lines
     },
     zone_section: {
       enabled: normalizeEnabled(next.zone_section?.enabled, defaults.zone_section.enabled),
-      title: next.zone_section?.title || defaults.zone_section.title,
-      subtitle: next.zone_section?.subtitle || defaults.zone_section.subtitle,
+      title: fieldOrDefault(next.zone_section, 'title', defaults.zone_section.title),
+      subtitle: fieldOrDefault(next.zone_section, 'subtitle', defaults.zone_section.subtitle),
       items: Array.isArray(next.zone_section?.items) && next.zone_section.items.length
         ? next.zone_section.items.map((item) => ({
             ...createFallbackItem('zone'),
             ...item,
-            enabled: normalizeEnabled(item?.enabled, true)
+            enabled: normalizeEnabled(item?.enabled, true),
+            link_text: fieldOrDefault(item, 'link_text', '进入专区'),
+            show_count: normalizeEnabled(item?.show_count, true)
           }))
         : defaults.zone_section.items
     },
     waterfall_section: {
       enabled: normalizeEnabled(next.waterfall_section?.enabled, defaults.waterfall_section.enabled),
-      title: next.waterfall_section?.title || defaults.waterfall_section.title,
-      subtitle: next.waterfall_section?.subtitle || defaults.waterfall_section.subtitle,
+      title: fieldOrDefault(next.waterfall_section, 'title', defaults.waterfall_section.title),
+      subtitle: fieldOrDefault(next.waterfall_section, 'subtitle', defaults.waterfall_section.subtitle),
       page_size: Math.max(4, Math.min(20, Number(next.waterfall_section?.page_size || defaults.waterfall_section.page_size))),
       source_keys: Array.isArray(next.waterfall_section?.source_keys) && next.waterfall_section.source_keys.length
         ? next.waterfall_section.source_keys.filter((item) => ZONE_SOURCE_OPTIONS.some((option) => option.value === item))
@@ -590,13 +603,14 @@ function normalizeDecoration(payload) {
     },
     package_section: {
       enabled: normalizeEnabled(next.package_section?.enabled, defaults.package_section.enabled),
-      title: next.package_section?.title || defaults.package_section.title,
+      title: fieldOrDefault(next.package_section, 'title', defaults.package_section.title),
       desc: next.package_section?.desc || defaults.package_section.desc,
       limit: Math.max(1, Math.min(6, Number(next.package_section?.limit || defaults.package_section.limit)))
     },
     promo_section: {
       enabled: normalizeEnabled(next.promo_section?.enabled, defaults.promo_section.enabled),
-      title: next.promo_section?.title || defaults.promo_section.title,
+      title: fieldOrDefault(next.promo_section, 'title', defaults.promo_section.title),
+      subtitle: fieldOrDefault(next.promo_section, 'subtitle', defaults.promo_section.subtitle),
       items: Array.isArray(next.promo_section?.items) && next.promo_section.items.length
         ? next.promo_section.items.map((item) => ({
             ...createFallbackItem('promo'),
@@ -607,8 +621,8 @@ function normalizeDecoration(payload) {
     },
     quick_section: {
       enabled: normalizeEnabled(next.quick_section?.enabled, defaults.quick_section.enabled),
-      title: next.quick_section?.title || defaults.quick_section.title,
-      subtitle: next.quick_section?.subtitle || defaults.quick_section.subtitle,
+      title: fieldOrDefault(next.quick_section, 'title', defaults.quick_section.title),
+      subtitle: fieldOrDefault(next.quick_section, 'subtitle', defaults.quick_section.subtitle),
       items: Array.isArray(next.quick_section?.items) && next.quick_section.items.length
         ? next.quick_section.items.map((item) => ({
             ...createFallbackItem('quick'),
@@ -633,7 +647,6 @@ const lists = ref({
 const waterfallVisibleCount = ref(8)
 
 const decoration = computed(() => decorationData.value || createDefaultDecoration())
-const heroConfig = computed(() => decoration.value.hero || createDefaultDecoration().hero)
 const customBlockMap = computed(() => {
   const map = {}
   ;(decoration.value.custom_blocks || []).forEach((block) => {
@@ -645,11 +658,21 @@ const announcementLines = computed(() => (decoration.value.announcement?.lines |
 const announcementEnabled = computed(() => decoration.value.announcement?.enabled !== false && announcementLines.value.length > 0)
 const packageLimit = computed(() => Math.max(1, Number(decoration.value.package_section?.limit || 2)))
 const promoCards = computed(() => (decoration.value.promo_section?.items || []).filter((item) => item?.enabled !== false && (item?.title || item?.desc || item?.badge)))
+const promoSectionSubtitle = computed(() => decoration.value.promo_section?.subtitle || '')
 const zoneItems = computed(() => (decoration.value.zone_section?.items || []).filter((item) => item?.enabled !== false && (item?.title || item?.key)))
 const quickItems = computed(() => (decoration.value.quick_section?.items || []).filter((item) => item?.enabled !== false && (item?.title || item?.desc)))
+const zoneLabelMap = computed(() => {
+  const map = {}
+  ;(decoration.value.zone_section?.items || []).forEach((item) => {
+    if (item?.key && item?.title) {
+      map[item.key] = item.title
+    }
+  })
+  return map
+})
 
 function zoneSourceLabel(key) {
-  return ZONE_SOURCE_OPTIONS.find((item) => item.value === key)?.label || '专区'
+  return zoneLabelMap.value[key] || ZONE_SOURCE_OPTIONS.find((item) => item.value === key)?.label || '专区'
 }
 
 const waterfallSourceKeys = computed(() => {
@@ -690,6 +713,14 @@ const primarySwiperBlock = computed(() => {
   return (decoration.value.custom_blocks || []).find((block) => block.type === 'image_swiper' && block.enabled !== false && customSwiperItems(block).length > 0) || null
 })
 const primarySwiperLayoutKey = computed(() => (primarySwiperBlock.value ? customLayoutKey(primarySwiperBlock.value.id) : ''))
+const primarySwiperMeta = computed(() => ({
+  sectionKicker: primarySwiperBlock.value?.section_kicker || '',
+  countSuffix: primarySwiperBlock.value?.count_suffix || '',
+  kicker: primarySwiperBlock.value?.kicker || '',
+  desc: primarySwiperBlock.value?.desc || '',
+  tags: Array.isArray(primarySwiperBlock.value?.tags) ? primarySwiperBlock.value.tags.filter(Boolean) : [],
+  slideTags: Array.isArray(primarySwiperBlock.value?.slide_tags) ? primarySwiperBlock.value.slide_tags.filter(Boolean) : []
+}))
 const heroSwiperItems = computed(() => {
   if (primarySwiperBlock.value) {
     return customSwiperItems(primarySwiperBlock.value)
@@ -709,6 +740,13 @@ function zoneList(key) {
 
 function zoneCount(key) {
   return zoneList(key).length
+}
+
+function zoneVisualImage(item) {
+  if (item?.icon_url) {
+    return item.icon_url
+  }
+  return ZONE_VISUAL_MAP[item?.key] || ''
 }
 
 function displayName(item) {
@@ -946,81 +984,151 @@ onReachBottom(() => {
 
 <style scoped>
 .home-page {
+  position: relative;
+  overflow: hidden;
   background:
-    radial-gradient(circle at top right, rgba(209, 163, 79, 0.14), transparent 28%),
-    linear-gradient(180deg, #fffaf1 0%, #f5f8f2 32%, #f7f3eb 100%);
+    radial-gradient(circle at 0% 0%, rgba(233, 176, 120, 0.24), transparent 22%),
+    radial-gradient(circle at 100% 8%, rgba(208, 220, 244, 0.82), transparent 24%),
+    linear-gradient(180deg, #fbf8f3 0%, #f6f4ef 42%, #f3f1ec 100%);
 }
 
-.hero-panel,
+.home-page::before,
+.home-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.home-page::before {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.62), transparent 18%, transparent 78%, rgba(255, 255, 255, 0.38)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 30%);
+}
+
+.home-page::after {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.78), transparent 10%),
+    radial-gradient(circle at 78% 12%, rgba(255, 255, 255, 0.68), transparent 12%);
+  opacity: 0.72;
+}
+
+.card,
 .swiper-panel {
-  margin-bottom: 20rpx;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24rpx;
+  border-radius: 30rpx;
+  border: 1rpx solid rgba(232, 224, 214, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(252, 250, 246, 0.96) 100%);
+  box-shadow:
+    0 18rpx 42rpx rgba(136, 124, 107, 0.1),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.75);
 }
 
-.hero-panel {
-  padding: 30rpx;
-  border-radius: 34rpx;
-  background:
-    radial-gradient(circle at top right, rgba(208, 163, 80, 0.18), transparent 26%),
-    linear-gradient(145deg, #173530 0%, #1f7d5f 100%);
-  color: #ffffff;
-  box-shadow: 0 24rpx 48rpx rgba(24, 52, 46, 0.18);
+.card,
+.swiper-panel {
+  padding: 28rpx;
 }
 
-.hero-kicker-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.hero-refresh {
-  font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.78);
-}
-
-.hero-tags,
+.visual-strip,
 .benefit-row,
-.waterfall-meta {
+.waterfall-meta,
+.slide-topline,
+.slide-footer {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 12rpx;
 }
 
-.hero-tags {
-  margin-top: 22rpx;
+.swiper-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 241, 0.98) 100%);
 }
 
-.hero-tag,
+.visual-strip {
+  justify-content: space-between;
+  margin-bottom: 22rpx;
+}
+
+.visual-copy-block {
+  max-width: 68%;
+}
+
+.cinematic-badge {
+  margin-bottom: 12rpx;
+  background: linear-gradient(135deg, #efe5d6 0%, #f5efe6 100%);
+  color: #8c5a2f;
+  border: 1rpx solid rgba(224, 209, 189, 0.9);
+}
+
+.visual-copy {
+  font-size: 23rpx;
+  line-height: 1.7;
+  color: #7a726a;
+}
+
+.visual-pill-stack {
+  display: grid;
+  gap: 10rpx;
+}
+
+.mini-pill,
 .benefit-pill,
 .promo-badge,
 .waterfall-chip,
-.slide-badge {
-  padding: 10rpx 18rpx;
+.slide-badge,
+.slide-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52rpx;
+  padding: 0 18rpx;
   border-radius: 999rpx;
   font-size: 22rpx;
+  color: #c86a32;
+  background: rgba(210, 108, 50, 0.08);
+  border: 1rpx solid rgba(210, 108, 50, 0.12);
 }
 
-.hero-tag,
-.slide-badge {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.swiper-panel {
-  padding: 24rpx;
-  border-radius: 30rpx;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 12rpx 30rpx rgba(24, 52, 46, 0.06);
+.visual-head {
+  align-items: flex-end;
+  padding-top: 8rpx;
+  border-top: 1rpx solid rgba(228, 220, 209, 0.9);
 }
 
 .section-head.compact {
-  margin-bottom: 18rpx;
+  margin-bottom: 20rpx;
+}
+
+.section-kicker {
+  margin-bottom: 10rpx;
+  font-size: 20rpx;
+  letter-spacing: 3rpx;
+  text-transform: uppercase;
+  color: #b28d69;
+}
+
+.visual-count {
+  min-height: 56rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(232, 224, 214, 0.9);
+  background: #ffffff;
+  color: #27231e;
 }
 
 .hero-swiper,
 .module-swiper {
-  height: 260rpx;
+  height: 400rpx;
+}
+
+.image-swiper-module {
+  margin-bottom: 24rpx;
+}
+
+.module-swiper {
+  height: 300rpx;
 }
 
 .swiper-slide,
@@ -1028,13 +1136,18 @@ onReachBottom(() => {
   position: relative;
   overflow: hidden;
   height: 100%;
-  padding: 30rpx;
+  padding: 34rpx 30rpx 30rpx;
   border-radius: 28rpx;
   box-sizing: border-box;
   background:
-    radial-gradient(circle at top right, rgba(208, 163, 80, 0.18), transparent 30%),
-    linear-gradient(145deg, #18343b 0%, #275d57 58%, #1f8f64 100%);
+    radial-gradient(circle at 84% 16%, rgba(232, 192, 149, 0.45), transparent 24%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 24%, transparent 72%, rgba(255, 255, 255, 0.06)),
+    linear-gradient(150deg, #25201b 0%, #3a2d24 50%, #7a5738 100%);
   color: #ffffff;
+  border: 1rpx solid rgba(120, 91, 63, 0.18);
+  box-shadow:
+    0 18rpx 44rpx rgba(111, 84, 58, 0.2),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.1);
 }
 
 .slide-image {
@@ -1042,12 +1155,37 @@ onReachBottom(() => {
   inset: 0;
   width: 100%;
   height: 100%;
+  transform: scale(1.04);
+  filter: saturate(0.94) contrast(1.02) brightness(0.94);
+}
+
+.slide-grid,
+.slide-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.slide-grid {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1rpx, transparent 1rpx),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 1rpx, transparent 1rpx);
+  background-size: 34rpx 34rpx;
+  opacity: 0.18;
+}
+
+.slide-glow {
+  background:
+    radial-gradient(circle at 88% 18%, rgba(255, 197, 140, 0.26), transparent 22%),
+    radial-gradient(circle at 20% 120%, rgba(255, 255, 255, 0.08), transparent 30%);
 }
 
 .slide-mask {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(11, 20, 25, 0.12) 0%, rgba(11, 20, 25, 0.62) 100%);
+  background:
+    linear-gradient(180deg, rgba(20, 17, 15, 0.12) 0%, rgba(20, 17, 15, 0.28) 40%, rgba(20, 17, 15, 0.68) 100%),
+    linear-gradient(135deg, rgba(255, 206, 159, 0.18), transparent 44%);
 }
 
 .slide-content {
@@ -1055,23 +1193,45 @@ onReachBottom(() => {
   z-index: 1;
 }
 
+.slide-topline {
+  justify-content: space-between;
+}
+
+.slide-series {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
+  font-size: 21rpx;
+  letter-spacing: 2rpx;
+}
+
 .slide-title {
-  margin: 18rpx 0 12rpx;
-  font-size: 38rpx;
+  margin: 26rpx 0 14rpx;
+  font-size: 42rpx;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.24;
+  max-width: 82%;
 }
 
 .slide-desc {
   font-size: 24rpx;
-  line-height: 1.7;
-  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.72;
+  color: rgba(255, 255, 255, 0.74);
+  max-width: 90%;
+}
+
+.slide-footer {
+  margin-top: 26rpx;
 }
 
 .notice-card {
-  background:
-    radial-gradient(circle at top left, rgba(208, 163, 80, 0.1), transparent 30%),
-    linear-gradient(180deg, #fffdf8 0%, #f6f8f3 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 247, 241, 0.98) 100%);
 }
 
 .notice-list,
@@ -1079,22 +1239,23 @@ onReachBottom(() => {
 .promo-grid,
 .feed-list {
   display: grid;
-  gap: 16rpx;
+  gap: 18rpx;
 }
 
 .notice-item {
-  padding: 22rpx 24rpx;
+  position: relative;
+  padding: 24rpx 26rpx;
   border-radius: 22rpx;
-  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
-  color: #556560;
-  line-height: 1.7;
-  border: 1rpx solid rgba(21, 55, 45, 0.05);
+  background: #fbfaf7;
+  color: #6e665e;
+  line-height: 1.75;
+  border: 1rpx solid rgba(238, 230, 220, 0.9);
 }
 
 .zone-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
+  gap: 18rpx;
 }
 
 .zone-nav-card,
@@ -1105,9 +1266,14 @@ onReachBottom(() => {
 .feed-card,
 .quick-entry,
 .waterfall-card {
-  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
-  border-radius: 26rpx;
-  border: 1rpx solid rgba(21, 55, 45, 0.05);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffffff 0%, #faf8f4 100%);
+  border-radius: 24rpx;
+  border: 1rpx solid rgba(238, 229, 219, 0.9);
+  box-shadow:
+    0 14rpx 32rpx rgba(145, 131, 112, 0.08),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.82);
 }
 
 .zone-nav-card,
@@ -1121,35 +1287,45 @@ onReachBottom(() => {
 }
 
 .zone-nav-card {
-  min-height: 200rpx;
+  min-height: 308rpx;
   box-sizing: border-box;
 }
 
+.zone-card-art {
+  width: 100%;
+  height: 148rpx;
+  margin-bottom: 18rpx;
+  border-radius: 18rpx;
+  display: block;
+  box-shadow:
+    0 14rpx 30rpx rgba(145, 131, 112, 0.12),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.36);
+}
+
 .nav-icon-shell {
-  width: 74rpx;
-  height: 74rpx;
-  border-radius: 24rpx;
+  width: 82rpx;
+  height: 82rpx;
+  border-radius: 26rpx;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 18rpx;
-  background:
-    radial-gradient(circle at top right, rgba(209, 163, 79, 0.2), transparent 36%),
-    linear-gradient(145deg, rgba(30, 143, 100, 0.16), rgba(24, 52, 46, 0.08));
-  color: #18342e;
+  margin-bottom: 20rpx;
+  background: linear-gradient(180deg, #f5efe6 0%, #fffdf8 100%);
+  border: 1rpx solid rgba(232, 223, 214, 0.9);
+  color: #44372f;
   font-size: 24rpx;
   font-weight: 700;
 }
 
 .zone-icon-shell {
-  box-shadow: 0 12rpx 26rpx rgba(30, 143, 100, 0.12);
+  box-shadow: 0 10rpx 22rpx rgba(146, 126, 105, 0.1);
 }
 
 .quick-icon-shell {
-  width: 66rpx;
-  height: 66rpx;
-  border-radius: 22rpx;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 24rpx;
   margin-bottom: 14rpx;
 }
 
@@ -1161,6 +1337,13 @@ onReachBottom(() => {
 .nav-icon-text {
   padding: 0 8rpx;
   text-align: center;
+}
+
+.nav-icon-empty {
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 10rpx;
+  background: rgba(201, 106, 50, 0.12);
 }
 
 .zone-card-top,
@@ -1178,7 +1361,7 @@ onReachBottom(() => {
 .waterfall-title {
   font-size: 30rpx;
   font-weight: 700;
-  color: #18342e;
+  color: #191613;
   line-height: 1.35;
 }
 
@@ -1187,12 +1370,13 @@ onReachBottom(() => {
   height: 48rpx;
   padding: 0 14rpx;
   border-radius: 999rpx;
-  background: rgba(30, 143, 100, 0.12);
-  color: #1e8f64;
+  background: #f6ede4;
+  color: #c96a32;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 22rpx;
+  border: 1rpx solid rgba(214, 176, 143, 0.36);
 }
 
 .zone-card-tip,
@@ -1201,36 +1385,29 @@ onReachBottom(() => {
 .waterfall-desc,
 .quick-entry-desc {
   font-size: 24rpx;
-  line-height: 1.7;
-  color: #66756f;
+  line-height: 1.75;
+  color: #7a726a;
 }
 
 .zone-card-link {
   margin-top: 14rpx;
   font-size: 22rpx;
-  color: #1e8f64;
+  color: #c96a32;
 }
 
 .waterfall-meta {
   margin-bottom: 18rpx;
 }
 
-.waterfall-chip,
-.benefit-pill,
-.promo-badge {
-  color: #1b6f4f;
-  background: rgba(231, 246, 239, 0.9);
-}
-
 .waterfall-columns {
   display: flex;
-  gap: 16rpx;
+  gap: 18rpx;
 }
 
 .waterfall-column {
   flex: 1;
   display: grid;
-  gap: 16rpx;
+  gap: 18rpx;
 }
 
 .waterfall-card {
@@ -1240,17 +1417,19 @@ onReachBottom(() => {
 .waterfall-cover {
   height: 220rpx;
   background:
-    radial-gradient(circle at top right, rgba(209, 163, 79, 0.2), transparent 28%),
-    linear-gradient(145deg, #203732 0%, #2e6e61 100%);
+    radial-gradient(circle at top right, rgba(245, 205, 169, 0.36), transparent 28%),
+    linear-gradient(150deg, #2a241f 0%, #513d2f 56%, #8a6448 100%);
 }
 
 .waterfall-cover.tall {
-  height: 280rpx;
+  height: 300rpx;
 }
 
 .waterfall-image {
   width: 100%;
   height: 100%;
+  transform: scale(1.04);
+  filter: saturate(0.94) contrast(1.02) brightness(0.94);
 }
 
 .waterfall-cover-fallback {
@@ -1270,6 +1449,7 @@ onReachBottom(() => {
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.16);
   font-size: 22rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
 }
 
 .waterfall-cover-title {
@@ -1297,13 +1477,13 @@ onReachBottom(() => {
 .package-price {
   font-size: 38rpx;
   font-weight: 700;
-  color: #1e8f64;
+  color: #c96a32;
   line-height: 1;
 }
 
 .waterfall-market-price {
   font-size: 22rpx;
-  color: #9aa7a0;
+  color: #aea59b;
   text-decoration: line-through;
 }
 
@@ -1315,22 +1495,14 @@ onReachBottom(() => {
 .quick-entry-title {
   font-size: 28rpx;
   font-weight: 700;
-  color: #18342e;
+  color: #191613;
 }
 
 .item-meta,
 .feed-meta {
   margin-top: 10rpx;
   font-size: 22rpx;
-  color: #1b6f4f;
-}
-
-.promo-card,
-.custom-banner-card,
-.coupon-strip-card {
-  background:
-    radial-gradient(circle at top right, rgba(200, 155, 73, 0.14), transparent 30%),
-    linear-gradient(180deg, #fffdf9 0%, #f5f7f2 100%);
+  color: #c96a32;
 }
 
 .banner-action {
@@ -1338,19 +1510,62 @@ onReachBottom(() => {
   margin-top: 18rpx;
   padding: 10rpx 18rpx;
   border-radius: 999rpx;
-  background: rgba(24, 52, 59, 0.08);
-  color: #18342e;
+  background: #f4ece4;
+  color: #7d5633;
   font-size: 22rpx;
+  border: 1rpx solid rgba(230, 215, 198, 0.9);
 }
 
 .quick-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
+  gap: 18rpx;
 }
 
 .quick-entry {
-  min-height: 152rpx;
+  min-height: 172rpx;
   box-sizing: border-box;
+}
+
+.section-head {
+  margin-bottom: 18rpx;
+}
+
+.section-title,
+.title {
+  color: #181512;
+}
+
+.section-link {
+  color: #b86f39;
+}
+
+.section-desc,
+.desc,
+.empty-text,
+.status-desc {
+  color: #7a726a;
+}
+
+.status-card {
+  background: linear-gradient(180deg, #ffffff 0%, #faf7f2 100%);
+  border: 1rpx solid rgba(235, 226, 216, 0.92);
+}
+
+.status-title {
+  color: #181512;
+}
+
+.secondary-btn {
+  background: linear-gradient(180deg, #ffffff 0%, #f7f2eb 100%);
+  color: #3b3129;
+  border: 1rpx solid rgba(232, 222, 212, 0.92);
+  box-shadow: 0 8rpx 20rpx rgba(145, 131, 112, 0.08);
+}
+
+.retry-btn,
+.load-more-btn {
+  position: relative;
+  z-index: 1;
 }
 </style>

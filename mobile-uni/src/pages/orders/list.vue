@@ -162,8 +162,9 @@ onShow(() => {
 <style scoped>
 .hero-card {
   background:
-    radial-gradient(circle at top right, rgba(62, 152, 108, 0.2), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 246, 0.98) 100%);
+    radial-gradient(circle at 100% 0%, rgba(232, 192, 149, 0.24), transparent 34%),
+    radial-gradient(circle at 0% 12%, rgba(208, 220, 244, 0.28), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 241, 0.98) 100%);
 }
 
 .tab-row {
@@ -178,14 +179,14 @@ onShow(() => {
   height: 64rpx;
   padding: 0 28rpx;
   border-radius: 999rpx;
-  background: #edf2ee;
-  color: #66756f;
+  background: #f5efe7;
+  color: var(--theme-text-muted);
   font-size: 24rpx;
   margin-right: 16rpx;
 }
 
 .status-tab.active {
-  background: #1e8f64;
+  background: linear-gradient(180deg, #d7793e 0%, #c96a32 100%);
   color: #ffffff;
 }
 
@@ -195,10 +196,10 @@ onShow(() => {
 }
 
 .order-card {
-  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
+  background: var(--theme-surface-muted);
   border-radius: 24rpx;
   padding: 24rpx;
-  border: 1rpx solid rgba(21, 55, 45, 0.05);
+  border: 1rpx solid var(--theme-border);
 }
 
 .order-top {
@@ -212,7 +213,7 @@ onShow(() => {
 .order-no {
   font-size: 29rpx;
   font-weight: 700;
-  color: #18342e;
+  color: var(--theme-text);
 }
 
 .actions {

@@ -192,8 +192,9 @@ onShow(() => {
 <style scoped>
 .hero-card {
   background:
-    radial-gradient(circle at top left, rgba(62, 152, 108, 0.2), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 246, 0.98) 100%);
+    radial-gradient(circle at 100% 0%, rgba(232, 192, 149, 0.24), transparent 34%),
+    radial-gradient(circle at 0% 12%, rgba(208, 220, 244, 0.28), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 241, 0.98) 100%);
 }
 
 .profile-top {
@@ -206,7 +207,7 @@ onShow(() => {
   width: 112rpx;
   height: 112rpx;
   border-radius: 32rpx;
-  background: linear-gradient(180deg, #1e8f64 0%, #18342e 100%);
+  background: var(--theme-dark-panel);
   color: #ffffff;
   font-size: 42rpx;
   font-weight: 700;
@@ -214,7 +215,7 @@ onShow(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 18rpx 30rpx rgba(30, 143, 100, 0.22);
+  box-shadow: 0 18rpx 30rpx rgba(111, 84, 58, 0.18);
 }
 
 .profile-main {
@@ -232,9 +233,10 @@ onShow(() => {
 .profile-tag {
   padding: 10rpx 18rpx;
   border-radius: 999rpx;
-  background: #e7f6ef;
-  color: #1e8f64;
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent);
   font-size: 22rpx;
+  border: 1rpx solid var(--theme-accent-border);
 }
 
 .action-grid {
@@ -244,23 +246,24 @@ onShow(() => {
 }
 
 .action-item {
-  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
+  background: var(--theme-surface-muted);
   border-radius: 24rpx;
   padding: 24rpx;
   min-height: 164rpx;
   box-sizing: border-box;
+  border: 1rpx solid var(--theme-border);
 }
 
 .action-title {
   font-size: 30rpx;
   font-weight: 700;
-  color: #18342e;
+  color: var(--theme-text);
   margin-bottom: 10rpx;
 }
 
 .action-desc {
   font-size: 24rpx;
-  color: #66756f;
+  color: var(--theme-text-muted);
   line-height: 1.7;
 }
 

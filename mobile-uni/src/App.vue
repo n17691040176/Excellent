@@ -11,8 +11,9 @@ export default {
 
 page {
   background:
-    radial-gradient(circle at top, rgba(224, 238, 230, 0.92), transparent 36%),
-    linear-gradient(180deg, #f7f2e9 0%, #f2f5ef 48%, #eef3ef 100%);
-  color: #18342e;
+    radial-gradient(circle at 0% 0%, rgba(233, 176, 120, 0.18), transparent 24%),
+    radial-gradient(circle at 100% 8%, rgba(208, 220, 244, 0.56), transparent 24%),
+    linear-gradient(180deg, #fbf8f3 0%, #f6f4ef 42%, #f3f1ec 100%);
+  color: #191613;
 }
 </style>

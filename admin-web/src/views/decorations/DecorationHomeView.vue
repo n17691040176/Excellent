@@ -300,6 +300,38 @@
                 <el-switch v-model="block.autoplay" />
               </el-form-item>
             </div>
+            <div class="form-split">
+              <el-form-item label="标题上方文案">
+                <el-input v-model="block.section_kicker" placeholder="如：Featured" />
+              </el-form-item>
+              <el-form-item label="数量单位">
+                <el-input v-model="block.count_suffix" placeholder="如：张" />
+              </el-form-item>
+            </div>
+            <div class="form-split">
+              <el-form-item label="顶部标签">
+                <el-input v-model="block.kicker" placeholder="如：精选活动" />
+              </el-form-item>
+              <el-form-item label="顶部胶囊文案">
+                <el-input
+                  :model-value="joinLines(block.tags)"
+                  placeholder="每行一个，如：当日精选"
+                  @update:model-value="block.tags = splitLines($event)"
+                />
+              </el-form-item>
+            </div>
+            <el-form-item label="顶部说明">
+              <el-input v-model="block.desc" type="textarea" :rows="2" />
+            </el-form-item>
+            <el-form-item label="轮播按钮文案">
+              <el-input
+                :model-value="joinLines(block.slide_tags)"
+                type="textarea"
+                :rows="2"
+                placeholder="每行一个，如：专题推荐"
+                @update:model-value="block.slide_tags = splitLines($event)"
+              />
+            </el-form-item>
             <div class="section-header-actions nested-actions">
               <span class="mini-desc">轮播内容</span>
               <el-button plain @click="addSwiperItem(block)">新增轮播项</el-button>
@@ -462,29 +494,6 @@
     <div class="editor-grid">
       <div class="panel-card data-card">
         <div class="section-title-row">
-          <h3>主视觉</h3>
-          <span>Hero / 顶部说明</span>
-        </div>
-        <el-form label-position="top">
-          <div class="form-split">
-            <el-form-item label="徽标">
-              <el-input v-model="form.hero.badge" />
-            </el-form-item>
-            <el-form-item label="标题">
-              <el-input v-model="form.hero.title" />
-            </el-form-item>
-          </div>
-          <el-form-item label="描述">
-            <el-input v-model="form.hero.desc" type="textarea" :rows="3" />
-          </el-form-item>
-          <el-form-item label="标签">
-            <el-input v-model="heroTagsText" type="textarea" :rows="3" placeholder="每行一个标签，或使用逗号分隔" />
-          </el-form-item>
-        </el-form>
-      </div>
-
-      <div class="panel-card data-card">
-        <div class="section-title-row">
           <h3>公告区</h3>
           <div class="section-meta">
             <span>Announcement</span>
@@ -597,6 +606,11 @@
         <el-form-item label="区块标题">
           <el-input v-model="form.promo_section.title" />
         </el-form-item>
+        <el-form-item label="右侧文案">
+          <el-input v-model="form.promo_section.subtitle" placeholder="为空则前台隐藏" />
+        </el-form-item>
+      </div>
+      <div class="section-config-row">
         <div class="section-tip">支持单卡禁用、上下排序，区块本身的上下顺序在“布局顺序”里调整。</div>
       </div>
       <div class="block-list">
@@ -705,6 +719,14 @@
           <el-form-item label="说明">
             <el-input v-model="item.tip" />
           </el-form-item>
+          <div class="form-split">
+            <el-form-item label="卡片跳转文案">
+              <el-input v-model="item.link_text" placeholder="为空则前台隐藏" />
+            </el-form-item>
+            <el-form-item label="显示数量角标">
+              <el-switch v-model="item.show_count" inline-prompt active-text="显示" inactive-text="隐藏" />
+            </el-form-item>
+          </div>
           <el-form-item label="图标地址">
             <el-input v-model="item.icon_url" placeholder="https:// 或后台上传后的图标地址" />
           </el-form-item>
@@ -831,20 +853,7 @@
         </div>
       </div>
       <div class="mobile-preview">
-        <div class="preview-card preview-hero">
-          <div class="preview-badge">{{ form.hero.badge }}</div>
-          <h3>{{ form.hero.title }}</h3>
-          <p>{{ form.hero.desc }}</p>
-          <div class="tag-row">
-            <span v-for="item in previewHeroTags" :key="item" class="mini-tag">{{ item }}</span>
-          </div>
-        </div>
-
           <div v-if="previewPrimarySwiperItems.length" class="preview-card preview-banner-card">
-            <div class="preview-head">
-              <strong>{{ previewPrimarySwiperBlock?.title || '首页轮播' }}</strong>
-              <span>{{ previewPrimarySwiperItems.length }} 张</span>
-            </div>
             <div class="preview-grid">
               <div
                 v-for="(item, index) in previewPrimarySwiperItems"
@@ -864,7 +873,7 @@
 
         <template v-for="sectionKey in orderedPreviewKeys" :key="sectionKey">
           <div v-if="sectionKey === 'announcement'" class="preview-card">
-            <div class="preview-head">
+            <div v-if="form.announcement.title" class="preview-head">
               <strong>{{ form.announcement.title }}</strong>
               <span>公告区</span>
             </div>
@@ -874,17 +883,17 @@
           </div>
 
           <div v-else-if="sectionKey === 'package_section'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ form.package_section.title }}</strong>
+            <div v-if="form.package_section.title || form.package_section.limit" class="preview-head">
+              <strong v-if="form.package_section.title">{{ form.package_section.title }}</strong>
               <span>展示 {{ form.package_section.limit }} 档</span>
             </div>
             <p>{{ form.package_section.desc }}</p>
           </div>
 
           <div v-else-if="sectionKey === 'promo_section'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ form.promo_section.title }}</strong>
-              <span>{{ previewPromoCards.length }} 张</span>
+            <div v-if="form.promo_section.title || form.promo_section.subtitle || previewPromoCards.length" class="preview-head">
+              <strong v-if="form.promo_section.title">{{ form.promo_section.title }}</strong>
+              <span>{{ form.promo_section.subtitle || `${previewPromoCards.length} 张` }}</span>
             </div>
             <div class="preview-grid">
               <div v-for="(item, index) in previewPromoCards" :key="`preview-promo-${index}`" class="preview-mini-card">
@@ -896,26 +905,23 @@
           </div>
 
           <div v-else-if="sectionKey === 'zone_section'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ form.zone_section.title }}</strong>
-              <span>{{ form.zone_section.subtitle }}</span>
+            <div v-if="form.zone_section.title || form.zone_section.subtitle" class="preview-head">
+              <strong v-if="form.zone_section.title">{{ form.zone_section.title }}</strong>
+              <span v-if="form.zone_section.subtitle">{{ form.zone_section.subtitle }}</span>
             </div>
             <div class="preview-grid">
               <div v-for="(item, index) in previewZoneItems" :key="`preview-zone-${index}`" class="preview-mini-card">
-                <div class="preview-item-icon">
-                  <img v-if="item.icon_url" :src="item.icon_url" alt="分区图标" class="preview-item-icon-image" />
-                  <span v-else>{{ navItemFallbackText(item, '分区') }}</span>
-                </div>
                 <strong>{{ item.title || item.key || '未命名分区' }}</strong>
                 <p>{{ item.tip || '请补充分区说明' }}</p>
+                <p v-if="item.link_text || item.show_count !== false">{{ item.link_text || '无跳转文案' }} · {{ item.show_count === false ? '隐藏数量' : '显示数量' }}</p>
               </div>
             </div>
           </div>
 
           <div v-else-if="sectionKey === 'waterfall_section'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ form.waterfall_section.title }}</strong>
-              <span>{{ form.waterfall_section.subtitle }}</span>
+            <div v-if="form.waterfall_section.title || form.waterfall_section.subtitle" class="preview-head">
+              <strong v-if="form.waterfall_section.title">{{ form.waterfall_section.title }}</strong>
+              <span v-if="form.waterfall_section.subtitle">{{ form.waterfall_section.subtitle }}</span>
             </div>
             <div class="preview-lines">
               <div>来源：{{ previewWaterfallSources || '未选择' }}</div>
@@ -931,9 +937,9 @@
           </div>
 
           <div v-else-if="sectionKey === 'quick_section'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ form.quick_section.title }}</strong>
-              <span>{{ form.quick_section.subtitle }}</span>
+            <div v-if="form.quick_section.title || form.quick_section.subtitle" class="preview-head">
+              <strong v-if="form.quick_section.title">{{ form.quick_section.title }}</strong>
+              <span v-if="form.quick_section.subtitle">{{ form.quick_section.subtitle }}</span>
             </div>
             <div class="preview-grid">
               <div v-for="(item, index) in previewQuickItems" :key="`preview-quick-${index}`" class="preview-mini-card">
@@ -949,15 +955,15 @@
 
           <div v-else-if="customBlockFromLayout(sectionKey)?.type === 'banner'" class="preview-card preview-banner-card">
             <div class="preview-badge muted">{{ customBlockFromLayout(sectionKey)?.badge || '活动横幅' }}</div>
-            <strong>{{ customBlockFromLayout(sectionKey)?.title || '未命名横幅' }}</strong>
+            <strong v-if="customBlockFromLayout(sectionKey)?.title">{{ customBlockFromLayout(sectionKey)?.title }}</strong>
             <p>{{ customBlockFromLayout(sectionKey)?.desc || '请补充活动说明' }}</p>
             <div class="preview-action">{{ customBlockFromLayout(sectionKey)?.button_text || '立即查看' }}</div>
           </div>
 
           <div v-else-if="customBlockFromLayout(sectionKey)?.type === 'grid'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ customBlockFromLayout(sectionKey)?.title || '专题导航' }}</strong>
-              <span>{{ customBlockFromLayout(sectionKey)?.subtitle || '自定义模块' }}</span>
+            <div v-if="customBlockFromLayout(sectionKey)?.title || customBlockFromLayout(sectionKey)?.subtitle" class="preview-head">
+              <strong v-if="customBlockFromLayout(sectionKey)?.title">{{ customBlockFromLayout(sectionKey)?.title }}</strong>
+              <span v-if="customBlockFromLayout(sectionKey)?.subtitle">{{ customBlockFromLayout(sectionKey)?.subtitle }}</span>
             </div>
             <div class="preview-grid">
               <div
@@ -977,13 +983,13 @@
 
           <div v-else-if="customBlockFromLayout(sectionKey)?.type === 'coupon_strip'" class="preview-card preview-coupon-card">
             <div class="preview-badge muted">{{ customBlockFromLayout(sectionKey)?.badge || '权益专区' }}</div>
-            <strong>{{ customBlockFromLayout(sectionKey)?.title || '券权益条' }}</strong>
+            <strong v-if="customBlockFromLayout(sectionKey)?.title">{{ customBlockFromLayout(sectionKey)?.title }}</strong>
             <p>{{ customBlockFromLayout(sectionKey)?.desc || '请补充权益文案' }}</p>
           </div>
 
           <div v-else-if="customBlockFromLayout(sectionKey)?.type === 'zone_feed'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ customBlockFromLayout(sectionKey)?.title || '专区商品流' }}</strong>
+            <div v-if="customBlockFromLayout(sectionKey)?.title || customBlockFromLayout(sectionKey)?.source_key" class="preview-head">
+              <strong v-if="customBlockFromLayout(sectionKey)?.title">{{ customBlockFromLayout(sectionKey)?.title }}</strong>
               <span>{{ zoneSourceLabel(customBlockFromLayout(sectionKey)?.source_key) }}</span>
             </div>
             <div class="preview-grid">
@@ -998,32 +1004,26 @@
             </div>
           </div>
 
-          <div v-else-if="customBlockFromLayout(sectionKey)?.type === 'image_swiper'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ customBlockFromLayout(sectionKey)?.title || '轮播海报' }}</strong>
-              <span>{{ customBlockFromLayout(sectionKey)?.autoplay ? '自动轮播' : '手动切换' }}</span>
-            </div>
-            <div class="preview-grid">
-              <div
-                v-for="(item, index) in customSwiperItems(customBlockFromLayout(sectionKey))"
-                :key="`preview-swiper-${sectionKey}-${index}`"
-                class="preview-mini-card preview-swiper-mini-card"
-                :style="previewSwiperStyle(item)"
-              >
-                <div class="preview-swiper-mask"></div>
-                <div class="preview-swiper-content">
-                  <div class="preview-badge muted">{{ item.badge || '轮播图' }}</div>
-                  <strong>{{ item.title || '未命名轮播' }}</strong>
-                  <p>{{ item.desc || '请补充轮播说明' }}</p>
-                </div>
+          <div v-else-if="customBlockFromLayout(sectionKey)?.type === 'image_swiper'" class="preview-swiper-strip">
+            <div
+              v-for="(item, index) in customSwiperItems(customBlockFromLayout(sectionKey))"
+              :key="`preview-swiper-${sectionKey}-${index}`"
+              class="preview-mini-card preview-swiper-mini-card"
+              :style="previewSwiperStyle(item)"
+            >
+              <div class="preview-swiper-mask"></div>
+              <div class="preview-swiper-content">
+                <div class="preview-badge muted">{{ item.badge || '轮播图' }}</div>
+                <strong>{{ item.title || '未命名轮播' }}</strong>
+                <p>{{ item.desc || '请补充轮播说明' }}</p>
               </div>
             </div>
           </div>
 
           <div v-else-if="customBlockFromLayout(sectionKey)?.type === 'mixed_goods'" class="preview-card">
-            <div class="preview-head">
-              <strong>{{ customBlockFromLayout(sectionKey)?.title || '混合商品区' }}</strong>
-              <span>{{ customBlockFromLayout(sectionKey)?.subtitle || '商品编排' }}</span>
+            <div v-if="customBlockFromLayout(sectionKey)?.title || customBlockFromLayout(sectionKey)?.subtitle" class="preview-head">
+              <strong v-if="customBlockFromLayout(sectionKey)?.title">{{ customBlockFromLayout(sectionKey)?.title }}</strong>
+              <span v-if="customBlockFromLayout(sectionKey)?.subtitle">{{ customBlockFromLayout(sectionKey)?.subtitle }}</span>
             </div>
             <div class="preview-grid">
               <div
@@ -1040,7 +1040,7 @@
         </template>
 
         <div v-if="!orderedPreviewKeys.length" class="preview-empty">
-          当前没有启用的首页区块，保存后 uni 首页将只显示 Hero。
+          当前没有启用的首页区块，保存后 uni 首页将不展示装修内容。
         </div>
       </div>
     </div>
@@ -1097,16 +1097,16 @@ import { decorationApi } from '@/api/modules'
 const SECTION_ORDER = ['announcement', 'zone_section', 'waterfall_section', 'package_section', 'promo_section', 'quick_section']
 const SECTION_META = {
   announcement: { label: '公告区', hint: '顶部公告与运营提醒' },
-  zone_section: { label: '四区导航', hint: '复购、自营、爆款、本地生活' },
+  zone_section: { label: '四区导航', hint: '后台配置的分区入口、角标和跳转文案' },
   waterfall_section: { label: '瀑布商品流', hint: '双列商品推荐，可下拉刷新与继续加载' },
   package_section: { label: '套餐区', hint: '套餐推荐与权益转化' },
   promo_section: { label: '运营卡片', hint: '活动卡片与重点引导' },
   quick_section: { label: '我的常用', hint: '团队、邀请、佣金、资产等个人常用入口' }
 }
 const ZONE_SOURCE_OPTIONS = [
-  { value: 'repurchase', label: '复购区' },
-  { value: 'selfOperated', label: '自营商城' },
-  { value: 'hotSale', label: '爆款区' },
+  { value: 'repurchase', label: '复购来源' },
+  { value: 'selfOperated', label: '商城来源' },
+  { value: 'hotSale', label: '热卖来源' },
   { value: 'localLife', label: '本地生活' }
 ]
 const CUSTOM_BLOCK_TEMPLATE_META = {
@@ -1139,7 +1139,7 @@ function createPromoCard() {
 }
 
 function createZoneItem() {
-  return { enabled: true, key: '', title: '', tip: '', icon_url: '', path: '', open_type: 'navigate' }
+  return { enabled: true, key: '', title: '', tip: '', icon_url: '', link_text: '进入专区', show_count: true, path: '', open_type: 'navigate' }
 }
 
 function createQuickItem() {
@@ -1164,6 +1164,12 @@ function createDefaultHomeSwiper() {
     type: 'image_swiper',
     enabled: true,
     title: '首页轮播',
+    section_kicker: 'Featured',
+    count_suffix: '张',
+    kicker: '精选活动',
+    desc: '主推活动、重点分区和新内容统一展示。',
+    tags: ['当日精选', '持续上新'],
+    slide_tags: ['专题推荐', '立即进入'],
     autoplay: true,
     items: [
       {
@@ -1255,6 +1261,12 @@ function createCustomImageSwiper() {
     type: 'image_swiper',
     enabled: true,
     title: '活动轮播',
+    section_kicker: '',
+    count_suffix: '',
+    kicker: '',
+    desc: '',
+    tags: [],
+    slide_tags: [],
     autoplay: true,
     items: [createSwiperItem(), createSwiperItem(), createSwiperItem()]
   }
@@ -1419,12 +1431,6 @@ function createLocalLifeTemplateBlocks() {
 function createDefaultPayload() {
   const homeSwiper = createDefaultHomeSwiper()
   return {
-    hero: {
-      badge: 'Excellent Mall',
-      title: '把轮播会场、四区导航和商品瀑布流放进统一首页',
-      desc: '参考热门电商项目的首页结构，先展示首屏轮播和四区分流，再用可下拉刷新的瀑布流持续承接商城、本地生活和复购内容。',
-      tags: ['首页轮播', '四区导航', '瀑布流', '本地生活', '我的订单', '装修配置']
-    },
     layout: [customLayoutKey(homeSwiper.id), ...SECTION_ORDER],
     custom_blocks: [homeSwiper],
     announcement: {
@@ -1451,6 +1457,7 @@ function createDefaultPayload() {
     promo_section: {
       enabled: true,
       title: '会场推荐',
+      subtitle: '运营精选',
       items: [
         {
           enabled: true,
@@ -1475,10 +1482,10 @@ function createDefaultPayload() {
       title: '四区导航',
       subtitle: '热门分区',
       items: [
-        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', path: '/pages/local-life/index', open_type: 'switchTab' }
+        { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/local-life/index', open_type: 'switchTab' }
       ]
     },
     quick_section: {
@@ -1499,10 +1506,6 @@ function createDefaultPayload() {
 
 function createGrowthPayload() {
   const payload = clonePayload(createDefaultPayload())
-  payload.hero.badge = 'Growth Mall'
-  payload.hero.title = '围绕拉新转化的商城首页'
-  payload.hero.desc = '把首屏轮播、新手导航和推荐瀑布流集中服务于拉新和首单转化。'
-  payload.hero.tags = ['新手入场', '首单转化', '团队裂变', '推荐瀑布流', '热门会场']
   payload.layout = ['custom:home_swiper_main', 'announcement', 'zone_section', 'waterfall_section', 'package_section', 'promo_section', 'quick_section']
   payload.announcement.title = '增长重点'
   payload.announcement.lines = [
@@ -1534,10 +1537,6 @@ function createGrowthPayload() {
 
 function createLocalLifePayload() {
   const payload = clonePayload(createDefaultPayload())
-  payload.hero.badge = 'Local Life Focus'
-  payload.hero.title = '把门店服务、四区入口和本地推荐流放到首页前排'
-  payload.hero.desc = '更适合线下商家和本地生活主运营场景，本地生活同时进入底部导航。'
-  payload.hero.tags = ['本地生活', '门店核销', '联盟商家', '推荐瀑布流', '到店服务']
   payload.layout = ['custom:home_swiper_main', 'announcement', 'zone_section', 'waterfall_section', 'promo_section', 'package_section', 'quick_section']
   payload.announcement.title = '本地生活重点'
   payload.announcement.lines = [
@@ -1563,10 +1562,10 @@ function createLocalLifePayload() {
     }
   ]
   payload.zone_section.items = [
-    { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', path: '/pages/local-life/index', open_type: 'switchTab' },
-    { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-    { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' },
-    { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', path: '/pages/packages/list', open_type: 'switchTab' }
+    { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/local-life/index', open_type: 'switchTab' },
+    { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+    { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+    { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' }
   ]
   payload.waterfall_section = {
     enabled: true,
@@ -1591,6 +1590,10 @@ function splitLines(value) {
     .filter(Boolean)
 }
 
+function joinLines(values) {
+  return Array.isArray(values) ? values.filter(Boolean).join('\n') : ''
+}
+
 function clonePayload(payload) {
   return JSON.parse(JSON.stringify(payload || createDefaultPayload()))
 }
@@ -1606,6 +1609,10 @@ function normalizeEnabled(value, fallback = true) {
     return true
   }
   return fallback
+}
+
+function fieldOrDefault(source, field, fallback = '') {
+  return Object.prototype.hasOwnProperty.call(source || {}, field) ? String(source?.[field] || '').trim() : fallback
 }
 
 function normalizeLayout(layout, fallback = SECTION_ORDER, customBlocks = []) {
@@ -1675,11 +1682,18 @@ function normalizeCustomBlock(block, index = 0) {
     }
   }
   if (type === 'image_swiper') {
+    const fallbackBlock = block?.id === 'home_swiper_main' ? createDefaultHomeSwiper() : {}
     return {
       id: block?.id || createBlockId(`swiper_${index}`),
       type,
       enabled: normalizeEnabled(block?.enabled, true),
-      title: block?.title || '',
+      title: fieldOrDefault(block, 'title', fallbackBlock.title || ''),
+      section_kicker: fieldOrDefault(block, 'section_kicker', fallbackBlock.section_kicker || ''),
+      count_suffix: fieldOrDefault(block, 'count_suffix', fallbackBlock.count_suffix || ''),
+      kicker: fieldOrDefault(block, 'kicker', fallbackBlock.kicker || ''),
+      desc: fieldOrDefault(block, 'desc', fallbackBlock.desc || ''),
+      tags: Array.isArray(block?.tags) ? block.tags.filter(Boolean) : (fallbackBlock.tags || []),
+      slide_tags: Array.isArray(block?.slide_tags) ? block.slide_tags.filter(Boolean) : (fallbackBlock.slide_tags || []),
       autoplay: normalizeEnabled(block?.autoplay, true),
       items: Array.isArray(block?.items) && block.items.length
         ? block.items.map((item) => ({
@@ -1687,7 +1701,7 @@ function normalizeCustomBlock(block, index = 0) {
             ...item,
             enabled: normalizeEnabled(item?.enabled, true)
           }))
-        : [createSwiperItem(), createSwiperItem()]
+        : (fallbackBlock.items || [createSwiperItem(), createSwiperItem()])
     }
   }
   if (type === 'mixed_goods') {
@@ -1722,32 +1736,26 @@ function normalizeCustomBlock(block, index = 0) {
 function normalizePayload(payload) {
   const defaults = createDefaultPayload()
   const next = clonePayload(payload || defaults)
-  const customBlocks = Array.isArray(next.custom_blocks)
-    ? next.custom_blocks.map((block, index) => normalizeCustomBlock(block, index))
-    : []
+  const customBlocksSource = Array.isArray(next.custom_blocks) ? next.custom_blocks : defaults.custom_blocks
+  const customBlocks = customBlocksSource.map((block, index) => normalizeCustomBlock(block, index))
 
-  next.hero = {
-    badge: next.hero?.badge || defaults.hero.badge,
-    title: next.hero?.title || defaults.hero.title,
-    desc: next.hero?.desc || defaults.hero.desc,
-    tags: Array.isArray(next.hero?.tags) ? next.hero.tags.filter(Boolean) : defaults.hero.tags
-  }
   next.custom_blocks = customBlocks
   next.layout = normalizeLayout(next.layout, defaults.layout, customBlocks)
   next.announcement = {
     enabled: normalizeEnabled(next.announcement?.enabled, defaults.announcement.enabled),
-    title: next.announcement?.title || defaults.announcement.title,
+    title: fieldOrDefault(next.announcement, 'title', defaults.announcement.title),
     lines: Array.isArray(next.announcement?.lines) ? next.announcement.lines.filter(Boolean) : defaults.announcement.lines
   }
   next.package_section = {
     enabled: normalizeEnabled(next.package_section?.enabled, defaults.package_section.enabled),
-    title: next.package_section?.title || defaults.package_section.title,
+    title: fieldOrDefault(next.package_section, 'title', defaults.package_section.title),
     desc: next.package_section?.desc || defaults.package_section.desc,
     limit: Math.max(1, Math.min(6, Number(next.package_section?.limit || defaults.package_section.limit)))
   }
   next.promo_section = {
     enabled: normalizeEnabled(next.promo_section?.enabled, defaults.promo_section.enabled),
-    title: next.promo_section?.title || defaults.promo_section.title,
+    title: fieldOrDefault(next.promo_section, 'title', defaults.promo_section.title),
+    subtitle: fieldOrDefault(next.promo_section, 'subtitle', defaults.promo_section.subtitle),
     items: Array.isArray(next.promo_section?.items) && next.promo_section.items.length
       ? next.promo_section.items.map((item) => ({
           ...createPromoCard(),
@@ -1758,20 +1766,22 @@ function normalizePayload(payload) {
   }
   next.zone_section = {
     enabled: normalizeEnabled(next.zone_section?.enabled, defaults.zone_section.enabled),
-    title: next.zone_section?.title || defaults.zone_section.title,
-    subtitle: next.zone_section?.subtitle || defaults.zone_section.subtitle,
+    title: fieldOrDefault(next.zone_section, 'title', defaults.zone_section.title),
+    subtitle: fieldOrDefault(next.zone_section, 'subtitle', defaults.zone_section.subtitle),
     items: Array.isArray(next.zone_section?.items) && next.zone_section.items.length
       ? next.zone_section.items.map((item) => ({
           ...createZoneItem(),
           ...item,
-          enabled: normalizeEnabled(item?.enabled, true)
+          enabled: normalizeEnabled(item?.enabled, true),
+          link_text: fieldOrDefault(item, 'link_text', '进入专区'),
+          show_count: normalizeEnabled(item?.show_count, true)
         }))
       : clonePayload(defaults.zone_section.items)
   }
   next.waterfall_section = {
     enabled: normalizeEnabled(next.waterfall_section?.enabled, defaults.waterfall_section.enabled),
-    title: next.waterfall_section?.title || defaults.waterfall_section.title,
-    subtitle: next.waterfall_section?.subtitle || defaults.waterfall_section.subtitle,
+    title: fieldOrDefault(next.waterfall_section, 'title', defaults.waterfall_section.title),
+    subtitle: fieldOrDefault(next.waterfall_section, 'subtitle', defaults.waterfall_section.subtitle),
     page_size: Math.max(4, Math.min(20, Number(next.waterfall_section?.page_size || defaults.waterfall_section.page_size))),
     source_keys: Array.isArray(next.waterfall_section?.source_keys) && next.waterfall_section.source_keys.length
       ? next.waterfall_section.source_keys.filter((item) => ZONE_SOURCE_OPTIONS.some((option) => option.value === item))
@@ -1779,8 +1789,8 @@ function normalizePayload(payload) {
   }
   next.quick_section = {
     enabled: normalizeEnabled(next.quick_section?.enabled, defaults.quick_section.enabled),
-    title: next.quick_section?.title || defaults.quick_section.title,
-    subtitle: next.quick_section?.subtitle || defaults.quick_section.subtitle,
+    title: fieldOrDefault(next.quick_section, 'title', defaults.quick_section.title),
+    subtitle: fieldOrDefault(next.quick_section, 'subtitle', defaults.quick_section.subtitle),
     items: Array.isArray(next.quick_section?.items) && next.quick_section.items.length
       ? next.quick_section.items.map((item) => ({
           ...createQuickItem(),
@@ -1804,7 +1814,6 @@ const customBlockTemplateFactories = {
 }
 
 const form = reactive(createDefaultPayload())
-const heroTagsText = ref('')
 const announcementLinesText = ref('')
 const saving = ref(false)
 const exportDialogVisible = ref(false)
@@ -1821,7 +1830,6 @@ const dragState = reactive({
   over: -1
 })
 
-const zoneSourceOptions = ZONE_SOURCE_OPTIONS
 const customBlockMap = computed(() => {
   const map = {}
   form.custom_blocks.forEach((block) => {
@@ -1829,8 +1837,11 @@ const customBlockMap = computed(() => {
   })
   return map
 })
+const zoneSourceOptions = computed(() => ZONE_SOURCE_OPTIONS.map((item) => ({
+  ...item,
+  label: zoneSourceLabel(item.value)
+})))
 
-const previewHeroTags = computed(() => splitLines(heroTagsText.value))
 const previewAnnouncementLines = computed(() => splitLines(announcementLinesText.value))
 const previewPromoCards = computed(() => form.promo_section.items.filter((item) => item.enabled !== false && (item.badge || item.title || item.desc)))
 const previewZoneItems = computed(() => form.zone_section.items.filter((item) => item.enabled !== false && (item.key || item.title || item.tip || item.icon_url)))
@@ -1876,7 +1887,8 @@ const sectionEnabledMap = computed(() => ({
 const orderedPreviewKeys = computed(() => form.layout.filter((key) => sectionEnabledMap.value[key] && key !== previewPrimarySwiperLayoutKey.value))
 
 function zoneSourceLabel(key) {
-  return ZONE_SOURCE_OPTIONS.find((item) => item.value === key)?.label || '专区'
+  const zoneItem = form.zone_section?.items?.find((item) => item.key === key && item.title)
+  return zoneItem?.title || ZONE_SOURCE_OPTIONS.find((item) => item.value === key)?.label || '专区'
 }
 
 function customBlockTypeLabel(type) {
@@ -1963,7 +1975,6 @@ function assignPayload(payload) {
   Object.keys(next).forEach((key) => {
     form[key] = next[key]
   })
-  heroTagsText.value = (next.hero.tags || []).join('\n')
   announcementLinesText.value = (next.announcement.lines || []).join('\n')
 }
 
@@ -1973,12 +1984,6 @@ function buildExportCustomBlocks() {
 
 function buildPayload() {
   return {
-    hero: {
-      badge: form.hero.badge,
-      title: form.hero.title,
-      desc: form.hero.desc,
-      tags: splitLines(heroTagsText.value)
-    },
     layout: [...form.layout],
     custom_blocks: form.custom_blocks.map((block) => {
       if (block.type === 'grid') {
@@ -2029,6 +2034,12 @@ function buildPayload() {
           type: block.type,
           enabled: !!block.enabled,
           title: block.title,
+          section_kicker: block.section_kicker,
+          count_suffix: block.count_suffix,
+          kicker: block.kicker,
+          desc: block.desc,
+          tags: [...(block.tags || [])],
+          slide_tags: [...(block.slide_tags || [])],
           autoplay: !!block.autoplay,
           items: block.items.map((item) => ({
             enabled: !!item.enabled,
@@ -2085,6 +2096,7 @@ function buildPayload() {
     promo_section: {
       enabled: !!form.promo_section.enabled,
       title: form.promo_section.title,
+      subtitle: form.promo_section.subtitle,
       items: form.promo_section.items.map((item) => ({
         enabled: !!item.enabled,
         badge: item.badge,
@@ -2104,6 +2116,8 @@ function buildPayload() {
         title: item.title,
         tip: item.tip,
         icon_url: item.icon_url,
+        link_text: item.link_text,
+        show_count: !!item.show_count,
         path: item.path,
         open_type: item.open_type
       }))
@@ -2750,11 +2764,6 @@ onMounted(loadData)
   border: 1px solid rgba(24, 52, 59, 0.08);
 }
 
-.preview-hero {
-  background: linear-gradient(145deg, rgba(24, 52, 59, 0.96), rgba(31, 143, 110, 0.9));
-  color: #fff;
-}
-
 .preview-banner-card,
 .preview-coupon-card {
   background:
@@ -2762,21 +2771,10 @@ onMounted(loadData)
     linear-gradient(180deg, rgba(255, 252, 244, 0.96) 0%, rgba(245, 249, 243, 0.96) 100%);
 }
 
-.preview-hero h3 {
-  margin: 10px 0 10px;
-  font-size: 24px;
-  line-height: 1.3;
-}
-
-.preview-hero p,
 .preview-banner-card p,
 .preview-coupon-card p {
   margin: 10px 0 0;
   line-height: 1.7;
-}
-
-.preview-hero p {
-  color: rgba(255, 255, 255, 0.82);
 }
 
 .preview-badge {
@@ -2866,6 +2864,19 @@ onMounted(loadData)
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.preview-item-icon-empty {
+  width: 16px;
+  height: 16px;
+  border-radius: 6px;
+  background: rgba(24, 52, 59, 0.16);
+}
+
+.preview-swiper-strip {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .preview-swiper-mini-card {

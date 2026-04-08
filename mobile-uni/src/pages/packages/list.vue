@@ -138,8 +138,9 @@ onShow(() => {
 <style scoped>
 .hero-card {
   background:
-    radial-gradient(circle at top left, rgba(62, 152, 108, 0.18), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 246, 0.98) 100%);
+    radial-gradient(circle at 100% 0%, rgba(232, 192, 149, 0.24), transparent 34%),
+    radial-gradient(circle at 0% 12%, rgba(208, 220, 244, 0.28), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 247, 241, 0.98) 100%);
 }
 
 .package-list,
@@ -149,10 +150,10 @@ onShow(() => {
 }
 
 .package-card {
-  background: linear-gradient(180deg, #fcfdfa 0%, #f4f8f3 100%);
+  background: var(--theme-surface-muted);
   border-radius: 24rpx;
   padding: 24rpx;
-  border: 1rpx solid rgba(21, 55, 45, 0.05);
+  border: 1rpx solid var(--theme-border);
 }
 
 .package-head,
@@ -168,9 +169,10 @@ onShow(() => {
   min-width: 164rpx;
   padding: 18rpx;
   border-radius: 22rpx;
-  background: #18342e;
+  background: var(--theme-dark-panel);
   color: #ffffff;
   box-sizing: border-box;
+  box-shadow: 0 16rpx 32rpx rgba(111, 84, 58, 0.14);
 }
 
 .price-label {
@@ -198,8 +200,9 @@ onShow(() => {
   justify-content: center;
   padding: 10rpx 18rpx;
   border-radius: 999rpx;
-  background: #e7f6ef;
-  color: #1e8f64;
+  background: var(--theme-accent-soft);
+  color: var(--theme-accent);
   font-size: 22rpx;
+  border: 1rpx solid var(--theme-accent-border);
 }
 </style>

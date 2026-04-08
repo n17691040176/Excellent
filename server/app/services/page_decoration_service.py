@@ -49,6 +49,12 @@ class PageDecorationService:
             'type': 'image_swiper',
             'enabled': True,
             'title': '首页轮播',
+            'section_kicker': 'Featured',
+            'count_suffix': '张',
+            'kicker': '精选活动',
+            'desc': '主推活动、重点分区和新内容统一展示。',
+            'tags': ['当日精选', '持续上新'],
+            'slide_tags': ['专题推荐', '立即进入'],
             'autoplay': True,
             'items': [
                 {
@@ -85,12 +91,6 @@ class PageDecorationService:
     def default_mobile_uni_home_payload() -> dict:
         home_swiper = PageDecorationService.default_home_swiper_block()
         return {
-            'hero': {
-                'badge': 'Excellent Mall',
-                'title': '把轮播会场、四区导航和商品瀑布流放进统一首页',
-                'desc': '参考热门电商项目的首页结构，先展示首屏轮播和四区分流，再用可下拉刷新的瀑布流持续承接商城、本地生活和复购内容。',
-                'tags': ['首页轮播', '四区导航', '瀑布流', '本地生活', '我的订单', '装修配置'],
-            },
             'layout': [f"custom:{home_swiper['id']}", *PageDecorationService.mobile_uni_home_layout()],
             'custom_blocks': [home_swiper],
             'announcement': {
@@ -117,6 +117,7 @@ class PageDecorationService:
             'promo_section': {
                 'enabled': True,
                 'title': '会场推荐',
+                'subtitle': '运营精选',
                 'items': [
                     {
                         'enabled': True,
@@ -141,10 +142,10 @@ class PageDecorationService:
                 'title': '四区导航',
                 'subtitle': '热门分区',
                 'items': [
-                    {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-                    {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-                    {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-                    {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'icon_url': '', 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+                    {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
                 ],
             },
             'quick_section': {
@@ -165,10 +166,6 @@ class PageDecorationService:
     @staticmethod
     def growth_mobile_uni_home_payload() -> dict:
         payload = deepcopy(PageDecorationService.default_mobile_uni_home_payload())
-        payload['hero']['badge'] = 'Growth Mall'
-        payload['hero']['title'] = '围绕拉新转化的商城首页'
-        payload['hero']['desc'] = '把首屏轮播、新手导航和推荐瀑布流集中服务于拉新和首单转化。'
-        payload['hero']['tags'] = ['新手入场', '首单转化', '团队裂变', '推荐瀑布流', '热门会场']
         payload['announcement']['title'] = '增长重点'
         payload['announcement']['lines'] = [
             '先用首屏轮播和瀑布流拉起点击，再承接套餐和邀请绑定。',
@@ -198,10 +195,6 @@ class PageDecorationService:
     @staticmethod
     def local_life_mobile_uni_home_payload() -> dict:
         payload = deepcopy(PageDecorationService.default_mobile_uni_home_payload())
-        payload['hero']['badge'] = 'Local Life Focus'
-        payload['hero']['title'] = '把门店服务、四区入口和本地推荐流放到首页前排'
-        payload['hero']['desc'] = '更适合线下商家和本地生活主运营场景，本地生活同时进入底部导航。'
-        payload['hero']['tags'] = ['本地生活', '门店核销', '联盟商家', '推荐瀑布流', '到店服务']
         payload['announcement']['title'] = '本地生活重点'
         payload['announcement']['lines'] = [
             '轮播和瀑布流都会优先承接本地生活内容与服务供给。',
@@ -227,10 +220,10 @@ class PageDecorationService:
             },
         ]
         payload['zone_section']['items'] = [
-            {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'icon_url': '', 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
-            {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-            {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
-            {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'icon_url': '', 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'localLife', 'title': '本地生活', 'tip': '联盟商家服务、门店履约与收益联动', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/local-life/index', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'repurchase', 'title': '复购区', 'tip': '套餐进入，二次复购 4-6 折', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'selfOperated', 'title': '自营商城', 'tip': '兑换券 5-7 折抵扣，返 AI 券', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/packages/list', 'open_type': 'switchTab'},
+            {'enabled': True, 'key': 'hotSale', 'title': '爆款区', 'tip': '低价抢购，支持积分或余额', 'icon_url': '', 'link_text': '进入专区', 'show_count': True, 'path': '/pages/packages/list', 'open_type': 'switchTab'},
         ]
         payload['waterfall_section'] = {
             'enabled': True,
@@ -244,6 +237,12 @@ class PageDecorationService:
     @staticmethod
     def _clean_text(value, fallback='') -> str:
         return str(value or fallback).strip()
+
+    @staticmethod
+    def _clean_text_field(source, field, fallback='') -> str:
+        if isinstance(source, dict) and field in source:
+            return PageDecorationService._clean_text(source.get(field))
+        return PageDecorationService._clean_text(fallback)
 
     @staticmethod
     def _clean_bool(value, fallback=True) -> bool:
@@ -415,10 +414,18 @@ class PageDecorationService:
                     'open_type': PageDecorationService._clean_text(block.get('open_type'), 'navigate'),
                 })
             elif base['type'] == 'image_swiper':
+                fallback_block = PageDecorationService.default_home_swiper_block() if block_id == 'home_swiper_main' else {}
+                swiper_items = block.get('items') if isinstance(block.get('items'), list) else fallback_block.get('items')
                 base.update({
-                    'title': PageDecorationService._clean_text(block.get('title')),
+                    'title': PageDecorationService._clean_text_field(block, 'title', fallback_block.get('title', '')),
+                    'section_kicker': PageDecorationService._clean_text_field(block, 'section_kicker', fallback_block.get('section_kicker', '')),
+                    'count_suffix': PageDecorationService._clean_text_field(block, 'count_suffix', fallback_block.get('count_suffix', '')),
+                    'kicker': PageDecorationService._clean_text_field(block, 'kicker', fallback_block.get('kicker', '')),
+                    'desc': PageDecorationService._clean_text_field(block, 'desc', fallback_block.get('desc', '')),
+                    'tags': PageDecorationService._clean_string_list(block.get('tags'), fallback_block.get('tags', [])),
+                    'slide_tags': PageDecorationService._clean_string_list(block.get('slide_tags'), fallback_block.get('slide_tags', [])),
                     'autoplay': PageDecorationService._clean_bool(block.get('autoplay'), True),
-                    'items': PageDecorationService._normalize_swiper_items(block.get('items')),
+                    'items': PageDecorationService._normalize_swiper_items(swiper_items),
                 })
             elif base['type'] == 'mixed_goods':
                 base.update({
@@ -448,6 +455,27 @@ class PageDecorationService:
             for field, fallback in field_rules.items():
                 row[field] = PageDecorationService._clean_text(item.get(field), fallback)
             if row['enabled'] or any(value for key, value in row.items() if key != 'enabled'):
+                rows.append(row)
+        return rows
+
+    @staticmethod
+    def _normalize_zone_items(items, defaults) -> list[dict]:
+        source = items if isinstance(items, list) else defaults
+        rows = []
+        for item in source:
+            item = item or {}
+            row = {
+                'enabled': PageDecorationService._clean_bool(item.get('enabled'), True),
+                'key': PageDecorationService._clean_text(item.get('key')),
+                'title': PageDecorationService._clean_text(item.get('title')),
+                'tip': PageDecorationService._clean_text(item.get('tip')),
+                'icon_url': PageDecorationService._clean_text(item.get('icon_url')),
+                'link_text': PageDecorationService._clean_text_field(item, 'link_text', '进入专区'),
+                'show_count': PageDecorationService._clean_bool(item.get('show_count'), True),
+                'path': PageDecorationService._clean_text(item.get('path')),
+                'open_type': PageDecorationService._clean_text(item.get('open_type'), 'navigate'),
+            }
+            if row['enabled'] or any(value for key, value in row.items() if key not in {'enabled', 'show_count'}):
                 rows.append(row)
         return rows
 
@@ -484,22 +512,16 @@ class PageDecorationService:
     def normalize_mobile_uni_home_payload(payload: dict | None) -> dict:
         defaults = PageDecorationService.default_mobile_uni_home_payload()
         source = payload if isinstance(payload, dict) else {}
-        hero = source.get('hero') or {}
         announcement = source.get('announcement') or {}
         package_section = source.get('package_section') or {}
         promo_section = source.get('promo_section') or {}
         zone_section = source.get('zone_section') or {}
         quick_section = source.get('quick_section') or {}
         waterfall_section = source.get('waterfall_section') or {}
-        custom_blocks = PageDecorationService._normalize_custom_blocks(source.get('custom_blocks'))
+        custom_blocks_source = source.get('custom_blocks') if isinstance(source.get('custom_blocks'), list) else defaults['custom_blocks']
+        custom_blocks = PageDecorationService._normalize_custom_blocks(custom_blocks_source)
 
         normalized = deepcopy(defaults)
-        normalized['hero'] = {
-            'badge': PageDecorationService._clean_text(hero.get('badge'), defaults['hero']['badge']),
-            'title': PageDecorationService._clean_text(hero.get('title'), defaults['hero']['title']),
-            'desc': PageDecorationService._clean_text(hero.get('desc'), defaults['hero']['desc']),
-            'tags': PageDecorationService._clean_string_list(hero.get('tags'), defaults['hero']['tags']),
-        }
         normalized['custom_blocks'] = custom_blocks
         normalized['layout'] = PageDecorationService._clean_layout_with_custom(
             source.get('layout'),
@@ -508,18 +530,19 @@ class PageDecorationService:
         )
         normalized['announcement'] = {
             'enabled': PageDecorationService._clean_bool(announcement.get('enabled'), defaults['announcement']['enabled']),
-            'title': PageDecorationService._clean_text(announcement.get('title'), defaults['announcement']['title']),
+            'title': PageDecorationService._clean_text_field(announcement, 'title', defaults['announcement']['title']),
             'lines': PageDecorationService._clean_string_list(announcement.get('lines'), defaults['announcement']['lines']),
         }
         normalized['package_section'] = {
             'enabled': PageDecorationService._clean_bool(package_section.get('enabled'), defaults['package_section']['enabled']),
-            'title': PageDecorationService._clean_text(package_section.get('title'), defaults['package_section']['title']),
+            'title': PageDecorationService._clean_text_field(package_section, 'title', defaults['package_section']['title']),
             'desc': PageDecorationService._clean_text(package_section.get('desc'), defaults['package_section']['desc']),
             'limit': max(1, min(int(package_section.get('limit') or defaults['package_section']['limit']), 6)),
         }
         normalized['promo_section'] = {
             'enabled': PageDecorationService._clean_bool(promo_section.get('enabled'), defaults['promo_section']['enabled']),
-            'title': PageDecorationService._clean_text(promo_section.get('title'), defaults['promo_section']['title']),
+            'title': PageDecorationService._clean_text_field(promo_section, 'title', defaults['promo_section']['title']),
+            'subtitle': PageDecorationService._clean_text_field(promo_section, 'subtitle', defaults['promo_section']['subtitle']),
             'items': PageDecorationService._normalize_item_list(
                 promo_section.get('items'),
                 defaults['promo_section']['items'],
@@ -528,18 +551,14 @@ class PageDecorationService:
         }
         normalized['zone_section'] = {
             'enabled': PageDecorationService._clean_bool(zone_section.get('enabled'), defaults['zone_section']['enabled']),
-            'title': PageDecorationService._clean_text(zone_section.get('title'), defaults['zone_section']['title']),
-            'subtitle': PageDecorationService._clean_text(zone_section.get('subtitle'), defaults['zone_section']['subtitle']),
-            'items': PageDecorationService._normalize_item_list(
-                zone_section.get('items'),
-                defaults['zone_section']['items'],
-                {'key': '', 'title': '', 'tip': '', 'icon_url': '', 'path': '', 'open_type': 'navigate'},
-            ),
+            'title': PageDecorationService._clean_text_field(zone_section, 'title', defaults['zone_section']['title']),
+            'subtitle': PageDecorationService._clean_text_field(zone_section, 'subtitle', defaults['zone_section']['subtitle']),
+            'items': PageDecorationService._normalize_zone_items(zone_section.get('items'), defaults['zone_section']['items']),
         }
         normalized['waterfall_section'] = {
             'enabled': PageDecorationService._clean_bool(waterfall_section.get('enabled'), defaults['waterfall_section']['enabled']),
-            'title': PageDecorationService._clean_text(waterfall_section.get('title'), defaults['waterfall_section']['title']),
-            'subtitle': PageDecorationService._clean_text(waterfall_section.get('subtitle'), defaults['waterfall_section']['subtitle']),
+            'title': PageDecorationService._clean_text_field(waterfall_section, 'title', defaults['waterfall_section']['title']),
+            'subtitle': PageDecorationService._clean_text_field(waterfall_section, 'subtitle', defaults['waterfall_section']['subtitle']),
             'page_size': max(4, min(int(waterfall_section.get('page_size') or defaults['waterfall_section']['page_size']), 20)),
             'source_keys': [
                 item
@@ -552,8 +571,8 @@ class PageDecorationService:
         }
         normalized['quick_section'] = {
             'enabled': PageDecorationService._clean_bool(quick_section.get('enabled'), defaults['quick_section']['enabled']),
-            'title': PageDecorationService._clean_text(quick_section.get('title'), defaults['quick_section']['title']),
-            'subtitle': PageDecorationService._clean_text(quick_section.get('subtitle'), defaults['quick_section']['subtitle']),
+            'title': PageDecorationService._clean_text_field(quick_section, 'title', defaults['quick_section']['title']),
+            'subtitle': PageDecorationService._clean_text_field(quick_section, 'subtitle', defaults['quick_section']['subtitle']),
             'items': PageDecorationService._normalize_item_list(
                 quick_section.get('items'),
                 defaults['quick_section']['items'],
