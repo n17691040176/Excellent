@@ -2,28 +2,9 @@
   <div class="page safe-bottom">
     <van-nav-bar title="商城首页" fixed placeholder />
 
-    <div class="page-card hero-soft">
-      <div class="hero-badge">Excellent Mall</div>
-      <h2 class="page-title">把套餐、商城、服务与资产放进同一个移动入口</h2>
-      <p class="page-desc">首页按业务链路重排，先看入口资格和四区供给，再直达订单、团队、邀请和资产操作。</p>
-      <div class="chip-list">
-        <div class="chip" v-for="item in heroTags" :key="item">{{ item }}</div>
-      </div>
-      <div class="metric-grid">
-        <div class="metric-card" v-for="item in metrics" :key="item.label">
-          <div class="metric-label">{{ item.label }}</div>
-          <div class="metric-value">{{ item.value }}</div>
-          <div class="metric-meta">{{ item.meta }}</div>
-        </div>
-      </div>
-    </div>
-
     <div class="page-card">
       <div class="section-head">
-        <div>
-          <h3 class="cell-group-title">套餐入口</h3>
-          <p class="page-desc" style="margin-bottom: 0;">首页保留两档核心套餐，方便快速判断抵扣和权益层级。</p>
-        </div>
+        <h3 class="cell-group-title" style="margin: 0;">入场套餐</h3>
         <span class="section-link-text" @click="goPackages">查看全部</span>
       </div>
 
@@ -57,8 +38,8 @@
 
     <div class="page-card">
       <div class="section-head" style="margin-bottom: 0.2rem;">
-        <h3 class="cell-group-title" style="margin: 0;">四区看板</h3>
-        <span class="section-link-text">内容同步</span>
+        <h3 class="cell-group-title" style="margin: 0;">四区分类</h3>
+        <span class="section-link-text" @click="router.push('/categories')">进入分类</span>
       </div>
       <div class="card-stack">
         <div class="soft-section" v-for="item in zoneTabs" :key="item.key" @click="openZone(item.key)">
@@ -92,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import AppTabbar from '@/components/AppTabbar.vue'
@@ -110,7 +91,6 @@ const lists = ref({
   localLife: []
 })
 
-const heroTags = ['套餐复购', '自营商城', '爆款专区', '本地生活', '邀请返利', '资产联动']
 const zoneTabs = [
   { key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折' },
   { key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券' },
@@ -118,7 +98,7 @@ const zoneTabs = [
   { key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动' }
 ]
 const quickActions = [
-  { key: 'packages', title: '套餐中心', desc: '查看入场资格与权益档位' },
+  { key: 'categories', title: '分类选品', desc: '按四区快速筛选商品与服务' },
   { key: 'life', title: '本地生活', desc: '浏览联盟商家与服务供给' },
   { key: 'team', title: '我的团队', desc: '管理归属与成员结构' },
   { key: 'invite', title: '邀请好友', desc: '分享邀请码完成绑定' },
@@ -127,15 +107,6 @@ const quickActions = [
   { key: 'assets', title: '资产中心', desc: '查看余额、积分与券资产' },
   { key: 'profile', title: '个人中心', desc: '维护资料、签到和账号设置' }
 ]
-
-const metrics = computed(() => [
-  { label: '套餐中心', value: packages.value.length, meta: '购买套餐可进入复购与资格体系' },
-  ...zoneTabs.map((item) => ({
-    label: item.title,
-    value: zoneList(item.key).length,
-    meta: item.tip
-  }))
-])
 
 function zoneList(key) {
   return lists.value[key] || []
@@ -154,16 +125,12 @@ function goPackage(id) {
 }
 
 function openZone(zoneKey) {
-  if (zoneKey === 'localLife') {
-    router.push('/life')
-    return
-  }
-  goPackages()
+  router.push({ path: '/categories', query: { zone: zoneKey } })
 }
 
 function handleQuick(key) {
   const map = {
-    packages: '/packages',
+    categories: '/categories',
     life: '/life',
     team: '/team',
     invite: '/invite',

@@ -6,6 +6,7 @@ const routes = [
   { path: '/login', component: () => import('@/views/LoginView.vue'), meta: { public: true, title: '登录注册' } },
   { path: '/', redirect: '/home' },
   { path: '/home', component: () => import('@/views/HomeView.vue'), meta: { title: '首页' } },
+  { path: '/categories', component: () => import('@/views/CategoryView.vue'), meta: { title: '分类' } },
   { path: '/packages', component: () => import('@/views/PackageListView.vue'), meta: { title: '套餐中心' } },
   { path: '/packages/:id', component: () => import('@/views/PackageDetailView.vue'), meta: { title: '套餐详情' } },
   { path: '/products/:id', component: () => import('@/views/ProductDetailView.vue'), meta: { title: '商品详情' } },
