@@ -1,24 +1,50 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+from random import choices
+from string import digits
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.exceptions import ConflictError, UnauthorizedError
+from app.core.redis import get_redis_client
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models.asset import UserAssetAccount
 from app.models.commission import UserCommission
-from app.models.enums import AssetType, GlobalRole, UserStatus
+from app.models.enums import GlobalRole, UserStatus
 from app.models.user import InviteRecord, User
 from app.services.asset_service import init_user_assets
 from app.utils.helpers import generate_code, now
 
 
 class AuthService:
-    @staticmethod
-    def register(db: Session, phone: str, password: str, nickname: str, invite_code: str | None = None) -> tuple[str, User]:
-        existing = db.query(User).filter(User.phone == phone).first()
-        if existing:
-            raise ConflictError('Phone already registered')
+    LOGIN_CODE_LENGTH = 6
+    LOGIN_CODE_TTL_SECONDS = 300
+    LOGIN_CODE_RESEND_INTERVAL_SECONDS = 60
+    LOGIN_CODE_KEY_PREFIX = 'auth:login_code'
+    LOGIN_CODE_COOLDOWN_KEY_PREFIX = 'auth:login_code:cooldown'
 
+    @staticmethod
+    def _issue_token(user: User) -> str:
+        return create_access_token(str(user.id), {'role': user.global_role.value})
+
+    @staticmethod
+    def _finalize_login(db: Session, user: User) -> tuple[str, User]:
+        if user.status != UserStatus.ENABLED:
+            raise UnauthorizedError('Account disabled')
+
+        user.last_login_at = now()
+        db.commit()
+        db.refresh(user)
+        return AuthService._issue_token(user), user
+
+    @staticmethod
+    def _create_user(
+        db: Session,
+        phone: str,
+        password: str,
+        nickname: str,
+        invite_code: str | None = None,
+    ) -> User:
         parent = db.query(User).filter(User.invite_code == invite_code).first() if invite_code else None
         user = User(
             phone=phone,
@@ -56,25 +82,81 @@ class AuthService:
 
         db.add(UserCommission(user_id=user.id, updated_at=now()))
         init_user_assets(db, user.id)
+        return user
+
+    @staticmethod
+    def _login_code_key(phone: str) -> str:
+        return f'{AuthService.LOGIN_CODE_KEY_PREFIX}:{phone}'
+
+    @staticmethod
+    def _login_code_cooldown_key(phone: str) -> str:
+        return f'{AuthService.LOGIN_CODE_COOLDOWN_KEY_PREFIX}:{phone}'
+
+    @staticmethod
+    def _generate_login_code() -> str:
+        return ''.join(choices(digits, k=AuthService.LOGIN_CODE_LENGTH))
+
+    @staticmethod
+    def register(db: Session, phone: str, password: str, nickname: str, invite_code: str | None = None) -> tuple[str, User]:
+        existing = db.query(User).filter(User.phone == phone).first()
+        if existing:
+            raise ConflictError('Phone already registered')
+
+        user = AuthService._create_user(db, phone, password, nickname, invite_code)
         db.commit()
         db.refresh(user)
-        token = create_access_token(str(user.id), {'role': user.global_role.value})
-        return token, user
+        return AuthService._issue_token(user), user
 
     @staticmethod
     def login(db: Session, phone: str, password: str, admin_only: bool = False) -> tuple[str, User]:
         user = db.query(User).filter(User.phone == phone).first()
         if not user or not verify_password(password, user.password_hash):
             raise UnauthorizedError('Phone or password invalid')
-        if user.status != UserStatus.ENABLED:
-            raise UnauthorizedError('Account disabled')
         if admin_only and user.global_role not in {GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN}:
             raise UnauthorizedError('Admin account required')
+        return AuthService._finalize_login(db, user)
 
-        user.last_login_at = now()
-        db.commit()
-        token = create_access_token(str(user.id), {'role': user.global_role.value})
-        return token, user
+    @staticmethod
+    def send_login_code(phone: str) -> dict:
+        redis = get_redis_client()
+        cooldown_key = AuthService._login_code_cooldown_key(phone)
+        ttl = redis.ttl(cooldown_key)
+        if ttl and ttl > 0:
+            raise ConflictError(f'Code already sent, retry in {ttl}s')
+
+        code = AuthService._generate_login_code()
+        redis.setex(AuthService._login_code_key(phone), AuthService.LOGIN_CODE_TTL_SECONDS, code)
+        redis.setex(cooldown_key, AuthService.LOGIN_CODE_RESEND_INTERVAL_SECONDS, '1')
+
+        response = {
+            'expires_in': AuthService.LOGIN_CODE_TTL_SECONDS,
+            'retry_in': AuthService.LOGIN_CODE_RESEND_INTERVAL_SECONDS,
+        }
+        if settings.app_env.lower() == 'development':
+            response['debug_code'] = code
+        return response
+
+    @staticmethod
+    def login_by_code(db: Session, phone: str, code: str) -> tuple[str, User]:
+        redis = get_redis_client()
+        cached_code = redis.get(AuthService._login_code_key(phone))
+        if not cached_code:
+            raise UnauthorizedError('Verification code expired')
+        if str(cached_code) != str(code):
+            raise UnauthorizedError('Verification code invalid')
+
+        redis.delete(AuthService._login_code_key(phone))
+
+        user = db.query(User).filter(User.phone == phone).first()
+        if not user:
+            user = AuthService._create_user(
+                db,
+                phone=phone,
+                password=generate_code(length=12),
+                nickname=f'用户{phone[-4:]}',
+            )
+
+        return AuthService._finalize_login(db, user)
 
     @staticmethod
     def reset_password(db: Session, phone: str, new_password: str) -> None:

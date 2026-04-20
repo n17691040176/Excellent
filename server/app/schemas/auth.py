@@ -20,6 +20,15 @@ class LoginRequest(AppBaseModel):
     password: str
 
 
+class SendLoginCodeRequest(AppBaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+
+
+class CodeLoginRequest(AppBaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+    code: str = Field(min_length=4, max_length=8)
+
+
 class ResetPasswordRequest(AppBaseModel):
     phone: str
     new_password: str = Field(min_length=6, max_length=64)

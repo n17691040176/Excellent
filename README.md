@@ -1,145 +1,84 @@
-# Excellent APP 一体化商城
+# Excellent
 
-统一仓库包含：
-- `server/` FastAPI 后端
-- `admin-web/` Vue 3 后台管理端
-- `mobile-h5/` Vue 3 + Vant 移动端 H5
-- `docs/` 规划文档、校对文档、实现对齐文档
+Excellent 是一个三服务一体化项目，当前有效目录为：
 
-当前定位：
-- 单人开发
-- 单节点部署
-- 1 万用户体量
-- 轻量化、易维护
+- `server/`: 后端 API，FastAPI + SQLAlchemy + MySQL + Redis
+- `admin-web/`: 后台管理系统，Vue 3 + Vite + Element Plus
+- `mobile-uniNew2/`: 移动端，uni-app Vue 3，可构建 H5/App/小程序
+- `docs/`: 业务、接口、数据库、部署说明文档
 
----
+## 服务与端口
 
-## 项目目录
+| 服务 | 目录 | 本地开发端口 | Docker 端口 |
+| --- | --- | --- | --- |
+| 后端 API | `server/` | `8000` | `8001 -> 8000` |
+| 后台管理 | `admin-web/` | `5173` | `5173 -> 80` |
+| 移动端 | `mobile-uniNew2/` | `5174` | `5174 -> 80` |
 
-```text
-D:\Excellent
-├─ server/                # FastAPI 后端服务
-├─ admin-web/             # Vue3 后台管理系统
-├─ mobile-h5/             # Vue3 移动端 H5 商城
-├─ docs/                  # 业务、数据库、接口、部署文档
-└─ README.md              # 仓库总说明
-```
+后端接口统一前缀为 `/api/v1`。两个前端都通过 `VITE_API_BASE_URL` 指向后端，Docker 场景默认使用同域 `/api` 代理到 `server:8000`。
 
----
+## 本地开发
 
-## 文档索引
-
-### 核心规划文档
-- `docs/开发文档-校对版.md`
-- `docs/数据库设计-校对版.md`
-- `docs/接口设计-校对版.md`
-- `docs/商品专区设计.md`
-- `docs/资产体系设计.md`
-- `docs/招商与代理规则.md`
-- `docs/本地生活业务设计.md`
-
-### 当前实现对齐文档
-- `docs/当前实现对齐说明-2026-04-02.md`
-- `docs/当前接口实现对齐说明-2026-04-02.md`
-- `docs/当前数据库实现对齐说明-2026-04-02.md`
-- `docs/部署与联调说明-2026-04-02.md`
-- `docs/功能缺口清单-2026-04-02.md`
-
----
-
-## 当前模块说明
-
-### 后端 `server/`
-- 技术栈：FastAPI + SQLAlchemy 2.0 + MySQL 8 + Redis + Celery
-- 入口：`server/app/main.py`
-- 路由：`server/app/api/v1/`
-- 模型：`server/app/models/`
-- 服务：`server/app/services/`
-- 建表 SQL：`server/sql/schema.sql`
-- 运行说明：`server/README.md`
-
-### 后台管理端 `admin-web/`
-- 技术栈：Vue 3 + Vite + Element Plus + Pinia + Vue Router + Axios
-- 路由：`admin-web/src/router/index.js`
-- 菜单：`admin-web/src/router/menu.js`
-- 页面：`admin-web/src/views/`
-
-### 移动端 H5 `mobile-h5/`
-- 技术栈：Vue 3 + Vite + Vant 4 + Vue Router + Axios
-- 路由：`mobile-h5/src/router/index.js`
-- 页面：`mobile-h5/src/views/`
-- rem 适配：`mobile-h5/src/utils/flexible.js`
-
-### 移动端 Uni `mobile-uni/`
-- 技术栈：uni-app Vue 3 + Vite
-- 目录：`mobile-uni/src/`
-- 路由：`mobile-uni/src/pages.json`
-- 说明：当前已完成业务迁移骨架与 H5 构建验证，可继续接 Android / iOS / 小程序
-
----
-
-## 当前业务范围
-
-### 已覆盖
-- 用户注册、登录、JWT 鉴权、个人资料
-- 团队创建、加入、角色管理、解散
-- 一级/二级邀请返现、冻结、结算、提现
-- 四大专区：首页复购区、自营商城、爆款区、本地生活
-- 套餐体系、商品下单、订单明细、演示支付、确认完成
-- 余额、积分、兑换券、AI 券四类资产
-- 供应商入驻、入场费、代理资格、协议与推荐奖励
-- 本地生活商家、门店、服务、订单、收益规则
-
-### 当前仍属轻量实现
-- 审计日志未独立落库
-- 后台账号未独立拆表
-- 资产转赠未拆专用记录表
-- 供应商商品未拆独立商品表
-
-详见：
-- `docs/当前实现对齐说明-2026-04-02.md`
-- `docs/当前接口实现对齐说明-2026-04-02.md`
-- `docs/当前数据库实现对齐说明-2026-04-02.md`
-
----
-
-## 启动顺序建议
-
-### 1. 启动后端
-参考：
-- `server/README.md`
-
-### 2. 启动后台管理端
-在 `admin-web/` 目录执行：
+启动后端：
 
 ```powershell
+cd D:\Excellent\server
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+启动后台管理：
+
+```powershell
+cd D:\Excellent\admin-web
 npm install
 npm run dev
 ```
 
-### 3. 启动移动端 H5
-在 `mobile-h5/` 目录执行：
+启动移动端 H5：
 
 ```powershell
+cd D:\Excellent\mobile-uniNew2
 npm install
-npm run dev
+npm run dev:h5
 ```
 
----
+访问地址：
 
-## 当前审查建议
+- 后端健康检查：`http://127.0.0.1:8000/health`
+- 后端 Swagger：`http://127.0.0.1:8000/docs`
+- 后台管理：`http://127.0.0.1:5173`
+- 移动端 H5：`http://127.0.0.1:5174`
 
-建议优先按以下顺序审查：
-1. `docs/开发文档-校对版.md`
-2. `docs/当前实现对齐说明-2026-04-02.md`
-3. `docs/接口设计-校对版.md`
-4. `docs/当前接口实现对齐说明-2026-04-02.md`
-5. `docs/数据库设计-校对版.md`
-6. `docs/当前数据库实现对齐说明-2026-04-02.md`
+## Docker Compose
 
----
+```powershell
+cd D:\Excellent
+docker compose up -d --build
+```
 
-## Git 状态
+Compose 会启动：
 
-- 当前仓库已初始化 Git。
-- 代码、文档、前后端工程均位于同一仓库下，适合继续按模块提交。
+- `excellent-mysql`
+- `excellent-redis`
+- `excellent-server`
+- `excellent-admin-web`
+- `excellent-mobile-uni-new2`
+
+默认管理端账号：
+
+- 手机号：`18800000000`
+- 密码：`Admin@123`
+
+## 配置文件
+
+- 后端配置示例：[server/.env.example](server/.env.example)
+- 后台配置示例：[admin-web/.env.example](admin-web/.env.example)
+- 移动端配置示例：[mobile-uniNew2/.env.example](mobile-uniNew2/.env.example)
+
+## 目录约定
+
+后台管理调用 `/api/v1/admin/...` 接口，移动端调用 `/api/v1/app/...` 与 `/api/v1/auth/...` 接口。不要再新增旧的 `mobile-h5/` 或 `mobile-uni/` 服务编排；当前移动端统一使用 `mobile-uniNew2/`。

@@ -3,7 +3,7 @@
     <div class="page-heading">
       <div>
         <h2>资产中心</h2>
-        <p>围绕余额、积分、兑换券、AI 券四套账户查看资金与券值流转。</p>
+        <p>围绕余额、积分、兑换券、AI 券和充电宝统一查看账户与资产流水。</p>
       </div>
       <el-button type="primary" @click="loadData">刷新资产</el-button>
     </div>
@@ -36,6 +36,10 @@
           <div class="notice-item">
             <strong>兑换券 / AI 券</strong>
             兑换券承接套餐与签到奖励，AI 券承接自营商城购物返券，二者都和套餐抵扣场景有关。
+          </div>
+          <div class="notice-item">
+            <strong>充电宝</strong>
+            充电宝按台数入账，绑定、启停会记录到资产流水，设备收益则结算到余额账户。
           </div>
         </div>
       </div>
@@ -99,7 +103,8 @@ const assetOptions = [
   { label: '余额', value: 'BALANCE' },
   { label: '积分', value: 'POINTS' },
   { label: '兑换券', value: 'VOUCHER' },
-  { label: 'AI 券', value: 'AI_COUPON' }
+  { label: 'AI 券', value: 'AI_COUPON' },
+  { label: '充电宝', value: 'POWER_BANK' }
 ]
 
 const summary = ref({})
@@ -114,15 +119,27 @@ const metrics = computed(() => [
   { label: '余额账户', value: Number(summary.value.BALANCE || 0).toFixed(2), subtext: '可提现或用于爆款区' },
   { label: '积分账户', value: Number(summary.value.POINTS || 0).toFixed(2), subtext: '补贴、转赠与商城消费' },
   { label: '兑换券账户', value: Number(summary.value.VOUCHER || 0).toFixed(2), subtext: '套餐奖励与签到发放' },
-  { label: 'AI 券账户', value: Number(summary.value.AI_COUPON || 0).toFixed(2), subtext: '自营商城返券与套餐抵扣' }
+  { label: 'AI 券账户', value: Number(summary.value.AI_COUPON || 0).toFixed(2), subtext: '自营商城返券与套餐抵扣' },
+  { label: '充电宝资产', value: Number(summary.value.POWER_BANK || summary.value.power_bank_count || 0).toFixed(0), subtext: '当前生效的充电宝台数' }
 ])
 
-const assetCards = computed(() => [
-  { code: 'available', title: '可用余额', amount: Number(detail.value.available_amount || 0).toFixed(2), meta: '当前资产可支配额度' },
-  { code: 'frozen', title: '冻结金额', amount: Number(detail.value.frozen_amount || 0).toFixed(2), meta: '待释放或待审核' },
-  { code: 'consumed', title: '累计消耗', amount: Number(detail.value.consumed_amount || 0).toFixed(2), meta: '历史支出或抵扣' },
-  { code: 'withdrawn', title: '累计提现', amount: Number(detail.value.withdrawn_amount || 0).toFixed(2), meta: '仅部分资产支持提现' }
-])
+const assetCards = computed(() => {
+  if (assetType.value === 'POWER_BANK') {
+    return [
+      { code: 'available', title: '当前生效', amount: Number(detail.value.available_amount || 0).toFixed(0), meta: '当前仍在生效中的设备台数' },
+      { code: 'total', title: '累计入账', amount: Number(detail.value.total_amount || 0).toFixed(0), meta: '绑定和重新启用都会累计到这里' },
+      { code: 'disabled', title: '停用数量', amount: Number(detail.value.consumed_amount || 0).toFixed(0), meta: '通过停用转出的设备台数' },
+      { code: 'frozen', title: '冻结数量', amount: Number(detail.value.frozen_amount || 0).toFixed(0), meta: '预留字段，当前未使用' }
+    ]
+  }
+
+  return [
+    { code: 'available', title: '可用余额', amount: Number(detail.value.available_amount || 0).toFixed(2), meta: '当前资产可支配额度' },
+    { code: 'frozen', title: '冻结金额', amount: Number(detail.value.frozen_amount || 0).toFixed(2), meta: '待释放或待审核' },
+    { code: 'consumed', title: '累计消耗', amount: Number(detail.value.consumed_amount || 0).toFixed(2), meta: '历史支出或抵扣' },
+    { code: 'withdrawn', title: '累计提现', amount: Number(detail.value.withdrawn_amount || 0).toFixed(2), meta: '仅部分资产支持提现' }
+  ]
+})
 
 const filteredLedgers = computed(() => {
   const term = keyword.value.trim()

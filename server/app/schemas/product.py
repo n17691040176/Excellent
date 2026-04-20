@@ -21,8 +21,15 @@ class CreateOrderRequest(AppBaseModel):
     order_type: str
     zone_type: str | None = None
     address_id: int | None = None
+    pay_channel: str = 'BALANCE'
     items: list[ProductOrderItemRequest]
     asset_deductions: list[AssetDeductionRequest] = []
+
+
+class OrderPayRequest(AppBaseModel):
+    pay_channel: str
+    points_amount: float = 0
+    auto_complete: bool = True
 
 
 class ProductZoneConfigUpdateRequest(AppBaseModel):
@@ -41,7 +48,7 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     device_revenue_enabled: bool = False
 
 
-class AdminProductCreateRequest(AppBaseModel):
+class AdminProductPayload(AppBaseModel):
     product_name: str
     product_type: ProductType
     zone_type: ZoneType
@@ -52,23 +59,36 @@ class AdminProductCreateRequest(AppBaseModel):
     cost_price: float | None = None
     stock: int = 0
     main_image: str | None = None
+    cover: str | None = None
+    icons: str | None = None
+    brand: str | None = None
+    profile: str | None = None
+    detail: str | None = None
+    feature: str | None = None
+    order_by: int | None = None
+    is_hot: bool = False
     requires_shipping: bool = True
     drop_shipping_enabled: bool = False
 
 
-class AdminProductUpdateRequest(AppBaseModel):
-    product_name: str
-    product_type: ProductType
-    zone_type: ZoneType
-    owner_type: ProductOwnerType = ProductOwnerType.SELF_OPERATED
-    owner_id: int | None = None
-    market_price: float | None = None
-    sale_price: float
-    cost_price: float | None = None
-    stock: int = 0
-    main_image: str | None = None
-    requires_shipping: bool = True
-    drop_shipping_enabled: bool = False
+class AdminProductCreateRequest(AdminProductPayload):
+    pass
+
+
+class AdminProductUpdateRequest(AdminProductPayload):
+    pass
+
+
+class AdminProductBatchMerchandiseRequest(AppBaseModel):
+    product_ids: list[int]
+    is_hot: bool | None = None
+    order_by_start: int | None = None
+    order_by_step: int = 1
+
+
+class AdminProductBatchStatusRequest(AppBaseModel):
+    product_ids: list[int]
+    operation: str
 
 
 class AdminProductAuditRequest(AppBaseModel):

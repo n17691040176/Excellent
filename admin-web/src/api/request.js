@@ -19,6 +19,9 @@ service.interceptors.request.use((config) => {
 
 service.interceptors.response.use(
   (response) => {
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
     const payload = response.data
     if (payload?.code !== 0) {
       ElMessage.error(payload?.message || '请求失败')

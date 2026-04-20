@@ -28,6 +28,13 @@
     roles: ['SUPER_ADMIN', 'TEAM_ADMIN']
   },
   {
+    path: '/products',
+    name: 'Products',
+    title: '商品管理',
+    icon: 'Goods',
+    roles: ['SUPER_ADMIN', 'TEAM_ADMIN']
+  },
+  {
     path: '/commission',
     name: 'Commission',
     title: '返现管理',

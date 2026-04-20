@@ -1,6 +1,6 @@
 ﻿from datetime import datetime
 
-from sqlalchemy import BigInteger, DECIMAL, DateTime, Enum, ForeignKey, JSON, String
+from sqlalchemy import BigInteger, DECIMAL, DateTime, Enum, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -25,6 +25,43 @@ class Product(TimestampMixin, Base):
     status: Mapped[ProductStatus] = mapped_column(Enum(ProductStatus), default=ProductStatus.DRAFT, nullable=False)
     requires_shipping: Mapped[bool] = mapped_column(default=True, nullable=False)
     drop_shipping_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    legacy_name: Mapped[str | None] = mapped_column('name', String(150), nullable=True)
+    profile: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cover: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    icons: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legacy_type: Mapped[int | None] = mapped_column('type', Integer, nullable=True)
+    store_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    column_type: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    order_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    state: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_hot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    old_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
+    legacy_price: Mapped[float | None] = mapped_column('price', DECIMAL(18, 2), nullable=True)
+    hehuoren_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
+    xiaofeijin_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
+    create_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    create_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    update_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    update_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    verify_state: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verify_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    verify_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    verify_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dept_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    is_delete: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_integral: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    group_buy: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    group_buy_num: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    group_buy_rate: Mapped[float | None] = mapped_column(DECIMAL(18, 4), nullable=True)
+    is_flash_kill: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    flash_kill_rate: Mapped[float | None] = mapped_column(DECIMAL(18, 4), nullable=True)
+    sales_volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    use_num: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    discount_rate: Mapped[float | None] = mapped_column(DECIMAL(18, 4), nullable=True)
+    feature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    direct_rate: Mapped[float | None] = mapped_column(DECIMAL(18, 4), nullable=True)
 
 
 class ProductSku(Base):

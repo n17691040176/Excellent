@@ -22,6 +22,7 @@ const routes = [
       { path: '/users', component: () => import('@/views/users/UserListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '用户管理' } },
       { path: '/teams', component: () => import('@/views/teams/TeamListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '团队管理' } },
       { path: '/packages', component: () => import('@/views/packages/PackageListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '套餐管理' } },
+      { path: '/products', component: () => import('@/views/products/ProductListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '商品管理' } },
       { path: '/commission', component: () => import('@/views/commission/CommissionView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '返现管理' } },
       { path: '/withdraws', component: () => import('@/views/withdraws/WithdrawListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '提现管理' } },
       { path: '/suppliers', component: () => import('@/views/suppliers/SupplierListView.vue'), meta: { roles: ['SUPER_ADMIN', 'TEAM_ADMIN'], title: '招商中心' } },

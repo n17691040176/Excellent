@@ -4,7 +4,7 @@ from sqlalchemy import BigInteger, DECIMAL, Date, DateTime, Enum, ForeignKey, St
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.models.enums import AssetDirection, AssetType
+from app.models.enums import AssetDirection, AssetType, PowerBankStatus
 
 
 class UserAssetAccount(Base):
@@ -47,4 +47,35 @@ class DailySigninRecord(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
     signin_date: Mapped[date] = mapped_column(Date, nullable=False)
     voucher_amount: Mapped[float] = mapped_column(DECIMAL(18, 2), default=100, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class UserPowerBank(Base):
+    __tablename__ = 'user_power_banks'
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    device_code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    device_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[PowerBankStatus] = mapped_column(Enum(PowerBankStatus), default=PowerBankStatus.ACTIVE, nullable=False)
+    bound_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_income_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    total_income_amount: Mapped[float] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    total_referral_income_amount: Mapped[float] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class UserPowerBankIncomeRecord(Base):
+    __tablename__ = 'user_power_bank_income_records'
+    __table_args__ = (UniqueConstraint('power_bank_id', 'income_date', name='uk_power_bank_income_date'),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    power_bank_id: Mapped[int] = mapped_column(ForeignKey('user_power_banks.id'), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    referrer_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
+    income_date: Mapped[date] = mapped_column(Date, nullable=False)
+    owner_income_amount: Mapped[float] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    referrer_income_amount: Mapped[float] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

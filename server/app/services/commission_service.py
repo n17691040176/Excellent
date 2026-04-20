@@ -4,6 +4,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
+from app.models.asset import UserAssetLedger
 from app.models.commission import CommissionConfig, CommissionFlow, UserCommission, WithdrawRequest
 from app.models.enums import AssetType, CommissionStatus, WithdrawStatus, WithdrawType
 from app.models.order import Order
@@ -11,6 +12,12 @@ from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 from app.utils.helpers import now, quantize_amount
+
+BALANCE_WITHDRAW_VOUCHER_RATE = Decimal('0.20')
+BALANCE_WITHDRAW_APPLY = 'BALANCE_WITHDRAW_APPLY'
+BALANCE_WITHDRAW_REJECT = 'BALANCE_WITHDRAW_REJECT'
+POINTS_WITHDRAW_APPLY = 'POINTS_WITHDRAW_APPLY'
+POINTS_WITHDRAW_REJECT = 'POINTS_WITHDRAW_REJECT'
 
 
 class CommissionService:
@@ -94,18 +101,23 @@ class CommissionService:
     @staticmethod
     def create_withdraw(db: Session, user_id: int, withdraw_type: WithdrawType, amount: float, remark: str | None = None) -> WithdrawRequest:
         quantized = quantize_amount(amount)
+        if quantized <= Decimal('0.00'):
+            raise ConflictError('Withdraw amount must be greater than 0')
         user = db.get(User, user_id)
         if not user:
             raise NotFoundError('User not found')
+
+        summary = None
         if withdraw_type == WithdrawType.COMMISSION:
             summary = db.query(UserCommission).filter(UserCommission.user_id == user_id).first()
             if not summary or quantize_amount(summary.available_amount) < quantized:
                 raise ConflictError('Commission amount insufficient')
         else:
-            asset_type = AssetType.BALANCE if withdraw_type == WithdrawType.BALANCE else AssetType.POINTS
+            asset_type, _, _ = CommissionService._asset_withdraw_meta(withdraw_type)
             account = AssetService.get_account(db, user_id, asset_type)
             if quantize_amount(account.available_amount) < quantized:
                 raise ConflictError('Asset amount insufficient')
+
         record = WithdrawRequest(
             user_id=user_id,
             team_id=user.team_id,
@@ -116,6 +128,25 @@ class CommissionService:
             created_at=now(),
         )
         db.add(record)
+        db.flush()
+
+        source_no = CommissionService._withdraw_source_no(record.id)
+        if withdraw_type == WithdrawType.COMMISSION:
+            summary.available_amount = quantize_amount(summary.available_amount) - quantized
+            summary.frozen_amount = quantize_amount(summary.frozen_amount) + quantized
+            summary.updated_at = now()
+        else:
+            asset_type, apply_business_type, _ = CommissionService._asset_withdraw_meta(withdraw_type)
+            AssetService.freeze_amount(
+                db,
+                user_id,
+                asset_type,
+                quantized,
+                apply_business_type,
+                source_id=record.id,
+                source_no=source_no,
+            )
+
         db.commit()
         db.refresh(record)
         return record
@@ -164,6 +195,29 @@ class CommissionService:
             raise ConflictError('Withdraw request out of team scope')
 
     @staticmethod
+    def _withdraw_source_no(withdraw_id: int) -> str:
+        return f'WD-{withdraw_id}'
+
+    @staticmethod
+    def _asset_withdraw_meta(withdraw_type: WithdrawType) -> tuple[AssetType, str, str]:
+        if withdraw_type == WithdrawType.BALANCE:
+            return AssetType.BALANCE, BALANCE_WITHDRAW_APPLY, BALANCE_WITHDRAW_REJECT
+        if withdraw_type == WithdrawType.POINTS:
+            return AssetType.POINTS, POINTS_WITHDRAW_APPLY, POINTS_WITHDRAW_REJECT
+        raise ConflictError('Withdraw type invalid')
+
+    @staticmethod
+    def _asset_withdraw_reserved(db: Session, record: WithdrawRequest) -> bool:
+        if record.withdraw_type not in {WithdrawType.BALANCE, WithdrawType.POINTS}:
+            return False
+        _, apply_business_type, _ = CommissionService._asset_withdraw_meta(record.withdraw_type)
+        return db.query(UserAssetLedger.id).filter(
+            UserAssetLedger.user_id == record.user_id,
+            UserAssetLedger.source_id == record.id,
+            UserAssetLedger.business_type == apply_business_type,
+        ).first() is not None
+
+    @staticmethod
     def approve_withdraw(db: Session, withdraw_id: int, current_user: User) -> WithdrawRequest:
         record = db.get(WithdrawRequest, withdraw_id)
         if not record:
@@ -175,24 +229,62 @@ class CommissionService:
         amount = quantize_amount(record.amount)
         if record.withdraw_type == WithdrawType.COMMISSION:
             summary = db.query(UserCommission).filter(UserCommission.user_id == record.user_id).first()
-            if not summary or quantize_amount(summary.available_amount) < amount:
+            if not summary:
                 raise ConflictError('Commission amount insufficient')
-            summary.available_amount = quantize_amount(summary.available_amount) - amount
+            reserved_amount = quantize_amount(summary.frozen_amount)
+            available_amount = quantize_amount(summary.available_amount)
+            if reserved_amount >= amount:
+                summary.frozen_amount = reserved_amount - amount
+            elif available_amount >= amount:
+                summary.available_amount = available_amount - amount
+            else:
+                raise ConflictError('Commission amount insufficient')
             summary.withdrawn_amount = quantize_amount(summary.withdrawn_amount) + amount
             summary.updated_at = now()
         else:
-            asset_type = AssetType.BALANCE if record.withdraw_type == WithdrawType.BALANCE else AssetType.POINTS
-            account = AssetService.get_account(db, record.user_id, asset_type)
-            AssetService.consume_amount(
-                db,
-                record.user_id,
-                asset_type,
-                amount,
-                'WITHDRAW_APPROVE',
-                source_id=record.id,
-                source_no=str(record.id),
-            )
-            account.withdrawn_amount = quantize_amount(account.withdrawn_amount) + amount
+            asset_type, _, _ = CommissionService._asset_withdraw_meta(record.withdraw_type)
+            account_reserved = CommissionService._asset_withdraw_reserved(db, record)
+            source_no = CommissionService._withdraw_source_no(record.id)
+
+            if record.withdraw_type == WithdrawType.BALANCE:
+                voucher_amount = quantize_amount(amount * BALANCE_WITHDRAW_VOUCHER_RATE)
+                net_amount = quantize_amount(amount - voucher_amount)
+                if account_reserved:
+                    account = AssetService.consume_frozen_amount(db, record.user_id, asset_type, amount)
+                else:
+                    account = AssetService.consume_amount(
+                        db,
+                        record.user_id,
+                        asset_type,
+                        amount,
+                        'BALANCE_WITHDRAW_APPROVE',
+                        source_id=record.id,
+                        source_no=source_no,
+                    )
+                AssetService.add_amount(
+                    db,
+                    record.user_id,
+                    AssetType.VOUCHER,
+                    voucher_amount,
+                    'BALANCE_WITHDRAW_VOUCHER',
+                    source_id=record.id,
+                    source_no=source_no,
+                )
+                account.withdrawn_amount = quantize_amount(account.withdrawn_amount) + net_amount
+            else:
+                if account_reserved:
+                    account = AssetService.consume_frozen_amount(db, record.user_id, asset_type, amount)
+                else:
+                    account = AssetService.consume_amount(
+                        db,
+                        record.user_id,
+                        asset_type,
+                        amount,
+                        'POINTS_WITHDRAW_APPROVE',
+                        source_id=record.id,
+                        source_no=source_no,
+                    )
+                account.withdrawn_amount = quantize_amount(account.withdrawn_amount) + amount
             account.updated_at = now()
 
         record.status = WithdrawStatus.APPROVED
@@ -210,6 +302,26 @@ class CommissionService:
         if record.status != WithdrawStatus.PENDING:
             raise ConflictError('Withdraw status invalid')
         CommissionService._ensure_withdraw_visible(db, record, current_user)
+
+        amount = quantize_amount(record.amount)
+        if record.withdraw_type == WithdrawType.COMMISSION:
+            summary = db.query(UserCommission).filter(UserCommission.user_id == record.user_id).first()
+            if summary and quantize_amount(summary.frozen_amount) >= amount:
+                summary.frozen_amount = quantize_amount(summary.frozen_amount) - amount
+                summary.available_amount = quantize_amount(summary.available_amount) + amount
+                summary.updated_at = now()
+        elif CommissionService._asset_withdraw_reserved(db, record):
+            asset_type, _, reject_business_type = CommissionService._asset_withdraw_meta(record.withdraw_type)
+            AssetService.unfreeze_amount(
+                db,
+                record.user_id,
+                asset_type,
+                amount,
+                reject_business_type,
+                source_id=record.id,
+                source_no=CommissionService._withdraw_source_no(record.id),
+            )
+
         record.status = WithdrawStatus.REJECTED
         record.reviewed_by = current_user.id
         record.reviewed_at = now()

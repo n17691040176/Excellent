@@ -1,16 +1,37 @@
+from __future__ import annotations
+
 from decimal import Decimal
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
+from app.models.address import UserAddress
 from app.models.enums import AssetType, OrderStatus, OrderType, PayStatus, ProductStatus, ZoneType
 from app.models.order import Order, OrderAssetDeduction, OrderItem
 from app.models.product import Product, ProductZoneConfig
 from app.models.user import User
 from app.services.asset_service import AssetService
+from app.services.catalog_service import ProductService
 from app.services.commission_service import CommissionService
 from app.utils.helpers import generate_order_no, now, quantize_amount
+
+
+INTERNAL_PAY_CHANNELS = {'BALANCE', 'VOUCHER'}
+EXTERNAL_PAY_CHANNELS = {'WECHAT', 'ALIPAY'}
+SUPPORTED_PAY_CHANNELS = INTERNAL_PAY_CHANNELS | EXTERNAL_PAY_CHANNELS
+
+ZONE_ORDER_TYPE_MAP = {
+    ZoneType.REPURCHASE: OrderType.REPURCHASE_ORDER,
+    ZoneType.SELF_OPERATED: OrderType.SELF_OPERATED_ORDER,
+    ZoneType.HOT_SALE: OrderType.HOT_SALE_ORDER,
+    ZoneType.LOCAL_LIFE: OrderType.LOCAL_LIFE_ORDER,
+}
+
+PAY_CHANNEL_ASSET_MAP = {
+    'BALANCE': AssetType.BALANCE,
+    'VOUCHER': AssetType.VOUCHER,
+}
 
 
 class OrderService:
@@ -35,8 +56,8 @@ class OrderService:
                 'voucher_deduct_max_rate': Decimal('70'),
                 'ai_coupon_max_deduct_rate': Decimal('20'),
                 'ai_coupon_reward_rate': Decimal('20'),
-                'points_purchase_enabled': False,
-                'balance_purchase_enabled': False,
+                'points_purchase_enabled': True,
+                'balance_purchase_enabled': True,
                 'flash_sale_enabled': False,
                 'per_user_limit': None,
             }
@@ -85,11 +106,7 @@ class OrderService:
 
     @staticmethod
     def _validate_order_type(zone_type: ZoneType, order_type: OrderType) -> None:
-        expected = {
-            ZoneType.REPURCHASE: OrderType.REPURCHASE_ORDER,
-            ZoneType.SELF_OPERATED: OrderType.SELF_OPERATED_ORDER,
-            ZoneType.HOT_SALE: OrderType.HOT_SALE_ORDER,
-        }.get(zone_type)
+        expected = ZONE_ORDER_TYPE_MAP.get(zone_type)
         if expected and order_type != expected:
             raise ConflictError(f'Order type must match zone {zone_type.value}')
 
@@ -128,57 +145,6 @@ class OrderService:
             raise ConflictError('Hot sale product purchase limit exceeded')
 
     @staticmethod
-    def _validate_asset_rules(
-        zone_type: ZoneType,
-        total_amount: Decimal,
-        configs: list[ProductZoneConfig | None],
-        deductions_by_type: dict[AssetType, Decimal],
-    ) -> None:
-        if zone_type == ZoneType.REPURCHASE:
-            invalid_assets = set(deductions_by_type) - {AssetType.POINTS}
-            if invalid_assets:
-                raise ConflictError('Repurchase zone only supports points deduction')
-            return
-
-        if zone_type == ZoneType.SELF_OPERATED:
-            invalid_assets = set(deductions_by_type) - {AssetType.VOUCHER, AssetType.AI_COUPON}
-            if invalid_assets:
-                raise ConflictError('Self-operated zone only supports voucher and AI coupon deductions')
-
-            voucher_amount = deductions_by_type.get(AssetType.VOUCHER, Decimal('0'))
-            ai_amount = deductions_by_type.get(AssetType.AI_COUPON, Decimal('0'))
-
-            if voucher_amount > 0:
-                min_rate = Decimal(str(OrderService._resolve_config_value(configs, zone_type, 'voucher_deduct_min_rate') or 0))
-                max_rate = Decimal(str(OrderService._resolve_config_value(configs, zone_type, 'voucher_deduct_max_rate') or 0))
-                min_amount = quantize_amount(total_amount * min_rate / Decimal('100'))
-                max_amount = quantize_amount(total_amount * max_rate / Decimal('100'))
-                if voucher_amount < min_amount or voucher_amount > max_amount:
-                    raise ConflictError('Voucher deduction must stay within configured self-operated ratio')
-
-            if ai_amount > 0:
-                ai_rate = Decimal(str(OrderService._resolve_config_value(configs, zone_type, 'ai_coupon_max_deduct_rate') or 0))
-                ai_max_amount = quantize_amount(total_amount * ai_rate / Decimal('100'))
-                if ai_amount > ai_max_amount:
-                    raise ConflictError('AI coupon deduction exceeds configured self-operated limit')
-            return
-
-        if zone_type == ZoneType.HOT_SALE:
-            invalid_assets = set(deductions_by_type) - {AssetType.POINTS, AssetType.BALANCE}
-            if invalid_assets:
-                raise ConflictError('Hot sale zone only supports points or balance deductions')
-            if not deductions_by_type:
-                raise ConflictError('Hot sale zone requires points or balance for rush purchase')
-
-            points_enabled = bool(OrderService._resolve_config_value(configs, zone_type, 'points_purchase_enabled'))
-            balance_enabled = bool(OrderService._resolve_config_value(configs, zone_type, 'balance_purchase_enabled'))
-            if deductions_by_type.get(AssetType.POINTS, Decimal('0')) > 0 and not points_enabled:
-                raise ConflictError('Hot sale zone points payment is disabled')
-            if deductions_by_type.get(AssetType.BALANCE, Decimal('0')) > 0 and not balance_enabled:
-                raise ConflictError('Hot sale zone balance payment is disabled')
-            return
-
-    @staticmethod
     def _reward_self_operated_ai_coupon(db: Session, order: Order) -> None:
         items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
         if not items:
@@ -204,6 +170,170 @@ class OrderService:
             )
 
     @staticmethod
+    def _resolve_pay_channel(channel: str | None) -> str:
+        value = str(channel or 'BALANCE').strip().upper()
+        if value not in SUPPORTED_PAY_CHANNELS:
+            raise ConflictError('Unsupported pay channel')
+        return value
+
+    @staticmethod
+    def _normalize_asset_deductions(deductions: list[dict] | None) -> dict[AssetType, Decimal]:
+        result: dict[AssetType, Decimal] = {}
+        for deduction in deductions or []:
+            asset_type = AssetType(str(deduction['asset_type']).upper())
+            amount = quantize_amount(deduction['amount'])
+            if amount <= 0:
+                continue
+            result[asset_type] = result.get(asset_type, Decimal('0')) + amount
+        return result
+
+    @staticmethod
+    def _deductions_payload(deductions_by_type: dict[AssetType, Decimal]) -> list[dict]:
+        return [
+            {'asset_type': asset_type.value, 'amount': amount}
+            for asset_type, amount in deductions_by_type.items()
+            if amount > 0
+        ]
+
+    @staticmethod
+    def _get_default_address(db: Session, user_id: int) -> UserAddress | None:
+        return db.query(UserAddress).filter(
+            UserAddress.user_id == user_id,
+            UserAddress.is_default.is_(True),
+        ).first()
+
+    @staticmethod
+    def _validate_address(db: Session, user_id: int, address_id: int | None, requires_shipping: bool) -> int | None:
+        if not requires_shipping:
+            return None
+        target_id = address_id
+        if target_id is None:
+            address = OrderService._get_default_address(db, user_id)
+            return address.id if address else None
+        address = db.query(UserAddress).filter(
+            UserAddress.id == target_id,
+            UserAddress.user_id == user_id,
+        ).first()
+        if not address:
+            raise NotFoundError('Address not found')
+        return address.id
+
+    @staticmethod
+    def _validate_payment_rules(
+        zone_type: ZoneType,
+        total_amount: Decimal,
+        configs: list[ProductZoneConfig | None],
+        deductions_by_type: dict[AssetType, Decimal],
+        pay_channel: str,
+    ) -> None:
+        allowed_assets = {AssetType.POINTS}
+        if pay_channel == 'BALANCE':
+            allowed_assets.add(AssetType.BALANCE)
+        if pay_channel == 'VOUCHER':
+            allowed_assets.add(AssetType.VOUCHER)
+
+        invalid_assets = set(deductions_by_type) - allowed_assets
+        if invalid_assets:
+            raise ConflictError('Current payment combination only supports points with selected pay channel')
+
+        if pay_channel in INTERNAL_PAY_CHANNELS and not deductions_by_type.get(PAY_CHANNEL_ASSET_MAP[pay_channel], Decimal('0')):
+            raise ConflictError('Internal payment channel must provide deduction amount')
+
+        if zone_type == ZoneType.REPURCHASE and pay_channel != 'BALANCE':
+            raise ConflictError('Repurchase zone only supports balance + points')
+
+        if zone_type == ZoneType.SELF_OPERATED and pay_channel not in {'VOUCHER', 'WECHAT', 'ALIPAY'}:
+            raise ConflictError('Self-operated zone supports voucher + points or external pay + points')
+
+        if zone_type == ZoneType.HOT_SALE and pay_channel not in {'BALANCE', 'WECHAT', 'ALIPAY'}:
+            raise ConflictError('Hot sale zone supports balance + points or external pay + points')
+
+        if zone_type == ZoneType.LOCAL_LIFE and pay_channel not in {'BALANCE', 'WECHAT', 'ALIPAY'}:
+            raise ConflictError('Local life zone supports balance + points or external pay + points')
+
+        points_amount = deductions_by_type.get(AssetType.POINTS, Decimal('0'))
+        if points_amount > total_amount:
+            raise ConflictError('Points deduction exceeds order total')
+
+        if zone_type in {ZoneType.HOT_SALE, ZoneType.REPURCHASE, ZoneType.SELF_OPERATED}:
+            points_enabled = bool(OrderService._resolve_config_value(configs, zone_type, 'points_purchase_enabled'))
+            if points_amount > 0 and not points_enabled:
+                raise ConflictError('Points payment is disabled for current product')
+
+        if pay_channel == 'BALANCE' and zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED, ZoneType.LOCAL_LIFE}:
+            balance_enabled = True
+            if zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED}:
+                balance_enabled = bool(OrderService._resolve_config_value(configs, zone_type, 'balance_purchase_enabled'))
+            if not balance_enabled:
+                raise ConflictError('Balance payment is disabled for current product')
+
+        voucher_amount = deductions_by_type.get(AssetType.VOUCHER, Decimal('0'))
+        if pay_channel == 'VOUCHER' and voucher_amount <= 0:
+            raise ConflictError('Voucher payment amount is required')
+
+        total_deduction = sum(deductions_by_type.values(), Decimal('0.00'))
+        if total_deduction > total_amount:
+            raise ConflictError('Asset deductions exceed order total')
+
+    @staticmethod
+    def build_payment_plan(
+        db: Session,
+        current_user: User,
+        products_data: list[dict],
+        deductions_by_type: dict[AssetType, Decimal],
+        pay_channel: str,
+        address_id: int | None = None,
+    ) -> dict:
+        zone_type = products_data[0]['product'].zone_type
+        configs = [item['config'] for item in products_data]
+        total_amount = quantize_amount(sum((item['line_total'] for item in products_data), Decimal('0.00')))
+        requires_shipping = any(bool(item['product'].requires_shipping) for item in products_data)
+        resolved_address_id = OrderService._validate_address(db, current_user.id, address_id, requires_shipping)
+
+        OrderService._validate_payment_rules(zone_type, total_amount, configs, deductions_by_type, pay_channel)
+
+        points_amount = deductions_by_type.get(AssetType.POINTS, Decimal('0.00'))
+        channel_asset_type = PAY_CHANNEL_ASSET_MAP.get(pay_channel)
+        internal_amount = deductions_by_type.get(channel_asset_type, Decimal('0.00')) if channel_asset_type else Decimal('0.00')
+        total_deduction = quantize_amount(points_amount + internal_amount)
+        cash_due = max(total_amount - total_deduction, Decimal('0.00'))
+
+        if pay_channel in INTERNAL_PAY_CHANNELS and cash_due > 0:
+            raise ConflictError('Selected internal assets are insufficient to complete payment')
+
+        payment_combo = (
+            ('EXTERNAL' if pay_channel in EXTERNAL_PAY_CHANNELS else pay_channel) + '+POINTS'
+            if points_amount > 0
+            else ('EXTERNAL' if pay_channel in EXTERNAL_PAY_CHANNELS else pay_channel)
+        )
+
+        return {
+            'zone_type': zone_type,
+            'total_amount': total_amount,
+            'discount_amount': total_deduction,
+            'cash_due': cash_due,
+            'deductions_by_type': deductions_by_type,
+            'pay_channel': pay_channel,
+            'payment_combo': payment_combo,
+            'requires_shipping': requires_shipping,
+            'address_id': resolved_address_id,
+        }
+
+    @staticmethod
+    def _build_external_payment_payload(order: Order, pay_channel: str) -> dict:
+        channel_text = '微信支付' if pay_channel == 'WECHAT' else '支付宝支付'
+        return {
+            'pay_channel': pay_channel,
+            'pay_channel_text': channel_text,
+            'status': 'RESERVED',
+            'trade_no': f'{pay_channel[:2]}{order.order_no}',
+            'prepay_id': f'prepay_{order.id}',
+            'cash_due': float(order.payable_amount),
+            'mocked': True,
+            'message': f'{channel_text}接口已预留，当前返回模拟支付参数',
+        }
+
+    @staticmethod
     def create_order(db: Session, current_user: User, payload: dict) -> Order:
         items_payload = payload['items']
         if not items_payload:
@@ -211,14 +341,17 @@ class OrderService:
 
         order_type = payload['order_type']
         payload_zone_type = payload.get('zone_type')
+        pay_channel = OrderService._resolve_pay_channel(payload.get('pay_channel'))
+        deductions_by_type = OrderService._normalize_asset_deductions(payload.get('asset_deductions'))
 
         products_data: list[dict] = []
         zone_types: set[ZoneType] = set()
-        total_amount = Decimal('0.00')
 
         for item in items_payload:
             product = db.get(Product, item['product_id'])
             if not product:
+                raise NotFoundError('Product not found')
+            if not ProductService.is_visible_to_user(db, current_user, product):
                 raise NotFoundError('Product not found')
             if product.status != ProductStatus.ON_SHELF:
                 raise ConflictError('Product unavailable')
@@ -232,7 +365,6 @@ class OrderService:
             zone_types.add(product.zone_type)
             config = OrderService._get_zone_config(db, product.id, product.zone_type)
             line_total = quantize_amount(Decimal(str(product.sale_price)) * Decimal(str(quantity)))
-            total_amount += line_total
             products_data.append(
                 {
                     'product': product,
@@ -253,16 +385,11 @@ class OrderService:
 
         configs = [item['config'] for item in products_data]
         if actual_zone_type == ZoneType.REPURCHASE:
-            package_required = any(
-                config.package_required for config in configs if config is not None
-            ) or bool(OrderService._zone_config_defaults(actual_zone_type)['package_required'])
+            package_required = bool(OrderService._resolve_config_value(configs, actual_zone_type, 'package_required'))
             if package_required:
                 OrderService._require_package_qualification(db, current_user, configs)
 
         if actual_zone_type == ZoneType.HOT_SALE:
-            flash_sale_enabled = OrderService._resolve_config_value(configs, actual_zone_type, 'flash_sale_enabled')
-            if not flash_sale_enabled:
-                raise ConflictError('Hot sale product flash sale is disabled')
             for item in products_data:
                 per_user_limit = OrderService._resolve_config_value([item['config']], actual_zone_type, 'per_user_limit')
                 OrderService._validate_hot_sale_limit(
@@ -273,15 +400,18 @@ class OrderService:
                     per_user_limit,
                 )
 
-        deductions_by_type: dict[AssetType, Decimal] = {}
-        for deduction in payload.get('asset_deductions', []):
-            asset_type = AssetType(deduction['asset_type'])
-            amount = quantize_amount(deduction['amount'])
-            if amount <= 0:
-                continue
-            deductions_by_type[asset_type] = deductions_by_type.get(asset_type, Decimal('0')) + amount
+        payment_plan = OrderService.build_payment_plan(
+            db,
+            current_user,
+            products_data,
+            deductions_by_type,
+            pay_channel,
+            payload.get('address_id'),
+        )
 
-        OrderService._validate_asset_rules(actual_zone_type, total_amount, configs, deductions_by_type)
+        total_amount = payment_plan['total_amount']
+        discount_amount = payment_plan['discount_amount']
+        cash_due = payment_plan['cash_due']
 
         order = Order(
             order_no=generate_order_no('OD'),
@@ -289,10 +419,10 @@ class OrderService:
             team_id=current_user.team_id,
             order_type=order_type,
             zone_type=actual_zone_type,
-            total_amount=0,
-            discount_amount=0,
-            payable_amount=0,
-            paid_amount=0,
+            total_amount=total_amount,
+            discount_amount=discount_amount,
+            payable_amount=cash_due,
+            paid_amount=max(total_amount - cash_due, Decimal('0.00')),
             pay_status=PayStatus.UNPAID,
             order_status=OrderStatus.CREATED,
         )
@@ -317,8 +447,7 @@ class OrderService:
                 )
             )
 
-        discount_amount = Decimal('0.00')
-        for asset_type, amount in deductions_by_type.items():
+        for asset_type, amount in payment_plan['deductions_by_type'].items():
             AssetService.consume_amount(
                 db,
                 current_user.id,
@@ -328,7 +457,6 @@ class OrderService:
                 source_id=order.id,
                 source_no=order.order_no,
             )
-            discount_amount += amount
             db.add(
                 OrderAssetDeduction(
                     order_id=order.id,
@@ -338,13 +466,10 @@ class OrderService:
                 )
             )
 
-        payable_amount = max(total_amount - discount_amount, Decimal('0.00'))
-        order.total_amount = total_amount
-        order.discount_amount = discount_amount
-        order.payable_amount = payable_amount
-        order.paid_amount = payable_amount
         db.commit()
         db.refresh(order)
+        if cash_due <= 0:
+            order = OrderService._mark_paid(db, order, external_paid_amount=Decimal('0.00'))
         return order
 
     @staticmethod
@@ -372,9 +497,16 @@ class OrderService:
         }
 
     @staticmethod
-    def _mark_paid(db: Session, order: Order) -> Order:
+    def _mark_paid(db: Session, order: Order, external_paid_amount: Decimal | None = None) -> Order:
         if order.pay_status == PayStatus.PAID:
             return order
+        if external_paid_amount is not None:
+            order.paid_amount = quantize_amount(Decimal(str(order.discount_amount)) + external_paid_amount)
+            order.payable_amount = Decimal('0.00')
+        else:
+            order.paid_amount = quantize_amount(order.total_amount)
+            order.payable_amount = Decimal('0.00')
+
         order.pay_status = PayStatus.PAID
         order.order_status = OrderStatus.PAID
         order.paid_at = now()
@@ -416,3 +548,105 @@ class OrderService:
         CommissionService.settle_for_order(db, order.id)
         db.refresh(order)
         return order
+
+    @staticmethod
+    def preview_order_payment(
+        db: Session,
+        current_user: User,
+        payload: dict,
+    ) -> dict:
+        order_type = OrderType(payload['order_type'])
+        zone_type = ZoneType(payload['zone_type']) if payload.get('zone_type') else None
+        items_payload = payload.get('items') or []
+        if not items_payload:
+            raise ConflictError('Order items required')
+
+        products_data: list[dict] = []
+        zone_types: set[ZoneType] = set()
+        for item in items_payload:
+            product = db.get(Product, item['product_id'])
+            if not product:
+                raise NotFoundError('Product not found')
+            if not ProductService.is_visible_to_user(db, current_user, product):
+                raise NotFoundError('Product not found')
+            quantity = max(1, int(item.get('quantity', 1)))
+            zone_types.add(product.zone_type)
+            products_data.append(
+                {
+                    'product': product,
+                    'quantity': quantity,
+                    'config': OrderService._get_zone_config(db, product.id, product.zone_type),
+                    'line_total': quantize_amount(Decimal(str(product.sale_price)) * Decimal(str(quantity))),
+                }
+            )
+
+        if len(zone_types) != 1:
+            raise ConflictError('Mixed zone products are not allowed in one order')
+        actual_zone_type = zone_types.pop()
+        if zone_type and zone_type != actual_zone_type:
+            raise ConflictError('Zone type does not match products')
+        OrderService._validate_order_type(actual_zone_type, order_type)
+
+        plan = OrderService.build_payment_plan(
+            db,
+            current_user,
+            products_data,
+            OrderService._normalize_asset_deductions(payload.get('asset_deductions')),
+            OrderService._resolve_pay_channel(payload.get('pay_channel')),
+            payload.get('address_id'),
+        )
+        return {
+            'zone_type': actual_zone_type.value,
+            'address_id': plan['address_id'],
+            'requires_shipping': plan['requires_shipping'],
+            'total_amount': float(plan['total_amount']),
+            'discount_amount': float(plan['discount_amount']),
+            'cash_due': float(plan['cash_due']),
+            'pay_channel': plan['pay_channel'],
+            'payment_combo': plan['payment_combo'],
+            'asset_deductions': [
+                {'asset_type': asset_type.value, 'amount': float(amount)}
+                for asset_type, amount in plan['deductions_by_type'].items()
+            ],
+            'pay_channel_options': [
+                {'value': 'BALANCE', 'label': '余额 + 积分'},
+                {'value': 'VOUCHER', 'label': '消费金 + 积分'},
+                {'value': 'WECHAT', 'label': '微信支付 + 积分'},
+                {'value': 'ALIPAY', 'label': '支付宝支付 + 积分'},
+            ],
+        }
+
+    @staticmethod
+    def pay_order(
+        db: Session,
+        current_user: User,
+        order_id: int,
+        pay_channel: str,
+        points_amount: float = 0,
+        auto_complete: bool = True,
+    ) -> dict:
+        order = OrderService.get_order(db, current_user.id, order_id)
+        if order.order_status == OrderStatus.CLOSED:
+            raise ConflictError('Closed order cannot be paid')
+        if order.pay_status == PayStatus.PAID:
+            return {'order': order, 'payment': {'status': 'PAID', 'message': 'Order already paid'}}
+
+        resolved_channel = OrderService._resolve_pay_channel(pay_channel)
+        points_amount_decimal = quantize_amount(points_amount)
+
+        if points_amount_decimal > 0:
+            raise ConflictError('Points deduction must be selected during order creation')
+
+        if resolved_channel in INTERNAL_PAY_CHANNELS:
+            if quantize_amount(order.payable_amount) > 0:
+                raise ConflictError('Current order cannot be completed with internal assets')
+            order = OrderService._mark_paid(db, order, external_paid_amount=Decimal('0.00'))
+            return {'order': order, 'payment': {'status': 'PAID', 'message': 'Internal asset payment completed'}}
+
+        payment = OrderService._build_external_payment_payload(order, resolved_channel)
+        if auto_complete:
+            order = OrderService._mark_paid(db, order, external_paid_amount=quantize_amount(order.payable_amount))
+            payment['status'] = 'PAID'
+            payment['message'] = 'Mock external payment completed'
+            payment['cash_due'] = 0
+        return {'order': order, 'payment': payment}

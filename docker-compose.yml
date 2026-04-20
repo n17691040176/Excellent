@@ -76,27 +76,18 @@ services:
     ports:
       - "5173:80"
 
-  mobile-h5:
+  mobile-uni-new2:
     build:
-      context: ./mobile-h5
+      context: ./mobile-uniNew2
       args:
         VITE_API_BASE_URL: ${PUBLIC_API_BASE_URL:-/}
-    container_name: excellent-mobile-h5
+        VITE_INVITE_WEB_BASE_URL: ${PUBLIC_INVITE_WEB_BASE_URL:-/}
+    container_name: excellent-mobile-uni-new2
     restart: unless-stopped
     depends_on:
       - server
     ports:
       - "5174:80"
-
-  mobile-uni:
-    build:
-      context: ./mobile-uni
-    container_name: excellent-mobile-uni
-    restart: unless-stopped
-    depends_on:
-      - server
-    ports:
-      - "5175:80"
 
 volumes:
   mysql_data:

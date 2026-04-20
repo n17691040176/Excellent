@@ -3,7 +3,7 @@
 
 class UserOut(AppBaseModel):
     id: int
-    phone: str
+    phone: str | None = None
     nickname: str
     avatar: str | None = None
     global_role: str

@@ -25,17 +25,29 @@ export const decorationApi = {
 }
 
 export const userApi = {
-  list() {
-    return request.get('/api/v1/admin/users')
+  list(params) {
+    return request.get('/api/v1/admin/users', { params })
   },
   detail(id) {
     return request.get(`/api/v1/admin/users/${id}`)
+  },
+  legacyProfile(id) {
+    return request.get(`/api/v1/admin/users/${id}/legacy-profile`)
   },
   updateStatus(id, data) {
     return request.patch(`/api/v1/admin/users/${id}/status`, data)
   },
   inviteTree(id) {
     return request.get(`/api/v1/admin/users/${id}/invite-tree`)
+  },
+  powerBanks(id) {
+    return request.get(`/api/v1/admin/users/${id}/power-banks`)
+  },
+  bindPowerBank(id, data) {
+    return request.post(`/api/v1/admin/users/${id}/power-banks`, data)
+  },
+  updatePowerBank(id, powerBankId, data) {
+    return request.patch(`/api/v1/admin/users/${id}/power-banks/${powerBankId}`, data)
   },
   profile() {
     return request.get('/api/v1/app/users/profile')
@@ -123,10 +135,16 @@ export const assetApi = {
   },
   ledgers(type) {
     return request.get(`/api/v1/app/assets/${type}/ledgers`)
+  },
+  powerBanks() {
+    return request.get('/api/v1/app/assets/power-banks')
   }
 }
 
 export const productApi = {
+  list(params) {
+    return request.get('/api/v1/admin/products', { params })
+  },
   repurchase() {
     return request.get('/api/v1/admin/zones/repurchase/products')
   },
@@ -142,6 +160,12 @@ export const productApi = {
   create(data) {
     return request.post('/api/v1/admin/products', data)
   },
+  batchMerchandise(data) {
+    return request.patch('/api/v1/admin/products/batch-merchandise', data)
+  },
+  batchStatus(data) {
+    return request.patch('/api/v1/admin/products/batch-status', data)
+  },
   update(id, data) {
     return request.put(`/api/v1/admin/products/${id}`, data)
   },
@@ -156,6 +180,20 @@ export const productApi = {
   },
   remove(id) {
     return request.delete(`/api/v1/admin/products/${id}`)
+  },
+  downloadImportTemplate() {
+    return request.get('/api/v1/admin/products/import-template', {
+      responseType: 'blob'
+    })
+  },
+  importExcel(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request.post('/api/v1/admin/products/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
   },
   zoneConfig(id) {
     return request.get(`/api/v1/admin/products/${id}/zone-config`)

@@ -1,0 +1,219 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "首页"
+      }
+    },
+    {
+      "path": "pages/packages/list",
+      "style": {
+        "navigationBarTitleText": "分类"
+      }
+    },
+    {
+      "path": "pages/local-life/index",
+      "style": {
+        "navigationBarTitleText": "本地生活"
+      }
+    },
+    {
+      "path": "pages/orders/list",
+      "style": {
+        "navigationBarTitleText": "订单"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    }
+  ],
+  "subPackages": [
+    {
+      "root": "subpackages/package",
+      "pages": [
+        {
+          "path": "detail",
+          "style": {
+            "navigationBarTitleText": "商品详情"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/order",
+      "pages": [
+        {
+          "path": "detail",
+          "style": {
+            "navigationBarTitleText": "订单详情"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/life",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "本地生活"
+          }
+        },
+        {
+          "path": "orders",
+          "style": {
+            "navigationBarTitleText": "生活订单"
+          }
+        },
+        {
+          "path": "service-detail",
+          "style": {
+            "navigationBarTitleText": "服务详情"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/team",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "我的团队"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/assets",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "我的资产"
+          }
+        },
+        {
+          "path": "withdraw",
+          "style": {
+            "navigationBarTitleText": "余额提现"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/commission",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "佣金中心"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/invite",
+      "pages": [
+        {
+          "path": "index",
+          "style": {
+            "navigationBarTitleText": "邀请好友"
+          }
+        }
+      ]
+    },
+    {
+      "root": "subpackages/profile",
+      "pages": [
+        {
+          "path": "settings",
+          "style": {
+            "navigationBarTitleText": "账号设置"
+          }
+        },
+        {
+          "path": "favorites",
+          "style": {
+            "navigationBarTitleText": "我的收藏"
+          }
+        },
+        {
+          "path": "footprints",
+          "style": {
+            "navigationBarTitleText": "最近足迹"
+          }
+        },
+        {
+          "path": "cart",
+          "style": {
+            "navigationBarTitleText": "购物车"
+          }
+        },
+        {
+          "path": "shipping",
+          "style": {
+            "navigationBarTitleText": "快递服务"
+          }
+        },
+        {
+          "path": "shipping-detail",
+          "style": {
+            "navigationBarTitleText": "快递详情"
+          }
+        }
+      ]
+    }
+  ],
+  "tabBar": {
+    "custom": true,
+    "color": "#a08f7d",
+    "selectedColor": "#ff7a00",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "static/tabbar/home.svg",
+        "selectedIconPath": "static/tabbar/home-active.svg"
+      },
+      {
+        "pagePath": "pages/packages/list",
+        "text": "分类",
+        "iconPath": "static/tabbar/packages.svg",
+        "selectedIconPath": "static/tabbar/packages-active.svg"
+      },
+      {
+        "pagePath": "pages/local-life/index",
+        "text": "生活",
+        "iconPath": "static/tabbar/life.svg",
+        "selectedIconPath": "static/tabbar/life-active.svg"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tabbar/profile.svg",
+        "selectedIconPath": "static/tabbar/profile-active.svg"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "Excellent",
+    "navigationBarBackgroundColor": "#fff6eb",
+    "backgroundColor": "#fff6eb"
+  },
+  "uniIdRouter": {}
+}

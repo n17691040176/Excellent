@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS teams (
 
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    phone VARCHAR(20) NOT NULL,
+    phone VARCHAR(20) NULL,
     password_hash VARCHAR(255) NOT NULL,
     nickname VARCHAR(64) NOT NULL,
     avatar VARCHAR(255) NULL,
@@ -34,6 +34,53 @@ CREATE TABLE IF NOT EXISTS users (
     KEY idx_users_parent_id (parent_id),
     KEY idx_users_grandparent_id (grandparent_id),
     KEY idx_users_team_id (team_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_legacy_profiles (
+    user_id BIGINT PRIMARY KEY,
+    legacy_user_id BIGINT NOT NULL,
+    dept_id BIGINT NULL,
+    user_name VARCHAR(64) NULL,
+    nick_name VARCHAR(255) NULL,
+    user_type VARCHAR(32) NULL,
+    email VARCHAR(128) NULL,
+    phonenumber VARCHAR(20) NULL,
+    signature TEXT NULL,
+    sex VARCHAR(8) NULL,
+    avatar VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    pay_password VARCHAR(255) NULL,
+    status VARCHAR(32) NULL,
+    del_flag VARCHAR(32) NULL,
+    login_ip VARCHAR(128) NULL,
+    login_date DATETIME NULL,
+    create_by VARCHAR(64) NULL,
+    create_time DATETIME NULL,
+    update_by VARCHAR(64) NULL,
+    update_time DATETIME NULL,
+    remark TEXT NULL,
+    superior BIGINT NULL,
+    open_id VARCHAR(128) NULL,
+    union_id VARCHAR(128) NULL,
+    applet_qr_code VARCHAR(255) NULL,
+    app_qr_code VARCHAR(255) NULL,
+    invite_code VARCHAR(32) NULL,
+    wx_qr_code VARCHAR(255) NULL,
+    zfb_qr_code VARCHAR(255) NULL,
+    zfb_nick_name VARCHAR(128) NULL,
+    zfb_avatar VARCHAR(255) NULL,
+    zfb_open_id VARCHAR(128) NULL,
+    zfb_user_id VARCHAR(128) NULL,
+    store_zfb_nick_name VARCHAR(128) NULL,
+    store_zfb_avatar VARCHAR(255) NULL,
+    store_zfb_open_id VARCHAR(128) NULL,
+    divide_num INT NULL,
+    activate INT NULL,
+    partner INT NULL,
+    sheng_withdraw INT NULL,
+    imported_at DATETIME NOT NULL,
+    UNIQUE KEY uk_user_legacy_profiles_legacy_user_id (legacy_user_id),
+    CONSTRAINT fk_user_legacy_profiles_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -186,6 +233,37 @@ CREATE TABLE IF NOT EXISTS daily_signin_records (
     UNIQUE KEY uk_daily_signin_user_date (user_id, signin_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS user_power_banks (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    device_code VARCHAR(64) NOT NULL,
+    device_name VARCHAR(128) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    bound_at DATETIME NOT NULL,
+    last_income_date DATE NULL,
+    total_income_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    total_referral_income_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_user_power_banks_device_code (device_code),
+    KEY idx_user_power_banks_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_power_bank_income_records (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    power_bank_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    referrer_user_id BIGINT NULL,
+    income_date DATE NOT NULL,
+    owner_income_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    referrer_income_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uk_power_bank_income_date (power_bank_id, income_date),
+    KEY idx_power_bank_income_records_power_bank_id (power_bank_id),
+    KEY idx_power_bank_income_records_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS suppliers (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NULL,
@@ -325,6 +403,43 @@ CREATE TABLE IF NOT EXISTS user_addresses (
     is_default TINYINT(1) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_favorite_products (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    product_id BIGINT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_favorite_products_user_product (user_id, product_id),
+    KEY idx_user_favorite_products_user_id (user_id),
+    KEY idx_user_favorite_products_product_id (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_product_footprints (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    product_id BIGINT NOT NULL,
+    view_count INT NOT NULL DEFAULT 1,
+    last_viewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_product_footprints_user_product (user_id, product_id),
+    KEY idx_user_product_footprints_user_id (user_id),
+    KEY idx_user_product_footprints_product_id (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS shopping_cart_items (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    product_id BIGINT NOT NULL,
+    sku_id BIGINT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    selected TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_shopping_cart_items_user_product (user_id, product_id),
+    KEY idx_shopping_cart_items_user_id (user_id),
+    KEY idx_shopping_cart_items_product_id (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS local_life_merchants (

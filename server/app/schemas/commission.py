@@ -2,6 +2,6 @@
 
 
 class WithdrawCreateRequest(AppBaseModel):
-    withdraw_type: str
+    withdraw_type: str = 'COMMISSION'
     amount: float
     remark: str | None = None

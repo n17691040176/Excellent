@@ -38,6 +38,8 @@
         <el-table-column prop="team_id" label="团队 ID" width="100" />
         <el-table-column prop="withdraw_type" label="提现类型" min-width="120" />
         <el-table-column prop="amount" label="提现金额" min-width="120" />
+        <el-table-column prop="net_amount" label="实际到账" min-width="120" />
+        <el-table-column prop="voucher_amount" label="转消费金" min-width="120" />
         <el-table-column label="审核状态" width="120">
           <template #default="scope">
             <el-tag :type="statusType(scope.row.status)">{{ scope.row.status }}</el-tag>

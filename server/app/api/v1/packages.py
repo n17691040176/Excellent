@@ -2,6 +2,8 @@
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_roles
+from app.api.v1.mobile_serializers import page_slice, serialize_order, serialize_package, serialize_product
+from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.models.enums import GlobalRole
 from app.models.user import User
@@ -11,15 +13,21 @@ from app.schemas.package import (
     AdminPackageUpdateRequest,
     PackageOrderRequest,
 )
-from app.services.catalog_service import PackageService
+from app.services.catalog_service import PackageService, ProductService
 
 app_router = APIRouter(prefix='/app/packages')
 admin_router = APIRouter(prefix='/admin/packages')
 
 
 @app_router.get('')
-def list_packages(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return {'code': 0, 'message': 'success', 'data': PackageService.list_packages(db)}
+def list_packages(
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = page_slice(ProductService.list_app_products(db, current_user=current_user), page, page_size)
+    return {'code': 0, 'message': 'success', 'data': [serialize_product(db, item) for item in rows]}
 
 
 @app_router.get('/my-qualifications')
@@ -28,8 +36,19 @@ def my_qualifications(db: Session = Depends(get_db), current_user: User = Depend
 
 
 @app_router.get('/{package_id}')
-def get_package(package_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return {'code': 0, 'message': 'success', 'data': PackageService.get_package(db, package_id)}
+def get_package(package_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    raw_product = ProductService.get_product(db, package_id)
+    if raw_product:
+        product = ProductService.get_product(db, package_id, current_user)
+        if not product:
+            raise NotFoundError('Product not found')
+        return {'code': 0, 'message': 'success', 'data': serialize_product(db, product)}
+
+    try:
+        package = PackageService.get_package(db, package_id)
+    except NotFoundError:
+        raise NotFoundError('Product not found')
+    return {'code': 0, 'message': 'success', 'data': serialize_package(package)}
 
 
 @app_router.post('/{package_id}/orders')
@@ -40,7 +59,7 @@ def create_package_order(
     current_user: User = Depends(get_current_user),
 ):
     order = PackageService.create_package_order(db, current_user.id, package_id, payload.use_ai_coupon_amount)
-    return {'code': 0, 'message': 'success', 'data': order}
+    return {'code': 0, 'message': 'success', 'data': serialize_order(db, order)}
 
 
 @admin_router.get('')

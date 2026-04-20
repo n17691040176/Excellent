@@ -54,6 +54,12 @@ class AssetType(StrEnum):
     POINTS = 'POINTS'
     VOUCHER = 'VOUCHER'
     AI_COUPON = 'AI_COUPON'
+    POWER_BANK = 'POWER_BANK'
+
+
+class PowerBankStatus(StrEnum):
+    ACTIVE = 'ACTIVE'
+    DISABLED = 'DISABLED'
 
 
 class AssetDirection(StrEnum):

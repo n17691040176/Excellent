@@ -1497,7 +1497,7 @@ function createDefaultPayload() {
         { enabled: true, title: '我的团队', desc: '管理归属与成员结构', icon_url: '', path: '/subpackages/team/index', open_type: 'navigate' },
         { enabled: true, title: '邀请好友', desc: '分享邀请码完成绑定', icon_url: '', path: '/subpackages/invite/index', open_type: 'navigate' },
         { enabled: true, title: '佣金中心', desc: '跟进冻结与可提现状态', icon_url: '', path: '/subpackages/commission/index', open_type: 'navigate' },
-        { enabled: true, title: '资产中心', desc: '查看余额、积分与券资产', icon_url: '', path: '/subpackages/assets/index', open_type: 'navigate' },
+        { enabled: true, title: '我的资产', desc: '查看余额、消费金、积分和充电宝', icon_url: '', path: '/subpackages/assets/index', open_type: 'navigate' },
         { enabled: true, title: '个人中心', desc: '维护资料、签到和账号设置', icon_url: '', path: '/pages/profile/index', open_type: 'switchTab' }
       ]
     }
