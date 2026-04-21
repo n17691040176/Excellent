@@ -10,11 +10,11 @@ export const APP_ENV = {
 
 const ENV_MAP = {
   [APP_ENV.LOCAL]: {
-    apiBaseUrl: 'http://127.0.0.1:8000',
+    apiBaseUrl: 'http://127.0.0.1:8001',
     inviteWebBaseUrl: 'http://127.0.0.1:5174'
   },
   [APP_ENV.DEV]: {
-    apiBaseUrl: 'http://156.238.241.213:8000',
+    apiBaseUrl: 'http://156.238.241.213:8001',
     inviteWebBaseUrl: 'http://156.238.241.213:5174'
   },
   [APP_ENV.PROD]: {
@@ -36,7 +36,19 @@ function shouldIgnoreRuntimeUrl(url) {
 
   try {
     const target = new URL(String(url), window.location.origin);
-    return !isLocalHostname(window.location.hostname) && isLocalHostname(target.hostname);
+    const currentHostIsLocal = isLocalHostname(window.location.hostname);
+    const targetHostIsLocal = isLocalHostname(target.hostname);
+
+    if (!currentHostIsLocal && targetHostIsLocal) {
+      return true;
+    }
+
+    // Avoid stale production/runtime overrides hijacking local H5 development.
+    if (currentHostIsLocal && !targetHostIsLocal) {
+      return true;
+    }
+
+    return false;
   } catch (error) {
     return false;
   }

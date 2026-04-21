@@ -53,7 +53,7 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
-      CORS_ORIGINS: http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174
+      CORS_ORIGINS: http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://156.238.241.213:5173,http://156.238.241.213:5174
     depends_on:
       mysql:
         condition: service_healthy

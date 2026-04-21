@@ -18,13 +18,11 @@ export default defineConfig(({ mode }) => {
       port: 5174,
       proxy: {
         '/api/v1': {
-          // target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
-          target: 'http://156.238.241.213:8000',
+          target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8001',
           changeOrigin: true
         },
         '/uploads': {
-          // target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
-          target: 'http://156.238.241.213:8000',
+          target: env.VITE_API_BASE_URL || 'http://127.0.0.1:8001',
           changeOrigin: true
         }
       }
