@@ -35,12 +35,23 @@ function isLocalHostname(hostname = '') {
 	return ['127.0.0.1', 'localhost', '::1'].includes(String(hostname).toLowerCase());
 }
 
-function shouldIgnoreRuntimeUrl(url) {
+function shouldIgnoreCrossContextUrl(url) {
 	if (!isH5Runtime() || !url) return false;
 
 	try {
 		const target = new URL(String(url), window.location.origin);
-		return !isLocalHostname(window.location.hostname) && isLocalHostname(target.hostname);
+		const currentHostIsLocal = isLocalHostname(window.location.hostname);
+		const targetHostIsLocal = isLocalHostname(target.hostname);
+
+		if (!currentHostIsLocal && targetHostIsLocal) {
+			return true;
+		}
+
+		if (currentHostIsLocal && !targetHostIsLocal) {
+			return true;
+		}
+
+		return false;
 	} catch (error) {
 		return false;
 	}
@@ -68,16 +79,18 @@ function getRuntimeValue(key) {
 }
 
 function resolveBaseUrl(runtimeKey, envValue, fallback) {
-	const rawRuntimeValue = uni.getStorageSync(runtimeKey);
-	const runtimeValue = shouldIgnoreRuntimeUrl(rawRuntimeValue) ? '' : rawRuntimeValue;
-	const resolved = normalizeBaseUrl(runtimeValue || envValue || fallback, fallback);
-	const source = runtimeValue ? 'runtime' : (envValue ? 'env' : 'default');
+	const rawRuntimeValue = uni.getStorageSync(runtimeKey)
+	const runtimeValue = shouldIgnoreCrossContextUrl(rawRuntimeValue) ? '' : rawRuntimeValue
+	const resolvedEnvValue = shouldIgnoreCrossContextUrl(envValue) ? '' : envValue
+	const resolvedFallback = shouldIgnoreCrossContextUrl(fallback) ? '' : fallback
+	const resolved = normalizeBaseUrl(runtimeValue || resolvedEnvValue || resolvedFallback, resolvedFallback)
+	const source = runtimeValue ? 'runtime' : (resolvedEnvValue ? 'env' : 'default')
 	return {
 		value: resolved,
 		source,
 		runtimeValue: normalizeBaseUrl(rawRuntimeValue || ''),
-		envValue: normalizeBaseUrl(envValue || ''),
-		fallback: normalizeBaseUrl(fallback, fallback)
+		envValue: normalizeBaseUrl(resolvedEnvValue || ''),
+		fallback: normalizeBaseUrl(resolvedFallback, resolvedFallback)
 	}
 }
 
@@ -116,8 +129,7 @@ function getEnvConfig() {
 
 export function getApiBaseUrlConfig() {
 	const envConfig = getEnvConfig()
-	return resolveBaseUrl(API_BASE_URL_KEY, getEnvValue('VITE_API_BASE_URL') || BUILD_API_BASE_URL || envConfig
-		.apiBaseUrl, envConfig.apiBaseUrl)
+	return resolveBaseUrl(API_BASE_URL_KEY, getEnvValue('VITE_API_BASE_URL') || BUILD_API_BASE_URL || envConfig.apiBaseUrl, envConfig.apiBaseUrl)
 }
 
 export function getApiBaseUrl() {
@@ -138,8 +150,7 @@ export function clearApiBaseUrl() {
 
 export function getInviteWebBaseUrlConfig() {
 	const envConfig = getEnvConfig()
-	return resolveBaseUrl(INVITE_WEB_BASE_URL_KEY, getEnvValue('VITE_INVITE_WEB_BASE_URL') || BUILD_INVITE_WEB_BASE_URL ||
-		envConfig.inviteWebBaseUrl, envConfig.inviteWebBaseUrl)
+	return resolveBaseUrl(INVITE_WEB_BASE_URL_KEY, getEnvValue('VITE_INVITE_WEB_BASE_URL') || BUILD_INVITE_WEB_BASE_URL || envConfig.inviteWebBaseUrl, envConfig.inviteWebBaseUrl)
 }
 
 export function getInviteWebBaseUrl() {
