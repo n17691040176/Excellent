@@ -62,7 +62,7 @@ services:
     volumes:
       - ./server/uploads:/app/uploads
     ports:
-      - "8001:8000"
+      - "8000:8000"
 
   admin-web:
     build:

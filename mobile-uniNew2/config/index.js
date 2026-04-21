@@ -10,11 +10,11 @@ export const APP_ENV = {
 
 const ENV_MAP = {
   [APP_ENV.LOCAL]: {
-    apiBaseUrl: 'http://127.0.0.1:8001',
+    apiBaseUrl: 'http://127.0.0.1:8000',
     inviteWebBaseUrl: 'http://127.0.0.1:5174'
   },
   [APP_ENV.DEV]: {
-    apiBaseUrl: 'http://156.238.241.213:8001',
+    apiBaseUrl: 'http://156.238.241.213:8000',
     inviteWebBaseUrl: 'http://156.238.241.213:5174'
   },
   [APP_ENV.PROD]: {
