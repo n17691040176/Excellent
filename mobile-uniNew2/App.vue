@@ -2,10 +2,12 @@
 import {
   clearApiBaseUrl,
   clearInviteWebBaseUrl,
+  clearRuntimeConfig,
   getApiBaseUrlConfig,
   getInviteWebBaseUrlConfig,
   setApiBaseUrl,
-  setInviteWebBaseUrl
+  setInviteWebBaseUrl,
+  syncRuntimeConfigFromBuild
 } from './config/index';
 
 let isOfflineNotified = false;
@@ -110,6 +112,10 @@ function retryCurrentPage() {
 
 export default {
   onLaunch() {
+    syncRuntimeConfigFromBuild();
+    clearRuntimeConfig();
+    syncRuntimeConfigFromBuild();
+
     logRuntimeConfig();
     bindH5DebugEvents();
     uni.onNetworkStatusChange((res) => {

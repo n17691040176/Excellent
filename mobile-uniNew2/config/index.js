@@ -18,7 +18,7 @@ const ENV_MAP = {
 		inviteWebBaseUrl: 'http://127.0.0.1:5174'
 	},
 	[APP_ENV.DEV]: {
-		apiBaseUrl: 'http://156.238.241.213:8001',
+		apiBaseUrl: 'http://156.238.241.213:8000',
 		inviteWebBaseUrl: 'http://156.238.241.213:5174'
 	},
 	[APP_ENV.PROD]: {
@@ -167,4 +167,26 @@ export function setInviteWebBaseUrl(url) {
 
 export function clearInviteWebBaseUrl() {
 	uni.removeStorageSync(INVITE_WEB_BASE_URL_KEY)
+}
+
+export function clearRuntimeConfig() {
+	uni.removeStorageSync(APP_ENV_KEY)
+	uni.removeStorageSync(API_BASE_URL_KEY)
+	uni.removeStorageSync(INVITE_WEB_BASE_URL_KEY)
+}
+
+export function syncRuntimeConfigFromBuild() {
+	clearRuntimeConfig()
+
+	if (BUILD_APP_ENV) {
+		setAppEnv(BUILD_APP_ENV)
+	}
+
+	if (BUILD_API_BASE_URL) {
+		setApiBaseUrl(BUILD_API_BASE_URL)
+	}
+
+	if (BUILD_INVITE_WEB_BASE_URL) {
+		setInviteWebBaseUrl(BUILD_INVITE_WEB_BASE_URL)
+	}
 }
