@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_roles
@@ -76,8 +76,21 @@ def admin_commission_flows(db: Session = Depends(get_db), current_user: User = D
 
 
 @admin_router.get('/commission/users')
-def admin_commission_users(db: Session = Depends(get_db), current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN))):
-    return {'code': 0, 'message': 'success', 'data': CommissionService.list_user_commissions_for_admin(db, current_user)}
+def admin_commission_users(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    keyword: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    data = CommissionService.list_user_commissions_page_for_admin(
+        db,
+        current_user,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
+    return {'code': 0, 'message': 'success', 'data': data}
 
 
 @admin_router.get('/withdraws')

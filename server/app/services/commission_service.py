@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import and_, or_
+from sqlalchemy import String, and_, cast, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
@@ -21,6 +21,39 @@ POINTS_WITHDRAW_REJECT = 'POINTS_WITHDRAW_REJECT'
 
 
 class CommissionService:
+    @staticmethod
+    def _admin_user_commission_query(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+    ):
+        query = db.query(UserCommission).join(User, User.id == UserCommission.user_id)
+        if not AdminScopeService.is_super_admin(current_user):
+            query = query.filter(User.team_id == AdminScopeService.require_team_id(current_user))
+        keyword_value = keyword.strip() if keyword else ''
+        if keyword_value:
+            like_value = f'%{keyword_value}%'
+            query = query.filter(or_(
+                cast(UserCommission.user_id, String).ilike(like_value),
+                User.phone.ilike(like_value),
+                User.nickname.ilike(like_value),
+                User.real_name.ilike(like_value),
+                User.invite_code.ilike(like_value),
+            ))
+        return query
+
+    @staticmethod
+    def serialize_admin_user_commission(item: UserCommission) -> dict:
+        return {
+            'id': item.id,
+            'user_id': item.user_id,
+            'available_amount': float(item.available_amount),
+            'frozen_amount': float(item.frozen_amount),
+            'withdrawn_amount': float(item.withdrawn_amount),
+            'total_amount': float(item.total_amount),
+            'updated_at': item.updated_at,
+        }
+
     @staticmethod
     def get_config(db: Session) -> CommissionConfig:
         config = db.query(CommissionConfig).filter(CommissionConfig.is_active.is_(True)).first()
@@ -156,11 +189,39 @@ class CommissionService:
         return db.query(WithdrawRequest).filter(WithdrawRequest.user_id == user_id).order_by(WithdrawRequest.id.desc()).all()
 
     @staticmethod
-    def list_user_commissions_for_admin(db: Session, current_user: User) -> list[UserCommission]:
-        query = db.query(UserCommission)
-        if not AdminScopeService.is_super_admin(current_user):
-            query = query.filter(UserCommission.user_id.in_(AdminScopeService.team_user_ids_subquery(current_user)))
-        return query.order_by(UserCommission.id.desc()).all()
+    def list_user_commissions_page_for_admin(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        safe_page = max(page, 1)
+        safe_page_size = max(1, min(page_size, 100))
+        query = CommissionService._admin_user_commission_query(db, current_user, keyword=keyword)
+
+        total = int(query.order_by(None).with_entities(func.count(UserCommission.id)).scalar() or 0)
+        summary_row = query.order_by(None).with_entities(
+            func.coalesce(func.sum(UserCommission.available_amount), 0),
+            func.coalesce(func.sum(UserCommission.frozen_amount), 0),
+            func.coalesce(func.sum(UserCommission.withdrawn_amount), 0),
+            func.coalesce(func.sum(UserCommission.total_amount), 0),
+        ).one()
+        rows = query.order_by(UserCommission.id.desc()).offset((safe_page - 1) * safe_page_size).limit(safe_page_size).all()
+
+        return {
+            'items': [CommissionService.serialize_admin_user_commission(item) for item in rows],
+            'total': total,
+            'page': safe_page,
+            'page_size': safe_page_size,
+            'summary': {
+                'user_count': total,
+                'available_amount': float(summary_row[0] or 0),
+                'frozen_amount': float(summary_row[1] or 0),
+                'withdrawn_amount': float(summary_row[2] or 0),
+                'total_amount': float(summary_row[3] or 0),
+            },
+        }
 
     @staticmethod
     def list_flows_for_admin(db: Session, current_user: User) -> list[CommissionFlow]:

@@ -12,6 +12,37 @@ from app.services.asset_service import AssetService
 
 class UserService:
     @staticmethod
+    def _user_list_query(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+        role: GlobalRole | None = None,
+        source: str | None = None,
+    ):
+        query = db.query(User, UserLegacyProfile).outerjoin(UserLegacyProfile, UserLegacyProfile.user_id == User.id)
+        if not AdminScopeService.is_super_admin(current_user):
+            query = query.filter(User.team_id == AdminScopeService.require_team_id(current_user))
+        if role:
+            query = query.filter(User.global_role == role)
+        if source == 'legacy':
+            query = query.filter(UserLegacyProfile.user_id.isnot(None))
+        elif source == 'native':
+            query = query.filter(UserLegacyProfile.user_id.is_(None))
+        if keyword:
+            like_value = f'%{keyword.strip()}%'
+            query = query.filter(or_(
+                User.phone.ilike(like_value),
+                User.nickname.ilike(like_value),
+                User.invite_code.ilike(like_value),
+                UserLegacyProfile.phonenumber.ilike(like_value),
+                UserLegacyProfile.nick_name.ilike(like_value),
+                UserLegacyProfile.user_name.ilike(like_value),
+                UserLegacyProfile.invite_code.ilike(like_value),
+                cast(UserLegacyProfile.legacy_user_id, String).ilike(like_value),
+            ))
+        return query
+
+    @staticmethod
     def is_legacy_user(db: Session, user: User | int | None) -> bool:
         user_id = user.id if isinstance(user, User) else user
         if not user_id:
@@ -80,29 +111,39 @@ class UserService:
         role: GlobalRole | None = None,
         source: str | None = None,
     ) -> list[dict]:
-        query = db.query(User, UserLegacyProfile).outerjoin(UserLegacyProfile, UserLegacyProfile.user_id == User.id)
-        if not AdminScopeService.is_super_admin(current_user):
-            query = query.filter(User.team_id == AdminScopeService.require_team_id(current_user))
-        if role:
-            query = query.filter(User.global_role == role)
-        if source == 'legacy':
-            query = query.filter(UserLegacyProfile.user_id.isnot(None))
-        elif source == 'native':
-            query = query.filter(UserLegacyProfile.user_id.is_(None))
-        if keyword:
-            like_value = f'%{keyword.strip()}%'
-            query = query.filter(or_(
-                User.phone.ilike(like_value),
-                User.nickname.ilike(like_value),
-                User.invite_code.ilike(like_value),
-                UserLegacyProfile.phonenumber.ilike(like_value),
-                UserLegacyProfile.nick_name.ilike(like_value),
-                UserLegacyProfile.user_name.ilike(like_value),
-                UserLegacyProfile.invite_code.ilike(like_value),
-                cast(UserLegacyProfile.legacy_user_id, String).ilike(like_value),
-            ))
+        query = UserService._user_list_query(db, current_user, keyword=keyword, role=role, source=source)
         rows = query.distinct(User.id).order_by(User.id.desc()).all()
         return [UserService.serialize_admin_user(user, legacy_profile) for user, legacy_profile in rows]
+
+    @staticmethod
+    def list_users_page(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+        role: GlobalRole | None = None,
+        source: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        safe_page = max(page, 1)
+        safe_page_size = max(1, min(page_size, 100))
+        query = UserService._user_list_query(db, current_user, keyword=keyword, role=role, source=source)
+        total = int(
+            query.order_by(None).with_entities(func.count(func.distinct(User.id))).scalar() or 0
+        )
+        rows = (
+            query.distinct(User.id)
+            .order_by(User.id.desc())
+            .offset((safe_page - 1) * safe_page_size)
+            .limit(safe_page_size)
+            .all()
+        )
+        return {
+            'items': [UserService.serialize_admin_user(user, legacy_profile) for user, legacy_profile in rows],
+            'total': total,
+            'page': safe_page,
+            'page_size': safe_page_size,
+        }
 
     @staticmethod
     def get_user(db: Session, user_id: int, current_user: User | None = None) -> User:

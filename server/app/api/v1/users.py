@@ -87,6 +87,8 @@ def team_summary(db: Session = Depends(get_db), current_user: User = Depends(get
 
 @admin_router.get('')
 def list_users(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     keyword: str | None = Query(default=None),
     role: str | None = Query(default=None),
     source: str | None = Query(default=None),
@@ -94,8 +96,16 @@ def list_users(
     current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     role_filter = GlobalRole(role) if role else None
-    users = UserService.list_users(db, current_user, keyword=keyword, role=role_filter, source=source)
-    return {'code': 0, 'message': 'success', 'data': users}
+    data = UserService.list_users_page(
+        db,
+        current_user,
+        keyword=keyword,
+        role=role_filter,
+        source=source,
+        page=page,
+        page_size=page_size,
+    )
+    return {'code': 0, 'message': 'success', 'data': data}
 
 
 @admin_router.get('/{user_id}')

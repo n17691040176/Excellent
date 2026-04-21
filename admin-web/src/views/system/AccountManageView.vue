@@ -84,7 +84,8 @@ function formatDate(value) {
 }
 
 async function loadData() {
-  rows.value = await userApi.list()
+  const data = await userApi.list({ page: 1, page_size: 200 })
+  rows.value = data.items || []
 }
 
 async function toggleStatus(row) {

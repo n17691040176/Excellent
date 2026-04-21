@@ -5,7 +5,7 @@
         <h2>用户管理</h2>
         <p>{{ scopeHint }}</p>
       </div>
-      <el-button type="primary" @click="fetchUsers">刷新列表</el-button>
+      <el-button type="primary" @click="fetchUsers(page)">刷新列表</el-button>
     </div>
 
     <div class="panel-card data-card">
@@ -15,15 +15,15 @@
           clearable
           placeholder="搜索手机号、昵称、邀请码、历史 ID"
           style="max-width: 360px;"
-          @keyup.enter="fetchUsers"
-          @clear="fetchUsers"
+          @keyup.enter="fetchUsers(1)"
+          @clear="fetchUsers(1)"
         />
         <el-select
           v-model="sourceFilter"
           clearable
           placeholder="来源筛选"
           style="width: 160px;"
-          @change="fetchUsers"
+          @change="fetchUsers(1)"
         >
           <el-option label="仅历史导入" value="legacy" />
           <el-option label="仅当前用户" value="native" />
@@ -33,13 +33,13 @@
           clearable
           placeholder="角色筛选"
           style="width: 180px;"
-          @change="fetchUsers"
+          @change="fetchUsers(1)"
         >
           <el-option label="超级管理员" value="SUPER_ADMIN" />
           <el-option label="团队管理员" value="TEAM_ADMIN" />
           <el-option label="普通用户" value="USER" />
         </el-select>
-        <el-button @click="fetchUsers">查询</el-button>
+        <el-button @click="fetchUsers(1)">查询</el-button>
       </div>
 
       <el-table :data="users" border>
@@ -76,6 +76,15 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        layout="total, prev, pager, next"
+        :page-size="pageSize"
+        :total="total"
+        @current-change="fetchUsers"
+      />
     </div>
 
     <el-drawer v-model="detailDrawerVisible" title="用户详情" size="960px">
@@ -263,9 +272,12 @@ import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const users = ref([])
+const total = ref(0)
 const keyword = ref('')
 const roleFilter = ref('')
 const sourceFilter = ref('')
+const page = ref(1)
+const pageSize = ref(20)
 const drawerVisible = ref(false)
 const inviteTree = ref({})
 const legacyDrawerVisible = ref(false)
@@ -326,12 +338,17 @@ function resetPowerBankForm() {
   }
 }
 
-async function fetchUsers() {
-  users.value = await userApi.list({
+async function fetchUsers(nextPage = page.value) {
+  page.value = nextPage
+  const data = await userApi.list({
+    page: page.value,
+    page_size: pageSize.value,
     keyword: keyword.value || undefined,
     role: roleFilter.value || undefined,
     source: sourceFilter.value || undefined
   })
+  users.value = data.items || []
+  total.value = data.total || 0
 }
 
 async function loadUserDetail(userId) {

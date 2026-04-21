@@ -91,8 +91,8 @@ export const commissionApi = {
   config() {
     return request.get('/api/v1/admin/commission/config')
   },
-  users() {
-    return request.get('/api/v1/admin/commission/users')
+  users(params) {
+    return request.get('/api/v1/admin/commission/users', { params })
   },
   flows() {
     return request.get('/api/v1/admin/commission/flows')
