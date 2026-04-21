@@ -19,9 +19,9 @@ export default defineConfig(({
 	mode
 }) => {
 	const env = loadEnv(mode || 'development', projectRoot, '')
-	const appEnv = env.VITE_APP_ENV || 'local'
-	const apiBaseUrl = env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-	const inviteWebBaseUrl = env.VITE_INVITE_WEB_BASE_URL || 'http://127.0.0.1:5174'
+	const appEnv = env.VITE_APP_ENV || 'dev'
+	const apiBaseUrl = env.VITE_API_BASE_URL || 'http://156.238.241.213:8000'
+	const inviteWebBaseUrl = env.VITE_INVITE_WEB_BASE_URL || 'http://156.238.241.213:5174'
 
 	console.log('mode=', mode)
 	console.log('projectRoot=', projectRoot)

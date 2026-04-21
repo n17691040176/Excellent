@@ -99,7 +99,7 @@ export const ENV_CONFIG = ENV_MAP
 export function getAppEnv() {
 	const envValue = getEnvValue('VITE_APP_ENV') || BUILD_APP_ENV
 	const runtimeEnv = getRuntimeValue(APP_ENV_KEY)
-	return envValue || runtimeEnv || APP_ENV.LOCAL
+	return envValue || runtimeEnv || APP_ENV.DEV
 }
 
 export function setAppEnv(env) {
