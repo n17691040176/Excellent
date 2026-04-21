@@ -31,7 +31,7 @@ function isLocalHostname(hostname = '') {
   return ['127.0.0.1', 'localhost', '::1'].includes(String(hostname).toLowerCase());
 }
 
-function shouldIgnoreRuntimeUrl(url) {
+function shouldIgnoreCrossContextUrl(url) {
   if (!isH5Runtime() || !url) return false;
 
   try {
@@ -77,15 +77,17 @@ function getRuntimeValue(key) {
 
 function resolveBaseUrl(runtimeKey, envValue, fallback) {
   const rawRuntimeValue = uni.getStorageSync(runtimeKey);
-  const runtimeValue = shouldIgnoreRuntimeUrl(rawRuntimeValue) ? '' : rawRuntimeValue;
-  const resolved = normalizeBaseUrl(runtimeValue || envValue || fallback, fallback);
-  const source = runtimeValue ? 'runtime' : (envValue ? 'env' : 'default');
+  const runtimeValue = shouldIgnoreCrossContextUrl(rawRuntimeValue) ? '' : rawRuntimeValue;
+  const resolvedEnvValue = shouldIgnoreCrossContextUrl(envValue) ? '' : envValue;
+  const resolvedFallback = shouldIgnoreCrossContextUrl(fallback) ? '' : fallback;
+  const resolved = normalizeBaseUrl(runtimeValue || resolvedEnvValue || resolvedFallback, resolvedFallback);
+  const source = runtimeValue ? 'runtime' : (resolvedEnvValue ? 'env' : 'default');
   return {
     value: resolved,
     source,
     runtimeValue: normalizeBaseUrl(rawRuntimeValue || ''),
-    envValue: normalizeBaseUrl(envValue || ''),
-    fallback: normalizeBaseUrl(fallback, fallback)
+    envValue: normalizeBaseUrl(resolvedEnvValue || ''),
+    fallback: normalizeBaseUrl(resolvedFallback, resolvedFallback)
   }
 }
 
