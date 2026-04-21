@@ -22,8 +22,8 @@ const ENV_MAP = {
 		inviteWebBaseUrl: 'http://156.238.241.213:5174'
 	},
 	[APP_ENV.PROD]: {
-		apiBaseUrl: '',
-		inviteWebBaseUrl: ''
+		apiBaseUrl: 'https://156.238.241.213:8000',
+		inviteWebBaseUrl: 'https://156.238.241.213:5174'
 	}
 }
 
@@ -62,6 +62,21 @@ function normalizeBaseUrl(url, fallback = '') {
 	return String(url).replace(/\/+$/, '')
 }
 
+function isLocalHost(hostname = '') {
+	return ['127.0.0.1', 'localhost', '::1'].includes(String(hostname).toLowerCase())
+}
+
+function isLocalUrl(url = '') {
+	if (!url) return false
+
+	try {
+		const parsed = new URL(String(url), 'http://placeholder.local')
+		return isLocalHost(parsed.hostname)
+	} catch (error) {
+		return false
+	}
+}
+
 function getEnvValue(key) {
 	let value = ''
 	// #ifdef VITE
@@ -80,9 +95,9 @@ function getRuntimeValue(key) {
 
 function resolveBaseUrl(runtimeKey, envValue, fallback) {
 	const rawRuntimeValue = uni.getStorageSync(runtimeKey)
-	const runtimeValue = shouldIgnoreCrossContextUrl(rawRuntimeValue) ? '' : rawRuntimeValue
-	const resolvedEnvValue = shouldIgnoreCrossContextUrl(envValue) ? '' : envValue
-	const resolvedFallback = shouldIgnoreCrossContextUrl(fallback) ? '' : fallback
+	const runtimeValue = shouldIgnoreCrossContextUrl(rawRuntimeValue) || isLocalUrl(rawRuntimeValue) ? '' : rawRuntimeValue
+	const resolvedEnvValue = shouldIgnoreCrossContextUrl(envValue) || isLocalUrl(envValue) ? '' : envValue
+	const resolvedFallback = shouldIgnoreCrossContextUrl(fallback) || isLocalUrl(fallback) ? '' : fallback
 	const resolved = normalizeBaseUrl(runtimeValue || resolvedEnvValue || resolvedFallback, resolvedFallback)
 	const source = runtimeValue ? 'runtime' : (resolvedEnvValue ? 'env' : 'default')
 	return {
@@ -188,5 +203,17 @@ export function syncRuntimeConfigFromBuild() {
 
 	if (BUILD_INVITE_WEB_BASE_URL) {
 		setInviteWebBaseUrl(BUILD_INVITE_WEB_BASE_URL)
+	}
+
+	if (getAppEnv() === APP_ENV.PROD) {
+		const apiBaseUrlConfig = getApiBaseUrlConfig()
+		if (isLocalUrl(apiBaseUrlConfig.value)) {
+			clearApiBaseUrl()
+		}
+
+		const inviteWebBaseUrlConfig = getInviteWebBaseUrlConfig()
+		if (isLocalUrl(inviteWebBaseUrlConfig.value)) {
+			clearInviteWebBaseUrl()
+		}
 	}
 }
