@@ -2,152 +2,158 @@ const API_BASE_URL_KEY = 'excellent_api_base_url'
 const INVITE_WEB_BASE_URL_KEY = 'excellent_invite_web_base_url'
 const APP_ENV_KEY = 'excellent_app_env'
 
+const BUILD_APP_ENV = (typeof globalThis !== 'undefined' && globalThis.__APP_ENV__) || ''
+const BUILD_API_BASE_URL = (typeof globalThis !== 'undefined' && globalThis.__API_BASE_URL__) || ''
+const BUILD_INVITE_WEB_BASE_URL = (typeof globalThis !== 'undefined' && globalThis.__INVITE_WEB_BASE_URL__) || ''
+
 export const APP_ENV = {
-  LOCAL: 'local',
-  DEV: 'dev',
-  PROD: 'prod'
+	LOCAL: 'local',
+	DEV: 'dev',
+	PROD: 'prod'
 }
 
 const ENV_MAP = {
-  [APP_ENV.LOCAL]: {
-    apiBaseUrl: 'http://127.0.0.1:8000',
-    inviteWebBaseUrl: 'http://127.0.0.1:5174'
-  },
-  [APP_ENV.DEV]: {
-    apiBaseUrl: 'http://156.238.241.213:8000',
-    inviteWebBaseUrl: 'http://156.238.241.213:5174'
-  },
-  [APP_ENV.PROD]: {
-    apiBaseUrl: '',
-    inviteWebBaseUrl: ''
-  }
+	[APP_ENV.LOCAL]: {
+		apiBaseUrl: 'http://127.0.0.1:8000',
+		inviteWebBaseUrl: 'http://127.0.0.1:5174'
+	},
+	[APP_ENV.DEV]: {
+		apiBaseUrl: 'http://156.238.241.213:8001',
+		inviteWebBaseUrl: 'http://156.238.241.213:5174'
+	},
+	[APP_ENV.PROD]: {
+		apiBaseUrl: '',
+		inviteWebBaseUrl: ''
+	}
 }
 
 function isH5Runtime() {
-  return typeof window !== 'undefined' && typeof window.location !== 'undefined';
+	return typeof window !== 'undefined' && typeof window.location !== 'undefined';
 }
 
 function isLocalHostname(hostname = '') {
-  return ['127.0.0.1', 'localhost', '::1'].includes(String(hostname).toLowerCase());
+	return ['127.0.0.1', 'localhost', '::1'].includes(String(hostname).toLowerCase());
 }
 
 function shouldIgnoreRuntimeUrl(url) {
-  if (!isH5Runtime() || !url) return false;
+	if (!isH5Runtime() || !url) return false;
 
-  try {
-    const target = new URL(String(url), window.location.origin);
-    return !isLocalHostname(window.location.hostname) && isLocalHostname(target.hostname);
-  } catch (error) {
-    return false;
-  }
+	try {
+		const target = new URL(String(url), window.location.origin);
+		return !isLocalHostname(window.location.hostname) && isLocalHostname(target.hostname);
+	} catch (error) {
+		return false;
+	}
 }
 
 function normalizeBaseUrl(url, fallback = '') {
-  if (!url) return fallback
-  return String(url).replace(/\/+$/, '')
+	if (!url) return fallback
+	return String(url).replace(/\/+$/, '')
 }
 
 function getEnvValue(key) {
-  let value = ''
-  // #ifdef VITE
-  value = import.meta.env?.[key] || ''
-  // #endif
-  return value
+	let value = ''
+	// #ifdef VITE
+	value = import.meta.env?.[key] || ''
+	// #endif
+	return value
 }
 
 function getRuntimeValue(key) {
-  try {
-    return uni.getStorageSync(key)
-  } catch (error) {
-    return ''
-  }
+	try {
+		return uni.getStorageSync(key)
+	} catch (error) {
+		return ''
+	}
 }
 
 function resolveBaseUrl(runtimeKey, envValue, fallback) {
-  const rawRuntimeValue = uni.getStorageSync(runtimeKey);
-  const runtimeValue = shouldIgnoreRuntimeUrl(rawRuntimeValue) ? '' : rawRuntimeValue;
-  const resolved = normalizeBaseUrl(runtimeValue || envValue || fallback, fallback);
-  const source = runtimeValue ? 'runtime' : (envValue ? 'env' : 'default');
-  return {
-    value: resolved,
-    source,
-    runtimeValue: normalizeBaseUrl(rawRuntimeValue || ''),
-    envValue: normalizeBaseUrl(envValue || ''),
-    fallback: normalizeBaseUrl(fallback, fallback)
-  }
+	const rawRuntimeValue = uni.getStorageSync(runtimeKey);
+	const runtimeValue = shouldIgnoreRuntimeUrl(rawRuntimeValue) ? '' : rawRuntimeValue;
+	const resolved = normalizeBaseUrl(runtimeValue || envValue || fallback, fallback);
+	const source = runtimeValue ? 'runtime' : (envValue ? 'env' : 'default');
+	return {
+		value: resolved,
+		source,
+		runtimeValue: normalizeBaseUrl(rawRuntimeValue || ''),
+		envValue: normalizeBaseUrl(envValue || ''),
+		fallback: normalizeBaseUrl(fallback, fallback)
+	}
 }
 
 export const ENV_CONFIG = ENV_MAP
 
 export function getAppEnv() {
-  const runtimeEnv = getRuntimeValue(APP_ENV_KEY)
-  const envValue = getEnvValue('VITE_APP_ENV')
-  return runtimeEnv || envValue || APP_ENV.LOCAL
+	const envValue = getEnvValue('VITE_APP_ENV') || BUILD_APP_ENV
+	const runtimeEnv = getRuntimeValue(APP_ENV_KEY)
+	return envValue || runtimeEnv || APP_ENV.LOCAL
 }
 
 export function setAppEnv(env) {
-  if (!env) {
-    uni.removeStorageSync(APP_ENV_KEY)
-    return
-  }
-  uni.setStorageSync(APP_ENV_KEY, String(env))
+	if (!env) {
+		uni.removeStorageSync(APP_ENV_KEY)
+		return
+	}
+	uni.setStorageSync(APP_ENV_KEY, String(env))
 }
 
 export function clearAppEnv() {
-  uni.removeStorageSync(APP_ENV_KEY)
+	uni.removeStorageSync(APP_ENV_KEY)
 }
 
 export function getAppEnvConfig() {
-  const appEnv = getAppEnv()
-  return {
-    value: appEnv,
-    source: getRuntimeValue(APP_ENV_KEY) ? 'runtime' : (getEnvValue('VITE_APP_ENV') ? 'env' : 'default')
-  }
+	const appEnv = getAppEnv()
+	return {
+		value: appEnv,
+		source: getEnvValue('VITE_APP_ENV') ? 'env' : (getRuntimeValue(APP_ENV_KEY) ? 'runtime' : 'default')
+	}
 }
 
 function getEnvConfig() {
-  const env = String(getAppEnv() || '').toLowerCase()
-  return ENV_MAP[env] || ENV_MAP[APP_ENV.LOCAL]
+	const env = String(getAppEnv() || '').toLowerCase()
+	return ENV_MAP[env] || ENV_MAP[APP_ENV.LOCAL]
 }
 
 export function getApiBaseUrlConfig() {
-  const envConfig = getEnvConfig()
-  return resolveBaseUrl(API_BASE_URL_KEY, getEnvValue('VITE_API_BASE_URL') || envConfig.apiBaseUrl, envConfig.apiBaseUrl)
+	const envConfig = getEnvConfig()
+	return resolveBaseUrl(API_BASE_URL_KEY, getEnvValue('VITE_API_BASE_URL') || BUILD_API_BASE_URL || envConfig
+		.apiBaseUrl, envConfig.apiBaseUrl)
 }
 
 export function getApiBaseUrl() {
-  return getApiBaseUrlConfig().value
+	return getApiBaseUrlConfig().value
 }
 
 export function setApiBaseUrl(url) {
-  if (!url) {
-    uni.removeStorageSync(API_BASE_URL_KEY)
-    return
-  }
-  uni.setStorageSync(API_BASE_URL_KEY, normalizeBaseUrl(url))
+	if (!url) {
+		uni.removeStorageSync(API_BASE_URL_KEY)
+		return
+	}
+	uni.setStorageSync(API_BASE_URL_KEY, normalizeBaseUrl(url))
 }
 
 export function clearApiBaseUrl() {
-  uni.removeStorageSync(API_BASE_URL_KEY)
+	uni.removeStorageSync(API_BASE_URL_KEY)
 }
 
 export function getInviteWebBaseUrlConfig() {
-  const envConfig = getEnvConfig()
-  return resolveBaseUrl(INVITE_WEB_BASE_URL_KEY, getEnvValue('VITE_INVITE_WEB_BASE_URL') || envConfig.inviteWebBaseUrl, envConfig.inviteWebBaseUrl)
+	const envConfig = getEnvConfig()
+	return resolveBaseUrl(INVITE_WEB_BASE_URL_KEY, getEnvValue('VITE_INVITE_WEB_BASE_URL') || BUILD_INVITE_WEB_BASE_URL ||
+		envConfig.inviteWebBaseUrl, envConfig.inviteWebBaseUrl)
 }
 
 export function getInviteWebBaseUrl() {
-  return getInviteWebBaseUrlConfig().value
+	return getInviteWebBaseUrlConfig().value
 }
 
 export function setInviteWebBaseUrl(url) {
-  if (!url) {
-    uni.removeStorageSync(INVITE_WEB_BASE_URL_KEY)
-    return
-  }
-  uni.setStorageSync(INVITE_WEB_BASE_URL_KEY, normalizeBaseUrl(url))
+	if (!url) {
+		uni.removeStorageSync(INVITE_WEB_BASE_URL_KEY)
+		return
+	}
+	uni.setStorageSync(INVITE_WEB_BASE_URL_KEY, normalizeBaseUrl(url))
 }
 
 export function clearInviteWebBaseUrl() {
-  uni.removeStorageSync(INVITE_WEB_BASE_URL_KEY)
+	uni.removeStorageSync(INVITE_WEB_BASE_URL_KEY)
 }
