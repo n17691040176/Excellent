@@ -2,6 +2,27 @@ const API_BASE_URL_KEY = 'excellent_api_base_url'
 const INVITE_WEB_BASE_URL_KEY = 'excellent_invite_web_base_url'
 const APP_ENV_KEY = 'excellent_app_env'
 
+export const APP_ENV = {
+  LOCAL: 'local',
+  DEV: 'dev',
+  PROD: 'prod'
+}
+
+const ENV_MAP = {
+  [APP_ENV.LOCAL]: {
+    apiBaseUrl: 'http://127.0.0.1:8000',
+    inviteWebBaseUrl: 'http://127.0.0.1:5174'
+  },
+  [APP_ENV.DEV]: {
+    apiBaseUrl: 'http://156.238.241.213:8000',
+    inviteWebBaseUrl: 'http://156.238.241.213:5174'
+  },
+  [APP_ENV.PROD]: {
+    apiBaseUrl: '',
+    inviteWebBaseUrl: ''
+  }
+}
+
 function isH5Runtime() {
   return typeof window !== 'undefined' && typeof window.location !== 'undefined';
 }
@@ -21,20 +42,17 @@ function shouldIgnoreRuntimeUrl(url) {
   }
 }
 
-const DEFAULT_API_BASE_URL = isH5Runtime() ? '' : 'http://127.0.0.1:8000';
-const DEFAULT_INVITE_WEB_BASE_URL = 'http://127.0.0.1:8080';
 function normalizeBaseUrl(url, fallback = '') {
   if (!url) return fallback
   return String(url).replace(/\/+$/, '')
 }
 
 function getEnvValue(key) {
+  let value = ''
   // #ifdef VITE
-  return import.meta.env?.[key]
+  value = import.meta.env?.[key] || ''
   // #endif
-  // #ifndef VITE
-  return ''
-  // #endif
+  return value
 }
 
 function getRuntimeValue(key) {
@@ -59,11 +77,7 @@ function resolveBaseUrl(runtimeKey, envValue, fallback) {
   }
 }
 
-export const APP_ENV = {
-  LOCAL: 'local',
-  DEV: 'dev',
-  PROD: 'prod'
-}
+export const ENV_CONFIG = ENV_MAP
 
 export function getAppEnv() {
   const runtimeEnv = getRuntimeValue(APP_ENV_KEY)
@@ -92,7 +106,8 @@ export function getAppEnvConfig() {
 }
 
 function getEnvConfig() {
-  return ENV_MAP[getAppEnv()] || ENV_MAP.local
+  const env = String(getAppEnv() || '').toLowerCase()
+  return ENV_MAP[env] || ENV_MAP[APP_ENV.LOCAL]
 }
 
 export function getApiBaseUrlConfig() {
