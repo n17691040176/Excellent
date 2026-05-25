@@ -35,6 +35,13 @@
     roles: ['SUPER_ADMIN', 'TEAM_ADMIN']
   },
   {
+    path: '/orders',
+    name: 'Orders',
+    title: '订单管理',
+    icon: 'Memo',
+    roles: ['SUPER_ADMIN', 'TEAM_ADMIN']
+  },
+  {
     path: '/commission',
     name: 'Commission',
     title: '返现管理',
@@ -75,6 +82,13 @@
     title: '本地生活',
     icon: 'Location',
     roles: ['SUPER_ADMIN', 'TEAM_ADMIN']
+  },
+  {
+    path: '/system/earning-rules',
+    name: 'EarningRules',
+    title: '收益规则',
+    icon: 'Coin',
+    roles: ['SUPER_ADMIN']
   },
   {
     path: '/system/roles',

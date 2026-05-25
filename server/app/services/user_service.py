@@ -1,11 +1,19 @@
 from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
+from app.api.v1.mobile_serializers import (
+    serialize_address,
+    serialize_cart_item,
+    serialize_favorite_product,
+    serialize_footprint,
+)
 from app.core.exceptions import NotFoundError
+from app.models.address import UserAddress
 from app.models.asset import UserAssetAccount, UserAssetLedger, UserPowerBank
+from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
 from app.models.enums import GlobalRole, UserStatus
 from app.models.order import Order
-from app.models.user import InviteRecord, User, UserLegacyProfile
+from app.models.user import User, UserLegacyProfile
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 
@@ -179,6 +187,25 @@ class UserService:
         AssetService.settle_power_bank_income(db, user.id)
         asset_rows = db.query(UserAssetAccount).filter(UserAssetAccount.user_id == user.id).all()
         power_banks = db.query(UserPowerBank).filter(UserPowerBank.user_id == user.id).order_by(UserPowerBank.id.desc()).all()
+        addresses = db.query(UserAddress).filter(UserAddress.user_id == user.id).order_by(UserAddress.id.desc()).all()
+        favorite_total = int(db.query(func.count(UserFavoriteProduct.id)).filter(UserFavoriteProduct.user_id == user.id).scalar() or 0)
+        footprint_total = int(db.query(func.count(UserProductFootprint.id)).filter(UserProductFootprint.user_id == user.id).scalar() or 0)
+        cart_total = int(db.query(func.count(ShoppingCartItem.id)).filter(ShoppingCartItem.user_id == user.id).scalar() or 0)
+        cart_selected_total = int(
+            db.query(func.count(ShoppingCartItem.id)).filter(
+                ShoppingCartItem.user_id == user.id,
+                ShoppingCartItem.selected.is_(True),
+            ).scalar() or 0
+        )
+        favorites = db.query(UserFavoriteProduct).filter(UserFavoriteProduct.user_id == user.id).order_by(UserFavoriteProduct.id.desc()).limit(20).all()
+        footprints = db.query(UserProductFootprint).filter(UserProductFootprint.user_id == user.id).order_by(
+            UserProductFootprint.last_viewed_at.desc(),
+            UserProductFootprint.id.desc(),
+        ).limit(20).all()
+        cart_items = db.query(ShoppingCartItem).filter(ShoppingCartItem.user_id == user.id).order_by(
+            ShoppingCartItem.updated_at.desc(),
+            ShoppingCartItem.id.desc(),
+        ).limit(20).all()
         asset_summary = {
             account.asset_type.value: {
                 'total_amount': float(account.total_amount),
@@ -263,6 +290,18 @@ class UserService:
                 **invite_summary,
                 'total_count': invite_summary['level1_count'] + invite_summary['level2_count'],
             },
+            'commerce_summary': {
+                'address_count': len(addresses),
+                'default_address_count': len([item for item in addresses if item.is_default]),
+                'favorite_count': favorite_total,
+                'footprint_count': footprint_total,
+                'cart_item_count': cart_total,
+                'cart_selected_count': cart_selected_total,
+            },
+            'addresses': [serialize_address(item) for item in addresses],
+            'favorites': [serialize_favorite_product(db, item) for item in favorites],
+            'footprints': [serialize_footprint(db, item) for item in footprints],
+            'cart_items': [serialize_cart_item(db, item) for item in cart_items],
         }
 
     @staticmethod

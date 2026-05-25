@@ -10,8 +10,9 @@
     />
 
     <template v-else>
-      <view class="card">
-        <view class="row-between section-row">
+      <view class="card hero-card">
+        <view class="hero-tag">资产中心</view>
+        <view class="row-between mt-12 section-row">
           <view>
             <view class="section-title slim-title">资产明细</view>
             <view class="muted">按资产分类查看账户余额和每一笔变动</view>
@@ -115,7 +116,7 @@
         </view>
       </view>
 
-      <view v-if="isPowerBankTab" class="card mt-24">
+      <view v-if="isPowerBankTab" class="card mt-24 power-card">
         <view class="row-between section-row">
           <view class="section-title slim-title">{{ powerBankSectionTitle }}</view>
           <view class="muted">{{ powerBanks.length }} 台</view>
@@ -666,6 +667,24 @@ onReachBottom(() => {
   padding-bottom: 36rpx;
 }
 
+.hero-card {
+  background:
+    radial-gradient(circle at 95% 8%, rgba(255, 166, 82, 0.16), transparent 36%),
+    linear-gradient(180deg, #fffdf9 0%, #fff6ec 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+}
+
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+
 .slim-title {
   margin-bottom: 0;
 }
@@ -691,9 +710,9 @@ onReachBottom(() => {
 }
 
 .tab-chip.active {
-  background: #bf8752;
+  background: linear-gradient(135deg, #ff7a00, #ff5f3d);
   color: #ffffff;
-  border-color: #bf8752;
+  border-color: transparent;
 }
 
 .detail-stat-grid {
@@ -718,7 +737,7 @@ onReachBottom(() => {
 .detail-stat-value {
   margin-top: 10rpx;
   font-size: 30rpx;
-  font-weight: 800;
+  font-weight: 900;
   color: #4f321a;
 }
 
@@ -752,11 +771,6 @@ onReachBottom(() => {
   font-size: 21rpx;
   line-height: 1.55;
   color: #8d745d;
-}
-
-.withdraw-head {
-  gap: 16rpx;
-  align-items: flex-start;
 }
 
 .withdraw-entry {
@@ -819,7 +833,7 @@ onReachBottom(() => {
 .detail-amount {
   flex-shrink: 0;
   font-size: 28rpx;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .detail-note {
@@ -835,13 +849,6 @@ onReachBottom(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12rpx;
-}
-
-.detail-meta-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6rpx 12rpx;
-  margin-top: 10rpx;
 }
 
 .detail-meta,
@@ -873,6 +880,7 @@ onReachBottom(() => {
   text-align: center;
 }
 
+.power-card { border: 1rpx solid rgba(255, 154, 106, 0.16); }
 .power-bank-status {
   padding: 6rpx 14rpx;
   border-radius: 999rpx;
@@ -902,7 +910,7 @@ onReachBottom(() => {
 }
 
 .amount-in {
-  color: #c96a14;
+  color: #ff6a00;
 }
 
 .amount-out {

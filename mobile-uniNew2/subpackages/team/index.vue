@@ -1,8 +1,9 @@
 <template>
   <view class="container team-page">
     <view class="card hero-card">
-      <view class="section-title">我的团队</view>
-      <view class="muted">查看团队规模、邀请层级和最近加入成员</view>
+      <view class="hero-tag">我的团队</view>
+      <view class="section-title mt-12">查看团队规模、邀请层级和最近加入成员</view>
+      <view class="muted">帮助你更快识别高活跃成员，跟踪拉新转化效果</view>
 
       <view class="grid-2 mt-20">
         <view class="stat">
@@ -147,22 +148,47 @@ onPullDownRefresh(async () => {
 
 .hero-card {
   background:
-    radial-gradient(circle at 95% 8%, rgba(255, 193, 120, 0.22), transparent 40%),
-    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
+    radial-gradient(circle at 95% 8%, rgba(255, 193, 120, 0.18), transparent 36%),
+    linear-gradient(180deg, #fffdf9 0%, #fff6ec 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-card::after {
+  content: '';
+  position: absolute;
+  right: -32rpx;
+  top: -30rpx;
+  width: 150rpx;
+  height: 150rpx;
+  border-radius: 50%;
+  background: rgba(255, 122, 0, 0.08);
+}
+
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
 }
 
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
 
 .stat {
-  border-radius: 16rpx;
+  border-radius: 18rpx;
   background: linear-gradient(180deg, #fffaf4 0%, #fbf2e7 100%);
   padding: 14rpx;
   border: 1rpx solid rgba(198, 161, 124, 0.16);
 }
 
-.num { font-size: 34rpx; color: #b85d11; font-weight: 800; }
+.num { font-size: 34rpx; color: #ff6a00; font-weight: 900; }
 .label { margin-top: 4rpx; font-size: 22rpx; color: #8b7158; }
 .member-list { display: flex; flex-direction: column; gap: 16rpx; }
-.member-card { border-radius: 22rpx; }
-.name { font-size: 30rpx; font-weight: 700; color: #4f321a; }
+.member-card { border-radius: 22rpx; border: 1rpx solid rgba(255, 154, 106, 0.16); }
+.name { font-size: 30rpx; font-weight: 800; color: #4f321a; }
 </style>

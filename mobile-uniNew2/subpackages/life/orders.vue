@@ -1,8 +1,9 @@
 <template>
   <view class="container life-orders-page">
-    <view class="card">
-      <view class="section-title">本地生活订单</view>
-      <view class="muted">预约、上门、完成等状态统一查看</view>
+    <view class="card hero-card">
+      <view class="hero-tag">本地生活订单</view>
+      <view class="section-title mt-12">预约、上门、完成等状态统一查看</view>
+      <view class="muted">统一跟踪每一笔生活服务订单的进度</view>
     </view>
 
     <StateView v-if="loading && !list.length" title="加载中..." custom-class="mt-24" />
@@ -100,7 +101,23 @@ onReachBottom(() => {
 <style scoped>
 @import '@/styles/common.css';
 .life-orders-page { padding-bottom: 36rpx; }
-.order-item { margin-bottom: 16rpx; }
+.hero-card {
+  background:
+    radial-gradient(circle at 96% 8%, rgba(255, 166, 82, 0.16), transparent 38%),
+    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+.order-item { margin-bottom: 16rpx; border: 1rpx solid rgba(255, 154, 106, 0.16); }
 .no { font-size: 23rpx; color: #667a71; }
 .name { margin-top: 12rpx; font-size: 30rpx; font-weight: 700; color: #173a2a; }
 .state-card { text-align: center; }

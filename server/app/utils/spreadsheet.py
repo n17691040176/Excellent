@@ -72,8 +72,8 @@ def _read_xlsx_rows(data: bytes) -> list[list[str]]:
 
         normalized_rows: list[list[str]] = []
         width = max_index + 1
-        for row in parsed_rows:
-            normalized_rows.append([row.get(index, '') for index in range(width)])
+        for parsed_row in parsed_rows:
+            normalized_rows.append([parsed_row.get(index, '') for index in range(width)])
         return normalized_rows
 
 

@@ -17,7 +17,7 @@
           <el-input v-model="form.password" type="password" show-password placeholder="请输入密码" size="large" />
         </el-form-item>
         <el-button type="primary" size="large" class="submit-btn" :loading="loading" @click="handleSubmit">进入后台</el-button>
-        <div class="hint-text">默认超级管理员：18800000000 / Admin@123</div>
+        <div class="hint-text">请使用已分配的管理员账号登录</div>
       </el-form>
     </div>
   </div>
@@ -34,8 +34,8 @@ const userStore = useUserStore()
 const formRef = ref()
 const loading = ref(false)
 const form = reactive({
-  phone: '18800000000',
-  password: 'Admin@123'
+  phone: '',
+  password: ''
 })
 
 const rules = {

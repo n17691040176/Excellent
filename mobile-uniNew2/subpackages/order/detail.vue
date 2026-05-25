@@ -7,20 +7,27 @@
     </view>
     <template v-else>
       <view class="card head-card">
-        <view class="row-between">
-          <view class="section-title">订单详情</view>
+        <view class="head-tag">订单中心</view>
+        <view class="row-between mt-12">
+          <view class="section-title no-margin">订单详情</view>
           <view class="badge" :class="badgeClass">{{ detail.status }}</view>
         </view>
-        <view class="muted">订单号：{{ detail.no }}</view>
-        <view class="price mt-16">¥{{ detail.amount }}</view>
+        <view class="muted mt-8">订单号：{{ detail.no }}</view>
+        <view class="price-row mt-16">
+          <view>
+            <view class="price-label">订单总额</view>
+            <view class="price">¥{{ detail.amount }}</view>
+          </view>
+          <view class="pay-status-pill">{{ detail.payStatus }}</view>
+        </view>
 
-        <view class="row-between mt-16">
+        <view class="service-strip mt-16">
           <view class="service-pill">{{ detail.channel }}</view>
-          <view class="service-pill">{{ detail.payStatus }}</view>
+          <view class="service-pill">{{ detail.paymentCombo }}</view>
         </view>
       </view>
 
-      <view class="card mt-20">
+      <view class="card mt-20 info-card">
         <view class="section-title">支付信息</view>
         <view class="info-row">
           <text>支付组合</text>
@@ -34,7 +41,7 @@
           <text>资产抵扣</text>
           <text>-¥{{ detail.discountAmount }}</text>
         </view>
-        <view class="info-row">
+        <view class="info-row strong">
           <text>待支付金额</text>
           <text>¥{{ detail.cashDue }}</text>
         </view>
@@ -73,6 +80,7 @@
 import { computed, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { orderApi } from '@/api/modules';
+import { requestPayment as requestPlatformPayment } from '@/utils/payment';
 import { trackPageView } from '@/utils/track';
 
 const loading = ref(false);
@@ -183,11 +191,29 @@ async function payOrder() {
       uni.showToast({ title: '当前订单暂无可用支付方式', icon: 'none' });
       return;
     }
-    await orderApi.pay(id.value, {
+    const result = await orderApi.pay(id.value, {
       pay_channel: payChannel,
       auto_complete: true
     });
-    uni.showToast({ title: '支付完成', icon: 'success' });
+    const payment = result?.payment;
+    if (payment?.status === 'PAID') {
+      uni.showToast({ title: '支付完成', icon: 'success' });
+      await loadDetail();
+      return;
+    }
+    try {
+      const platformResult = await requestPlatformPayment(payment);
+      uni.showToast({
+        title: platformResult?.mocked ? '支付单已创建' : '支付已提交',
+        icon: platformResult?.mocked ? 'none' : 'success'
+      });
+    } catch (error) {
+      const errMsg = String(error?.errMsg || error?.message || '');
+      uni.showToast({
+        title: errMsg.includes('cancel') ? '已取消支付' : '支付失败',
+        icon: 'none'
+      });
+    }
     await loadDetail();
   } finally {
     paying.value = false;
@@ -213,11 +239,52 @@ onLoad((query) => {
 .detail-page { padding-bottom: 36rpx; }
 .head-card {
   background:
-    radial-gradient(circle at 96% 8%, rgba(255, 166, 82, 0.22), transparent 42%),
-    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
+    radial-gradient(circle at 96% 8%, rgba(255, 166, 82, 0.18), transparent 38%),
+    linear-gradient(180deg, #fffdf9 0%, #fff6ec 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+  position: relative;
+  overflow: hidden;
 }
-.price { font-size: 42rpx; color: #c96a14; font-weight: 800; }
+.head-card::after {
+  content: '';
+  position: absolute;
+  right: -30rpx;
+  top: -30rpx;
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 50%;
+  background: rgba(255, 122, 0, 0.08);
+}
+.head-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+.no-margin { margin-bottom: 0; }
+.price-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.price-label { font-size: 22rpx; color: #8b7158; }
+.price { font-size: 42rpx; color: #ff6a00; font-weight: 900; }
+.pay-status-pill {
+  padding: 10rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 122, 0, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+.service-strip { display: flex; flex-wrap: wrap; gap: 10rpx; }
 .service-pill { padding: 6rpx 12rpx; border-radius: 999rpx; background: #fbf3ea; color: #9f6736; font-size: 20rpx; }
+.info-card { border: 1rpx solid rgba(255, 154, 106, 0.16); }
 .info-row {
   display: flex;
   align-items: center;
@@ -227,6 +294,7 @@ onLoad((query) => {
   font-size: 24rpx;
   color: #6b4a2f;
 }
+.info-row.strong { color: #ff6a00; font-weight: 800; }
 .payment-note {
   margin-top: 18rpx;
   padding: 18rpx;
@@ -240,13 +308,14 @@ onLoad((query) => {
   margin-top: 16rpx;
   padding: 18rpx;
   border-radius: 18rpx;
-  background: #fcf7f0;
+  background: linear-gradient(180deg, #fffaf7, #fff2e8);
+  border: 1rpx solid rgba(255, 154, 106, 0.12);
 }
-.goods-title { font-size: 26rpx; color: #4f321a; font-weight: 700; }
+.goods-title { font-size: 26rpx; color: #4f321a; font-weight: 800; }
 .goods-meta { margin-top: 8rpx; color: #8b7158; font-size: 22rpx; }
 .timeline { display: flex; gap: 12rpx; margin-top: 16rpx; }
 .dot { width: 16rpx; height: 16rpx; border-radius: 50%; background: #e6cfb6; margin-top: 10rpx; }
-.dot.active { background: #c96a14; }
+.dot.active { background: #ff6a00; }
 .t-title { font-size: 26rpx; color: #4f321a; }
 .t-time { margin-top: 4rpx; color: #8b7158; font-size: 22rpx; }
 .action-wrap { display: flex; gap: 16rpx; }

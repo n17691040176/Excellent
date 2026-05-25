@@ -46,14 +46,22 @@
                 "dSYMs" : false
             },
             /* SDK配置 */
-            "sdkConfigs" : {}
+            "sdkConfigs" : {
+                "share" : {
+                    "weixin" : {
+                        "appid" : "",
+                        "UniversalLinks" : ""
+                    }
+                }
+            }
         }
     },
     /* 快应用特有相关 */
     "quickapp" : {},
     /* 小程序特有相关 */
     "mp-weixin" : {
-        "appid" : "",
+        "appid" : "wx7866a1515b865305",
+        "navigateToMiniProgramAppIdList" : [ "wx7866a1515b865305" ],
         "setting" : {
             "urlCheck" : false
         },

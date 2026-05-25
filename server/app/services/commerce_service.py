@@ -14,7 +14,6 @@ from app.services.catalog_service import ProductService
 from app.services.order_service import OrderService
 from app.utils.helpers import now, quantize_amount
 
-
 ZONE_ORDER_TYPE_MAP = {
     ZoneType.REPURCHASE: OrderType.REPURCHASE_ORDER,
     ZoneType.SELF_OPERATED: OrderType.SELF_OPERATED_ORDER,

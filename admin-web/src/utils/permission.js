@@ -9,6 +9,7 @@ export const PERMISSION_MATRIX = {
   TEAM_ADMIN: [
     'dashboard:view',
     'users:view',
+    'users:manage-commerce',
     'teams:view',
     'teams:edit',
     'packages:view',
@@ -20,6 +21,8 @@ export const PERMISSION_MATRIX = {
     'products:edit',
     'products:submit-review',
     'products:shelf',
+    'orders:view',
+    'orders:manage',
     'commission:view',
     'withdraws:view',
     'withdraws:review',

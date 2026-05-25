@@ -1,7 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 from random import choices
 from string import ascii_uppercase, digits
 from uuid import uuid4

@@ -37,6 +37,27 @@ export const userApi = {
   updateStatus(id, data) {
     return request.patch(`/api/v1/admin/users/${id}/status`, data)
   },
+  createAddress(id, data) {
+    return request.post(`/api/v1/admin/users/${id}/addresses`, data)
+  },
+  updateAddress(id, addressId, data) {
+    return request.put(`/api/v1/admin/users/${id}/addresses/${addressId}`, data)
+  },
+  deleteAddress(id, addressId) {
+    return request.delete(`/api/v1/admin/users/${id}/addresses/${addressId}`)
+  },
+  setDefaultAddress(id, addressId) {
+    return request.patch(`/api/v1/admin/users/${id}/addresses/${addressId}/default`)
+  },
+  deleteFavorite(id, productId) {
+    return request.delete(`/api/v1/admin/users/${id}/favorites/${productId}`)
+  },
+  deleteFootprint(id, productId) {
+    return request.delete(`/api/v1/admin/users/${id}/footprints/${productId}`)
+  },
+  deleteCartItem(id, itemId) {
+    return request.delete(`/api/v1/admin/users/${id}/cart-items/${itemId}`)
+  },
   inviteTree(id) {
     return request.get(`/api/v1/admin/users/${id}/invite-tree`)
   },
@@ -87,6 +108,24 @@ export const packageApi = {
   }
 }
 
+export const orderApi = {
+  list(params) {
+    return request.get('/api/v1/admin/orders', { params })
+  },
+  detail(id) {
+    return request.get(`/api/v1/admin/orders/${id}`)
+  },
+  markPaid(id) {
+    return request.post(`/api/v1/admin/orders/${id}/pay`)
+  },
+  confirm(id) {
+    return request.post(`/api/v1/admin/orders/${id}/confirm`)
+  },
+  close(id) {
+    return request.post(`/api/v1/admin/orders/${id}/close`)
+  }
+}
+
 export const commissionApi = {
   config() {
     return request.get('/api/v1/admin/commission/config')
@@ -105,6 +144,24 @@ export const commissionApi = {
   },
   rejectWithdraw(id) {
     return request.patch(`/api/v1/admin/withdraws/${id}/reject`)
+  }
+}
+
+export const earningRuleApi = {
+  list(params) {
+    return request.get('/api/v1/admin/earning-rules', { params })
+  },
+  create(data) {
+    return request.post('/api/v1/admin/earning-rules', data)
+  },
+  update(id, data) {
+    return request.put(`/api/v1/admin/earning-rules/${id}`, data)
+  },
+  updateStatus(id, data) {
+    return request.patch(`/api/v1/admin/earning-rules/${id}/status`, data)
+  },
+  remove(id) {
+    return request.delete(`/api/v1/admin/earning-rules/${id}`)
   }
 }
 

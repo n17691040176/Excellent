@@ -1,55 +1,90 @@
 <template>
-  <view class="container packages-page">
-    <view class="filter-strip">
-      <view
-        v-for="item in quickFilters"
-        :key="item.value"
-        class="filter-chip interactive"
-        :class="{ active: activeQuickFilter === item.value }"
-        @click="selectQuickFilter(item.value)"
-      >
-        {{ item.label }}
+  <view class="packages-page">
+    <view class="packages-topbar">
+      <view class="brand-wrap">
+        <view class="brand-mark">ZK</view>
+        <view class="brand-name">ZKMALL</view>
+      </view>
+      <view class="page-title">分类</view>
+      <view class="topbar-spacer" />
+    </view>
+
+    <view class="search-shell">
+      <view class="search-field">
+        <view class="search-icon">搜</view>
+        <input
+          v-model.trim="searchKeyword"
+          class="search-input"
+          placeholder="请输入关键词"
+          confirm-type="search"
+          @confirm="submitSearch"
+        />
+        <view class="search-btn interactive" @click="submitSearch">搜索</view>
       </view>
     </view>
 
-    <StateView v-if="loading" title="商品加载中..." custom-class="mt-20" />
-    <StateView
+    <view v-if="loading" class="catalog-shell catalog-shell-state">
+      <StateView title="商品加载中..." custom-class="catalog-state-card" />
+    </view>
+    <view
       v-else-if="failed"
-      title="商品加载失败，请重试"
-      :show-retry="true"
-      custom-class="mt-20"
-      @retry="fetchList"
-    />
-    <StateView
-      v-else-if="!filteredGoods.length"
-      title="暂无商品"
-      description="切换筛选条件后再试试看"
-      custom-class="mt-20"
-    />
+      class="catalog-shell catalog-shell-state"
+    >
+      <StateView
+        title="商品加载失败，请重试"
+        :show-retry="true"
+        custom-class="catalog-state-card"
+        @retry="fetchList"
+      />
+    </view>
+    <view
+      v-else-if="!categories.length"
+      class="catalog-shell catalog-shell-state"
+    >
+      <StateView
+        title="暂无分类商品"
+        description="换个关键词再试试"
+        custom-class="catalog-state-card"
+      />
+    </view>
 
-    <view v-else class="goods-grid mt-20">
-      <view
-        v-for="item in filteredGoods"
-        :key="item.id"
-        class="goods-card interactive"
-        @click="goDetail(item.id)"
-      >
-        <image v-if="item.image" class="goods-cover" :src="item.image" mode="aspectFill" lazy-load />
-        <view v-else class="goods-cover goods-cover-fallback" />
+    <view v-else class="catalog-shell">
+      <view class="category-rail">
+        <view
+          v-for="item in categories"
+          :key="item.key"
+          class="category-item interactive"
+          :class="{ active: item.key === selectedCategory }"
+          @click="selectCategory(item.key)"
+        >
+          <view class="category-item-text">{{ item.label }}</view>
+        </view>
+      </view>
 
-        <view class="goods-body">
-          <view class="goods-tag-row">
-            <text class="goods-tag">{{ item.tag }}</text>
-            <text v-if="item.quickTag" class="goods-quick-tag">{{ item.quickTag }}</text>
-          </view>
-          <view class="goods-title">{{ item.title }}</view>
-          <view class="goods-desc">{{ item.desc }}</view>
-          <view class="goods-foot">
-            <view class="ecom-price">
-              <view class="ecom-price-main">¥{{ item.price }}</view>
-              <view class="ecom-price-origin" v-if="item.originPrice">¥{{ item.originPrice }}</view>
+      <view class="goods-panel">
+        <view class="goods-matrix">
+          <view
+            v-for="item in currentCategoryGoods"
+            :key="item.id"
+            class="goods-tile interactive"
+            @click="goDetail(item.id)"
+          >
+            <view class="goods-visual">
+              <image
+                v-if="item.image"
+                class="goods-image"
+                :src="item.image"
+                mode="aspectFit"
+                lazy-load
+              />
+              <view v-else class="goods-image-fallback">{{ item.fallbackLabel }}</view>
             </view>
+            <view class="goods-name">{{ item.title }}</view>
           </view>
+        </view>
+
+        <view v-if="!currentCategoryGoods.length" class="panel-empty">
+          当前分类暂无商品
         </view>
       </view>
     </view>
@@ -57,7 +92,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import StateView from '@/components/StateView.vue';
 import { packageApi } from '@/api/modules';
 import { getApiBaseUrl } from '@/config/index';
@@ -65,17 +100,13 @@ import { trackEvent, trackPageView } from '@/utils/track';
 
 const LEGACY_FILE_BASE_URL = 'https://file.hoh516.com/huohonghuo';
 
-const quickFilters = [
-  { value: 'all', label: '全部商品' },
-  { value: 'new', label: '新品优先' },
-  { value: 'value', label: '高性价比' },
-  { value: 'premium', label: '品质精选' }
-];
-
 const loading = ref(false);
 const failed = ref(false);
 const goods = ref([]);
-const activeQuickFilter = ref('all');
+const selectedCategory = ref('');
+const searchKeyword = ref('');
+
+const normalizeText = (value) => String(value ?? '').trim();
 
 const resolveImage = (value) => {
   if (!value) return '';
@@ -85,51 +116,79 @@ const resolveImage = (value) => {
   return value;
 };
 
-const filteredGoods = computed(() => {
-  const rows = [...goods.value];
+const normalizeCategory = (value) => {
+  const label = normalizeText(value);
+  return label || '精选分类';
+};
 
-  if (activeQuickFilter.value === 'new') {
-    return rows.sort((a, b) => b.rank - a.rank);
-  }
-
-  if (activeQuickFilter.value === 'value') {
-    return rows.sort((a, b) => a.price - b.price);
-  }
-
-  if (activeQuickFilter.value === 'premium') {
-    return rows.sort((a, b) => b.price - a.price);
-  }
-
-  return rows;
-});
+const buildFallbackLabel = (title) => {
+  const compact = normalizeText(title).replace(/\s+/g, '');
+  return (compact || '商品').slice(0, 2).toUpperCase();
+};
 
 const normalizeList = (res) => {
   const rows = Array.isArray(res) ? res : res?.items || res?.list || [];
   return rows.map((item, idx) => {
-    const price = Number(item.price ?? item.sale_price ?? 0);
-    const marketPrice = Number(item.market_price ?? 0);
-    const category = item.category_name || item.tag || '精选';
-    const rank = Number(item.sort ?? item.rank ?? rows.length - idx);
+    const title = normalizeText(item.name || item.title || `商品${idx + 1}`);
+    const desc = normalizeText(item.description || item.desc || '');
+    const categoryLabel = normalizeCategory(item.category_name || item.tag);
 
     return {
       id: item.id || item.product_id || `product-${idx}`,
-      title: item.name || item.title || '未命名商品',
-      desc: item.description || item.desc || '暂无描述',
-      price: Number(price.toFixed(2)),
-      originPrice: marketPrice > price ? marketPrice.toFixed(2) : '',
-      tag: item.tag || category,
-      rank,
-      quickTag: price >= 999 ? '甄选' : price <= 99 ? '实惠' : '',
-      image: resolveImage(item.image || item.main_image || item.cover || item.gallery?.[0])
+      title,
+      desc,
+      image: resolveImage(item.image || item.main_image || item.cover || item.gallery?.[0]),
+      categoryKey: categoryLabel,
+      categoryLabel,
+      fallbackLabel: buildFallbackLabel(title),
+      searchText: `${title} ${desc} ${categoryLabel}`.toLowerCase(),
     };
   });
 };
+
+const filteredGoods = computed(() => {
+  const keyword = normalizeText(searchKeyword.value).toLowerCase();
+  if (!keyword) return goods.value;
+  return goods.value.filter((item) => item.searchText.includes(keyword));
+});
+
+const categories = computed(() => {
+  const bucket = new Map();
+  filteredGoods.value.forEach((item) => {
+    if (!bucket.has(item.categoryKey)) {
+      bucket.set(item.categoryKey, {
+        key: item.categoryKey,
+        label: item.categoryLabel,
+      });
+    }
+  });
+  return Array.from(bucket.values());
+});
+
+watch(
+  categories,
+  (rows) => {
+    if (!rows.length) {
+      selectedCategory.value = '';
+      return;
+    }
+    if (!rows.some((item) => item.key === selectedCategory.value)) {
+      selectedCategory.value = rows[0].key;
+    }
+  },
+  { immediate: true }
+);
+
+const currentCategoryGoods = computed(() => {
+  if (!selectedCategory.value) return [];
+  return filteredGoods.value.filter((item) => item.categoryKey === selectedCategory.value);
+});
 
 const fetchList = async () => {
   loading.value = true;
   failed.value = false;
   try {
-    const res = await packageApi.list({ page: 1, page_size: 60 });
+    const res = await packageApi.list({ page: 1, page_size: 120 });
     goods.value = normalizeList(res);
   } catch (error) {
     failed.value = true;
@@ -139,14 +198,28 @@ const fetchList = async () => {
 };
 
 const goDetail = (id) => {
-  trackEvent('packages_click_item', { id, filter: activeQuickFilter.value });
+  trackEvent('packages_click_item', {
+    id,
+    category: selectedCategory.value,
+    keyword: normalizeText(searchKeyword.value),
+  });
   uni.navigateTo({ url: `/subpackages/package/detail?id=${id}` });
 };
 
-const selectQuickFilter = (value) => {
-  if (activeQuickFilter.value === value) return;
-  activeQuickFilter.value = value;
-  trackEvent('packages_select_filter', { filter: value });
+const selectCategory = (key) => {
+  if (selectedCategory.value === key) return;
+  selectedCategory.value = key;
+  trackEvent('packages_select_category', {
+    category: key,
+    keyword: normalizeText(searchKeyword.value),
+  });
+};
+
+const submitSearch = () => {
+  trackEvent('packages_search', {
+    keyword: normalizeText(searchKeyword.value),
+    result_count: filteredGoods.value.length,
+  });
 };
 
 onMounted(() => {
@@ -159,112 +232,249 @@ onMounted(() => {
 @import '@/styles/common.css';
 
 .packages-page {
-  padding-bottom: 36rpx;
+  min-height: calc(100vh - 24rpx);
+  padding: 16rpx 12rpx 30rpx;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 184, 125, 0.2), transparent 30%),
+    radial-gradient(circle at 100% 0%, rgba(255, 136, 88, 0.14), transparent 26%),
+    linear-gradient(180deg, #fff9f3 0%, #fff3e8 46%, #fffaf7 100%);
 }
 
-.filter-strip {
-  display: flex;
-  gap: 12rpx;
-  overflow-x: auto;
-  padding-bottom: 6rpx;
-}
-
-.filter-chip {
-  flex-shrink: 0;
-  padding: 14rpx 24rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 249, 242, 0.9);
-  color: #8d735a;
-  font-size: 24rpx;
-  border: 1rpx solid rgba(198, 161, 124, 0.16);
-}
-
-.filter-chip.active {
-  background: linear-gradient(135deg, rgba(201, 143, 88, 0.18), rgba(191, 127, 66, 0.1));
-  color: #a16532;
-  border-color: rgba(191, 127, 66, 0.24);
-  box-shadow: 0 10rpx 20rpx rgba(167, 109, 54, 0.08);
-}
-
-.goods-grid {
+.packages-topbar {
+  min-height: 72rpx;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18rpx;
-}
-
-.goods-card {
-  overflow: hidden;
-  border-radius: 24rpx;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1rpx solid rgba(198, 161, 124, 0.14);
-  box-shadow: 0 14rpx 28rpx rgba(146, 103, 63, 0.08);
-}
-
-.goods-cover {
-  width: 100%;
-  height: 260rpx;
-  display: block;
-  background: #f4eadf;
-}
-
-.goods-cover-fallback {
-  background: linear-gradient(135deg, #f1dec9, #e7c8a4 46%, #d8af83);
-}
-
-.goods-body {
-  padding: 16rpx 16rpx 18rpx;
-}
-
-.goods-tag-row {
-  display: flex;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 8rpx;
+  color: #222733;
 }
 
-.goods-tag,
-.goods-quick-tag {
+.brand-wrap {
   display: inline-flex;
   align-items: center;
-  height: 38rpx;
-  padding: 0 12rpx;
-  border-radius: 999rpx;
-  font-size: 20rpx;
+  gap: 8rpx;
+  justify-self: start;
 }
 
-.goods-tag {
-  color: #9a6333;
-  background: rgba(190, 133, 78, 0.12);
+.brand-mark {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fff1e2 0%, #ffe0bf 100%);
+  color: #ff7a00;
+  font-size: 18rpx;
+  font-weight: 900;
+  letter-spacing: 0.6rpx;
+  box-shadow: inset 0 0 0 1rpx rgba(255, 145, 53, 0.12);
 }
 
-.goods-quick-tag {
-  color: #fffaf4;
-  background: #bd7d44;
-}
-
-.goods-title {
-  margin-top: 12rpx;
-  min-height: 76rpx;
+.brand-name {
   font-size: 28rpx;
-  line-height: 1.35;
-  font-weight: 700;
-  color: #4f321b;
+  font-weight: 800;
+  letter-spacing: 0.4rpx;
+  color: #ff7a00;
 }
 
-.goods-desc {
-  margin-top: 8rpx;
-  min-height: 64rpx;
+.page-title {
+  justify-self: center;
+  font-size: 34rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.topbar-spacer {
+  width: 120rpx;
+  justify-self: end;
+}
+
+.search-shell {
+  margin-top: 14rpx;
+}
+
+.search-field {
+  min-height: 72rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 6rpx 8rpx 6rpx 16rpx;
+  border-radius: 999rpx;
+  background: transparent;
+  border: 1rpx solid rgba(206, 213, 222, 0.92);
+  box-shadow: none;
+}
+
+.search-icon {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b68866;
+  font-size: 18rpx;
+  font-weight: 700;
+  border: 1rpx solid rgba(192, 155, 123, 0.24);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 60rpx;
   font-size: 22rpx;
-  line-height: 1.45;
-  color: #856a53;
+  color: #5c412b;
+}
+
+.search-btn {
+  flex-shrink: 0;
+  min-width: 108rpx;
+  height: 56rpx;
+  border-radius: 999rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ff7a00, #ff5f1f);
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.catalog-shell {
+  margin-top: 18rpx;
+  display: grid;
+  grid-template-columns: 148rpx minmax(0, 1fr);
+  min-height: calc(100vh - 250rpx);
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+
+.catalog-shell-state {
+  display: block;
+  min-height: 520rpx;
+  padding: 12rpx 0 0;
+  box-sizing: border-box;
+}
+
+.category-rail {
+  padding: 18rpx 0;
+  background: linear-gradient(180deg, #f6f1ea 0%, #eee7de 100%);
+  border-right: 1rpx solid rgba(210, 186, 164, 0.24);
+}
+
+.category-item {
+  position: relative;
+  min-height: 78rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14rpx;
+  color: #7b6a5d;
+}
+
+.category-item.active {
+  color: #ff6a00;
+  font-weight: 700;
+  background: rgba(255, 138, 42, 0.08);
+}
+
+.category-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 16rpx;
+  bottom: 16rpx;
+  width: 6rpx;
+  border-radius: 0 999rpx 999rpx 0;
+  background: linear-gradient(180deg, #ff8a2a, #ff5f1f);
+}
+
+.category-item-text {
+  font-size: 24rpx;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.goods-panel {
+  padding: 18rpx 16rpx;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.goods-matrix {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16rpx 12rpx;
+}
+
+.goods-tile {
+  min-width: 0;
+}
+
+.goods-visual {
+  height: 118rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f4f4 100%);
+  border: 1rpx solid rgba(223, 223, 223, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.goods-image {
+  width: 100%;
+  height: 100%;
+}
+
+.goods-image-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ffd4a6, #ffb566 48%, #ff8a2a);
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+}
+
+.goods-name {
+  margin-top: 10rpx;
+  min-height: 56rpx;
+  font-size: 22rpx;
+  line-height: 1.3;
+  color: #5d4633;
+  text-align: center;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.goods-foot {
-  margin-top: 14rpx;
+.panel-empty {
+  padding: 120rpx 0;
+  text-align: center;
+  font-size: 24rpx;
+  color: #8e7560;
+}
+
+:deep(.catalog-state-card) {
+  background: transparent;
+  border: 1rpx solid rgba(255, 160, 84, 0.24);
+  box-shadow: none;
+}
+
+:deep(.catalog-state-card .state-title) {
+  color: #4f321a;
+}
+
+:deep(.catalog-state-card .state-desc) {
+  color: #8e7560;
 }
 
 .interactive {

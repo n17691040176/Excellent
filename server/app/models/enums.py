@@ -1,4 +1,4 @@
-﻿from enum import StrEnum
+from enum import StrEnum
 
 
 class GlobalRole(StrEnum):
@@ -9,6 +9,9 @@ class GlobalRole(StrEnum):
 
 class BusinessIdentity(StrEnum):
     NORMAL_MEMBER = 'NORMAL_MEMBER'
+    VIP_MEMBER = 'VIP_MEMBER'
+    DEALER = 'DEALER'
+    MASTER_DEALER = 'MASTER_DEALER'
     SUPPLIER = 'SUPPLIER'
     COUNTY_AGENT = 'COUNTY_AGENT'
     CITY_AGENT = 'CITY_AGENT'
@@ -118,6 +121,18 @@ class PayStatus(StrEnum):
     UNPAID = 'UNPAID'
     PAID = 'PAID'
     REFUNDED = 'REFUNDED'
+
+
+class PaymentChannel(StrEnum):
+    WECHAT = 'WECHAT'
+    ALIPAY = 'ALIPAY'
+
+
+class PaymentStatus(StrEnum):
+    PENDING = 'PENDING'
+    PAID = 'PAID'
+    FAILED = 'FAILED'
+    CLOSED = 'CLOSED'
 
 
 class QualificationStatus(StrEnum):

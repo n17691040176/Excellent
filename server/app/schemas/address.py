@@ -1,4 +1,4 @@
-﻿from app.schemas.common import AppBaseModel
+from app.schemas.common import AppBaseModel
 
 
 class AddressCreateRequest(AppBaseModel):

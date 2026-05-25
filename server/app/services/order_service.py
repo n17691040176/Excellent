@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import cast
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
@@ -11,13 +12,13 @@ from app.models.enums import AssetType, OrderStatus, OrderType, PayStatus, Produ
 from app.models.order import Order, OrderAssetDeduction, OrderItem
 from app.models.product import Product, ProductZoneConfig
 from app.models.user import User
+from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 from app.services.catalog_service import ProductService
 from app.services.commission_service import CommissionService
 from app.utils.helpers import generate_order_no, now, quantize_amount
 
-
-INTERNAL_PAY_CHANNELS = {'BALANCE', 'VOUCHER'}
+INTERNAL_PAY_CHANNELS = {'BALANCE', 'VOUCHER', 'POINTS'}
 EXTERNAL_PAY_CHANNELS = {'WECHAT', 'ALIPAY'}
 SUPPORTED_PAY_CHANNELS = INTERNAL_PAY_CHANNELS | EXTERNAL_PAY_CHANNELS
 
@@ -36,6 +37,113 @@ PAY_CHANNEL_ASSET_MAP = {
 
 class OrderService:
     @staticmethod
+    def _base_admin_query(db: Session, current_user: User):
+        query = db.query(Order).join(User, User.id == Order.user_id)
+        if not AdminScopeService.is_super_admin(current_user):
+            team_id = AdminScopeService.require_team_id(current_user)
+            query = query.filter(Order.team_id == team_id)
+        return query
+
+    @staticmethod
+    def list_orders_for_admin(
+        db: Session,
+        current_user: User,
+        *,
+        keyword: str | None = None,
+        order_status: str | None = None,
+        pay_status: str | None = None,
+        order_type: str | None = None,
+        zone_type: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        query = OrderService._base_admin_query(db, current_user)
+
+        if keyword:
+            like = f'%{keyword.strip()}%'
+            query = query.filter(
+                or_(
+                    Order.order_no.ilike(like),
+                    User.phone.ilike(like),
+                    User.nickname.ilike(like),
+                )
+            )
+
+        if order_status:
+            query = query.filter(Order.order_status == OrderStatus(order_status))
+        if pay_status:
+            query = query.filter(Order.pay_status == PayStatus(pay_status))
+        if order_type:
+            query = query.filter(Order.order_type == OrderType(order_type))
+        if zone_type:
+            query = query.filter(Order.zone_type == ZoneType(zone_type))
+
+        safe_page = max(page, 1)
+        safe_page_size = max(1, min(page_size, 100))
+        total = query.order_by(None).count()
+        rows = (
+            query.order_by(Order.id.desc())
+            .offset((safe_page - 1) * safe_page_size)
+            .limit(safe_page_size)
+            .all()
+        )
+        return {
+            'items': rows,
+            'total': total,
+            'page': safe_page,
+            'page_size': safe_page_size,
+        }
+
+    @staticmethod
+    def get_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
+        order = db.get(Order, order_id)
+        if not order:
+            raise NotFoundError('Order not found')
+        AdminScopeService.ensure_team_visible(current_user, order.team_id)
+        return order
+
+    @staticmethod
+    def _confirm_order_instance(db: Session, order: Order) -> Order:
+        if order.pay_status != PayStatus.PAID:
+            raise ConflictError('Only paid orders can be confirmed')
+        if order.order_status == OrderStatus.CONFIRMED:
+            return order
+        if order.order_status == OrderStatus.CLOSED:
+            raise ConflictError('Closed order cannot be confirmed')
+        order.order_status = OrderStatus.CONFIRMED
+        order.confirmed_at = now()
+        db.commit()
+        CommissionService.settle_for_order(db, order.id)
+        db.refresh(order)
+        return order
+
+    @staticmethod
+    def confirm_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
+        order = OrderService.get_order_for_admin(db, order_id, current_user)
+        return OrderService._confirm_order_instance(db, order)
+
+    @staticmethod
+    def close_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
+        order = OrderService.get_order_for_admin(db, order_id, current_user)
+        if order.order_status == OrderStatus.CONFIRMED:
+            raise ConflictError('Confirmed order cannot be closed')
+        if order.pay_status == PayStatus.PAID:
+            raise ConflictError('Paid order cannot be closed directly')
+        if order.order_status == OrderStatus.CLOSED:
+            return order
+        order.order_status = OrderStatus.CLOSED
+        db.commit()
+        db.refresh(order)
+        return order
+
+    @staticmethod
+    def mark_paid_for_admin(db: Session, order_id: int, current_user: User) -> Order:
+        order = OrderService.get_order_for_admin(db, order_id, current_user)
+        if order.order_status == OrderStatus.CLOSED:
+            raise ConflictError('Closed order cannot be marked paid')
+        return OrderService._mark_paid(db, order)
+
+    @staticmethod
     def _zone_config_defaults(zone_type: ZoneType) -> dict:
         if zone_type == ZoneType.REPURCHASE:
             return {
@@ -46,6 +154,11 @@ class OrderService:
                 'ai_coupon_reward_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': False,
+                'points_only_enabled': False,
+                'points_cash_enabled': True,
+                'cash_only_enabled': True,
+                'balance_only_enabled': True,
+                'balance_points_enabled': True,
                 'flash_sale_enabled': False,
                 'per_user_limit': None,
             }
@@ -56,8 +169,13 @@ class OrderService:
                 'voucher_deduct_max_rate': Decimal('70'),
                 'ai_coupon_max_deduct_rate': Decimal('20'),
                 'ai_coupon_reward_rate': Decimal('20'),
-                'points_purchase_enabled': True,
-                'balance_purchase_enabled': True,
+                'points_purchase_enabled': False,
+                'balance_purchase_enabled': False,
+                'points_only_enabled': False,
+                'points_cash_enabled': True,
+                'cash_only_enabled': True,
+                'balance_only_enabled': True,
+                'balance_points_enabled': True,
                 'flash_sale_enabled': False,
                 'per_user_limit': None,
             }
@@ -70,6 +188,11 @@ class OrderService:
                 'ai_coupon_reward_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
+                'points_only_enabled': False,
+                'points_cash_enabled': True,
+                'cash_only_enabled': True,
+                'balance_only_enabled': True,
+                'balance_points_enabled': True,
                 'flash_sale_enabled': True,
                 'per_user_limit': 1,
             }
@@ -81,6 +204,11 @@ class OrderService:
             'ai_coupon_reward_rate': None,
             'points_purchase_enabled': True,
             'balance_purchase_enabled': True,
+            'points_only_enabled': False,
+            'points_cash_enabled': True,
+            'cash_only_enabled': True,
+            'balance_only_enabled': True,
+            'balance_points_enabled': True,
             'flash_sale_enabled': False,
             'per_user_limit': None,
         }
@@ -196,6 +324,51 @@ class OrderService:
         ]
 
     @staticmethod
+    def _config_value(config: ProductZoneConfig | None, zone_type: ZoneType, field: str):
+        default_value = OrderService._zone_config_defaults(zone_type).get(field)
+        if config and getattr(config, field, None) is not None:
+            return getattr(config, field)
+        return default_value
+
+    @staticmethod
+    def _purchase_mode(
+        total_amount: Decimal,
+        deductions_by_type: dict[AssetType, Decimal],
+        pay_channel: str,
+    ) -> str:
+        points_amount = quantize_amount(deductions_by_type.get(AssetType.POINTS, Decimal('0')))
+        non_points_amount = quantize_amount(
+            sum((amount for asset_type, amount in deductions_by_type.items() if asset_type != AssetType.POINTS), Decimal('0'))
+        )
+        total_deduction = quantize_amount(points_amount + non_points_amount)
+        cash_due = max(quantize_amount(total_amount) - total_deduction, Decimal('0'))
+        if points_amount > 0 and cash_due == 0 and non_points_amount == 0:
+            return 'POINTS_ONLY'
+        if points_amount > 0:
+            return 'POINTS_CASH'
+        return 'CASH_ONLY'
+
+    @staticmethod
+    def _validate_purchase_mode(
+        zone_type: ZoneType,
+        configs: list[ProductZoneConfig | None],
+        purchase_mode: str,
+    ) -> None:
+        field_map = {
+            'POINTS_ONLY': 'points_only_enabled',
+            'POINTS_CASH': 'points_cash_enabled',
+            'CASH_ONLY': 'cash_only_enabled',
+        }
+        field = field_map[purchase_mode]
+        if not all(bool(OrderService._config_value(config, zone_type, field)) for config in configs):
+            label = {
+                'POINTS_ONLY': 'pure points',
+                'POINTS_CASH': 'points + cash',
+                'CASH_ONLY': 'cash only',
+            }[purchase_mode]
+            raise ConflictError(f'Current product does not support {label} purchase')
+
+    @staticmethod
     def _get_default_address(db: Session, user_id: int) -> UserAddress | None:
         return db.query(UserAddress).filter(
             UserAddress.user_id == user_id,
@@ -231,41 +404,33 @@ class OrderService:
             allowed_assets.add(AssetType.BALANCE)
         if pay_channel == 'VOUCHER':
             allowed_assets.add(AssetType.VOUCHER)
+        if pay_channel == 'POINTS':
+            allowed_assets = {AssetType.POINTS}
 
         invalid_assets = set(deductions_by_type) - allowed_assets
         if invalid_assets:
             raise ConflictError('Current payment combination only supports points with selected pay channel')
 
-        if pay_channel in INTERNAL_PAY_CHANNELS and not deductions_by_type.get(PAY_CHANNEL_ASSET_MAP[pay_channel], Decimal('0')):
+        if pay_channel in PAY_CHANNEL_ASSET_MAP and not deductions_by_type.get(PAY_CHANNEL_ASSET_MAP[pay_channel], Decimal('0')):
             raise ConflictError('Internal payment channel must provide deduction amount')
+        if pay_channel == 'POINTS' and deductions_by_type.get(AssetType.POINTS, Decimal('0')) <= 0:
+            raise ConflictError('Points payment amount is required')
 
-        if zone_type == ZoneType.REPURCHASE and pay_channel != 'BALANCE':
-            raise ConflictError('Repurchase zone only supports balance + points')
+        if pay_channel == 'VOUCHER' and zone_type != ZoneType.SELF_OPERATED:
+            raise ConflictError('Voucher payment only supports self-operated zone')
 
-        if zone_type == ZoneType.SELF_OPERATED and pay_channel not in {'VOUCHER', 'WECHAT', 'ALIPAY'}:
-            raise ConflictError('Self-operated zone supports voucher + points or external pay + points')
-
-        if zone_type == ZoneType.HOT_SALE and pay_channel not in {'BALANCE', 'WECHAT', 'ALIPAY'}:
-            raise ConflictError('Hot sale zone supports balance + points or external pay + points')
-
-        if zone_type == ZoneType.LOCAL_LIFE and pay_channel not in {'BALANCE', 'WECHAT', 'ALIPAY'}:
-            raise ConflictError('Local life zone supports balance + points or external pay + points')
+        if (
+            pay_channel == 'BALANCE'
+            and zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED, ZoneType.LOCAL_LIFE, ZoneType.REPURCHASE}
+            and not all(bool(OrderService._config_value(config, zone_type, 'balance_purchase_enabled')) for config in configs)
+        ):
+            raise ConflictError('Balance payment is disabled for current product')
 
         points_amount = deductions_by_type.get(AssetType.POINTS, Decimal('0'))
         if points_amount > total_amount:
             raise ConflictError('Points deduction exceeds order total')
-
-        if zone_type in {ZoneType.HOT_SALE, ZoneType.REPURCHASE, ZoneType.SELF_OPERATED}:
-            points_enabled = bool(OrderService._resolve_config_value(configs, zone_type, 'points_purchase_enabled'))
-            if points_amount > 0 and not points_enabled:
-                raise ConflictError('Points payment is disabled for current product')
-
-        if pay_channel == 'BALANCE' and zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED, ZoneType.LOCAL_LIFE}:
-            balance_enabled = True
-            if zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED}:
-                balance_enabled = bool(OrderService._resolve_config_value(configs, zone_type, 'balance_purchase_enabled'))
-            if not balance_enabled:
-                raise ConflictError('Balance payment is disabled for current product')
+        if points_amount > 0 and not all(bool(OrderService._config_value(config, zone_type, 'points_purchase_enabled')) for config in configs):
+            raise ConflictError('Points payment is disabled for current product')
 
         voucher_amount = deductions_by_type.get(AssetType.VOUCHER, Decimal('0'))
         if pay_channel == 'VOUCHER' and voucher_amount <= 0:
@@ -274,6 +439,13 @@ class OrderService:
         total_deduction = sum(deductions_by_type.values(), Decimal('0.00'))
         if total_deduction > total_amount:
             raise ConflictError('Asset deductions exceed order total')
+        purchase_mode = OrderService._purchase_mode(total_amount, deductions_by_type, pay_channel)
+        OrderService._validate_purchase_mode(zone_type, configs, purchase_mode)
+        if pay_channel == 'BALANCE':
+            field = 'balance_points_enabled' if purchase_mode == 'POINTS_CASH' else 'balance_only_enabled'
+            if not all(bool(OrderService._config_value(config, zone_type, field)) for config in configs):
+                label = 'balance + points' if purchase_mode == 'POINTS_CASH' else 'balance only'
+                raise ConflictError(f'Current product does not support {label} purchase')
 
     @staticmethod
     def build_payment_plan(
@@ -301,11 +473,12 @@ class OrderService:
         if pay_channel in INTERNAL_PAY_CHANNELS and cash_due > 0:
             raise ConflictError('Selected internal assets are insufficient to complete payment')
 
-        payment_combo = (
-            ('EXTERNAL' if pay_channel in EXTERNAL_PAY_CHANNELS else pay_channel) + '+POINTS'
-            if points_amount > 0
-            else ('EXTERNAL' if pay_channel in EXTERNAL_PAY_CHANNELS else pay_channel)
-        )
+        purchase_mode = OrderService._purchase_mode(total_amount, deductions_by_type, pay_channel)
+        payment_combo = {
+            'POINTS_ONLY': 'POINTS',
+            'POINTS_CASH': 'POINTS+CASH',
+            'CASH_ONLY': 'CASH',
+        }[purchase_mode]
 
         return {
             'zone_type': zone_type,
@@ -315,6 +488,7 @@ class OrderService:
             'deductions_by_type': deductions_by_type,
             'pay_channel': pay_channel,
             'payment_combo': payment_combo,
+            'purchase_mode': purchase_mode,
             'requires_shipping': requires_shipping,
             'address_id': resolved_address_id,
         }
@@ -430,7 +604,7 @@ class OrderService:
         db.flush()
 
         for item in products_data:
-            product = item['product']
+            product = cast(Product, item['product'])
             product.stock -= item['quantity']
             product.sold_count += item['quantity']
             db.add(
@@ -542,12 +716,7 @@ class OrderService:
     @staticmethod
     def confirm_order(db: Session, user_id: int, order_id: int) -> Order:
         order = OrderService.get_order(db, user_id, order_id)
-        order.order_status = OrderStatus.CONFIRMED
-        order.confirmed_at = now()
-        db.commit()
-        CommissionService.settle_for_order(db, order.id)
-        db.refresh(order)
-        return order
+        return OrderService._confirm_order_instance(db, order)
 
     @staticmethod
     def preview_order_payment(
@@ -604,15 +773,17 @@ class OrderService:
             'cash_due': float(plan['cash_due']),
             'pay_channel': plan['pay_channel'],
             'payment_combo': plan['payment_combo'],
+            'purchase_mode': plan['purchase_mode'],
             'asset_deductions': [
                 {'asset_type': asset_type.value, 'amount': float(amount)}
                 for asset_type, amount in plan['deductions_by_type'].items()
             ],
             'pay_channel_options': [
-                {'value': 'BALANCE', 'label': '余额 + 积分'},
-                {'value': 'VOUCHER', 'label': '消费金 + 积分'},
-                {'value': 'WECHAT', 'label': '微信支付 + 积分'},
-                {'value': 'ALIPAY', 'label': '支付宝支付 + 积分'},
+                {'value': 'POINTS', 'label': '纯积分'},
+                {'value': 'BALANCE', 'label': '余额'},
+                {'value': 'VOUCHER', 'label': '消费金'},
+                {'value': 'WECHAT', 'label': '微信支付'},
+                {'value': 'ALIPAY', 'label': '支付宝支付'},
             ],
         }
 
@@ -643,10 +814,16 @@ class OrderService:
             order = OrderService._mark_paid(db, order, external_paid_amount=Decimal('0.00'))
             return {'order': order, 'payment': {'status': 'PAID', 'message': 'Internal asset payment completed'}}
 
-        payment = OrderService._build_external_payment_payload(order, resolved_channel)
-        if auto_complete:
-            order = OrderService._mark_paid(db, order, external_paid_amount=quantize_amount(order.payable_amount))
-            payment['status'] = 'PAID'
-            payment['message'] = 'Mock external payment completed'
-            payment['cash_due'] = 0
+        from app.services.payment_service import PaymentService
+
+        payment_result = PaymentService.prepare_external_payment(db, order, resolved_channel)
+        payment = payment_result['payment']
+        if auto_complete and payment.get('mocked'):
+            order = PaymentService.confirm_paid_order(db, payment_result['transaction'], notify_payload={'mocked': True})
+            payment = {
+                **payment,
+                'status': 'PAID',
+                'message': 'Mock external payment completed',
+                'cash_due': 0,
+            }
         return {'order': order, 'payment': payment}

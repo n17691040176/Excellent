@@ -112,9 +112,9 @@ function resolveBaseUrl(runtimeKey, envValue, fallback) {
 export const ENV_CONFIG = ENV_MAP
 
 export function getAppEnv() {
-	const envValue = getEnvValue('VITE_APP_ENV') || BUILD_APP_ENV
 	const runtimeEnv = getRuntimeValue(APP_ENV_KEY)
-	return envValue || runtimeEnv || APP_ENV.DEV
+	const envValue = getEnvValue('VITE_APP_ENV') || BUILD_APP_ENV
+	return runtimeEnv || envValue || APP_ENV.DEV
 }
 
 export function setAppEnv(env) {
@@ -130,10 +130,25 @@ export function clearAppEnv() {
 }
 
 export function getAppEnvConfig() {
-	const appEnv = getAppEnv()
+	const runtimeEnv = getRuntimeValue(APP_ENV_KEY)
+	if (runtimeEnv) {
+		return {
+			value: runtimeEnv,
+			source: 'runtime'
+		}
+	}
+
+	const envValue = getEnvValue('VITE_APP_ENV') || BUILD_APP_ENV
+	if (envValue) {
+		return {
+			value: envValue,
+			source: 'env'
+		}
+	}
+
 	return {
-		value: appEnv,
-		source: getEnvValue('VITE_APP_ENV') ? 'env' : (getRuntimeValue(APP_ENV_KEY) ? 'runtime' : 'default')
+		value: APP_ENV.DEV,
+		source: 'default'
 	}
 }
 
@@ -191,17 +206,15 @@ export function clearRuntimeConfig() {
 }
 
 export function syncRuntimeConfigFromBuild() {
-	clearRuntimeConfig()
-
-	if (BUILD_APP_ENV) {
+	if (BUILD_APP_ENV && !getRuntimeValue(APP_ENV_KEY)) {
 		setAppEnv(BUILD_APP_ENV)
 	}
 
-	if (BUILD_API_BASE_URL) {
+	if (BUILD_API_BASE_URL && !getRuntimeValue(API_BASE_URL_KEY)) {
 		setApiBaseUrl(BUILD_API_BASE_URL)
 	}
 
-	if (BUILD_INVITE_WEB_BASE_URL) {
+	if (BUILD_INVITE_WEB_BASE_URL && !getRuntimeValue(INVITE_WEB_BASE_URL_KEY)) {
 		setInviteWebBaseUrl(BUILD_INVITE_WEB_BASE_URL)
 	}
 

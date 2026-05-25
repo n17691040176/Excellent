@@ -60,10 +60,10 @@
         <view class="pay-options">
           <view
             v-for="item in paymentOptions"
-            :key="item.value"
+            :key="item.key"
             class="pay-option interactive"
-            :class="{ active: payChannel === item.value }"
-            @click="selectPayChannel(item.value)"
+            :class="{ active: selectedPayKey === item.key }"
+            @click="selectPaymentOption(item)"
           >
             <view class="pay-title">{{ item.label }}</view>
             <view class="pay-desc">{{ item.desc }}</view>
@@ -133,6 +133,7 @@ import { computed, ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { commerceApi, orderApi, packageApi } from '@/api/modules';
 import { getApiBaseUrl } from '@/config/index';
+import { requestPayment as requestPlatformPayment } from '@/utils/payment';
 import { trackEvent, trackPageView } from '@/utils/track';
 
 const LEGACY_FILE_BASE_URL = 'https://file.hoh516.com/huohonghuo';
@@ -144,6 +145,7 @@ const ORDER_TYPE_MAP = {
 };
 
 const PAYMENT_LABEL_MAP = {
+  POINTS: '纯积分',
   BALANCE: '余额',
   VOUCHER: '消费金',
   WECHAT: '微信支付',
@@ -151,6 +153,7 @@ const PAYMENT_LABEL_MAP = {
 };
 
 const PAYMENT_DESC_MAP = {
+  POINTS: '全部使用积分完成支付',
   BALANCE: '使用余额支付剩余金额',
   VOUCHER: '使用消费金支付剩余金额',
   WECHAT: '已预留微信支付接口',
@@ -165,6 +168,8 @@ const ordering = ref(false);
 const quantity = ref(1);
 const pointsAmount = ref('');
 const payChannel = ref('BALANCE');
+const purchaseMode = ref('CASH_ONLY');
+const selectedPayKey = ref('');
 const detail = ref({
   title: '',
   desc: '',
@@ -185,13 +190,37 @@ const detail = ref({
   defaultPayChannel: 'BALANCE'
 });
 
+function optionKey(item) {
+  return `${item.value || ''}|${item.purchase_mode || (item.supports_points ? 'POINTS_CASH' : 'CASH_ONLY')}`;
+}
+
+function paymentLabel(item, mode) {
+  if (item.label) return item.label;
+  if (item.value === 'BALANCE' && mode === 'POINTS_CASH') return '余额+积分支付';
+  if (item.value === 'BALANCE' && mode === 'CASH_ONLY') return '余额纯支付';
+  return `${PAYMENT_LABEL_MAP[item.value] || item.value}${item.supports_points ? ' + 积分' : ''}`;
+}
+
+function paymentDesc(item) {
+  if (item.desc) return item.desc;
+  return PAYMENT_DESC_MAP[item.value] || '按当前渠道支付';
+}
+
 const paymentOptions = computed(() => (
   Array.isArray(detail.value.paymentOptions) ? detail.value.paymentOptions : []
-).map((item) => ({
-  value: item.value,
-  label: `${PAYMENT_LABEL_MAP[item.value] || item.value}${item.supports_points ? ' + 积分' : ''}`,
-  desc: PAYMENT_DESC_MAP[item.value] || '按当前渠道支付'
-})));
+).map((item) => {
+  const mode = item.purchase_mode || (item.supports_points ? 'POINTS_CASH' : 'CASH_ONLY');
+  return {
+    key: optionKey({ ...item, purchase_mode: mode }),
+    value: item.value,
+    purchase_mode: mode,
+    supports_points: Boolean(item.supports_points),
+    label: paymentLabel(item, mode),
+    desc: paymentDesc(item)
+  };
+}));
+
+const selectedPaymentOption = computed(() => paymentOptions.value.find((item) => item.key === selectedPayKey.value) || paymentOptions.value[0] || null);
 
 const zoneLabel = computed(() => ({
   HOT_SALE: '爆款区',
@@ -205,9 +234,12 @@ const subtotal = computed(() => {
 });
 
 const normalizedPoints = computed(() => {
-  if (!detail.value.supportsPoints) return '0.00';
+  const option = selectedPaymentOption.value;
+  if (!option || option.purchase_mode === 'CASH_ONLY') return '0.00';
+  if (option.purchase_mode === 'POINTS_ONLY') return Number(subtotal.value).toFixed(2);
   const amount = Math.max(0, Number(pointsAmount.value || 0));
-  return Math.min(amount, Number(subtotal.value)).toFixed(2);
+  const maxPoints = Math.max(0, Number(subtotal.value) - 0.01);
+  return Math.min(amount, maxPoints).toFixed(2);
 });
 
 const cashAmount = computed(() => {
@@ -291,9 +323,9 @@ const loadProductStatus = async () => {
 watch(
   () => detail.value.defaultPayChannel,
   (value) => {
-    if (value) {
-      payChannel.value = value;
-    }
+    if (!value || selectedPayKey.value) return;
+    const option = paymentOptions.value.find((item) => item.value === value) || paymentOptions.value[0];
+    if (option) selectPaymentOption(option);
   },
   { immediate: true }
 );
@@ -302,8 +334,8 @@ watch(
   paymentOptions,
   (options) => {
     if (!options.length) return;
-    if (!options.some((item) => item.value === payChannel.value)) {
-      payChannel.value = options[0].value;
+    if (!options.some((item) => item.key === selectedPayKey.value)) {
+      selectPaymentOption(options[0]);
     }
   },
   { immediate: true }
@@ -342,13 +374,18 @@ function changeQuantity(delta) {
   quantity.value = next;
 }
 
-function selectPayChannel(value) {
-  payChannel.value = value;
+function selectPaymentOption(option) {
+  selectedPayKey.value = option.key;
+  payChannel.value = option.value;
+  purchaseMode.value = option.purchase_mode;
+  if (option.purchase_mode !== 'POINTS_CASH') {
+    pointsAmount.value = '';
+  }
 }
 
 function buildDeductions() {
   const rows = [];
-  const points = detail.value.supportsPoints ? Number(normalizedPoints.value) : 0;
+  const points = Number(normalizedPoints.value);
   const cash = Number(cashAmount.value);
   if (points > 0) {
     rows.push({ asset_type: 'POINTS', amount: points });
@@ -395,7 +432,7 @@ const createAndPay = async () => {
   }
   ordering.value = true;
   try {
-    trackEvent('package_detail_pay', { id: id.value, zone_type: detail.value.zoneType, pay_channel: payChannel.value });
+    trackEvent('package_detail_pay', { id: id.value, zone_type: detail.value.zoneType, pay_channel: payChannel.value, purchase_mode: purchaseMode.value });
     const order = await orderApi.create({
       order_type: orderType,
       zone_type: detail.value.zoneType,
@@ -404,14 +441,28 @@ const createAndPay = async () => {
       asset_deductions: buildDeductions()
     });
 
+    let toastTitle = '支付完成';
+    let toastIcon = 'success';
     if (['WECHAT', 'ALIPAY'].includes(payChannel.value)) {
-      await orderApi.pay(order.id || order.order_id, {
+      const payResult = await orderApi.pay(order.id || order.order_id, {
         pay_channel: payChannel.value,
         auto_complete: true
       });
+      const payment = payResult?.payment;
+      if (payment?.status !== 'PAID') {
+        try {
+          const platformResult = await requestPlatformPayment(payment);
+          toastTitle = platformResult?.mocked ? '支付单已创建' : '支付已提交';
+          toastIcon = platformResult?.mocked ? 'none' : 'success';
+        } catch (error) {
+          const errMsg = String(error?.errMsg || error?.message || '');
+          toastTitle = errMsg.includes('cancel') ? '已取消支付' : '支付失败';
+          toastIcon = 'none';
+        }
+      }
     }
 
-    uni.showToast({ title: '支付完成', icon: 'success' });
+    uni.showToast({ title: toastTitle, icon: toastIcon });
     setTimeout(() => {
       uni.navigateTo({ url: `/subpackages/order/detail?id=${order.id || order.order_id}` });
     }, 500);
@@ -430,18 +481,18 @@ const createAndPay = async () => {
 .media-card {
   position: relative;
   overflow: hidden;
-  border-radius: 30rpx;
-  background: linear-gradient(160deg, #f6e0c8, #ebc69d 48%, #d8a678);
+  border-radius: 34rpx;
+  background: linear-gradient(160deg, #fff2e2, #ffd2a9 48%, #ff9f62);
   box-shadow: 0 20rpx 40rpx rgba(152, 93, 42, 0.14);
 }
 .media-swiper, .hero-image, .media-fallback { width: 100%; height: 560rpx; }
 .hero-image, .media-fallback { display: block; }
-.media-fallback { background: linear-gradient(160deg, #f4e0c9, #e9c79e 48%, #d8ab7b); }
+.media-fallback { background: linear-gradient(160deg, #f7e0c7, #f0c892 48%, #e09d67); }
 .media-mask {
   position: absolute;
-  left: 20rpx;
-  right: 20rpx;
-  top: 20rpx;
+  left: 18rpx;
+  right: 18rpx;
+  top: 18rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -454,15 +505,16 @@ const createAndPay = async () => {
   font-size: 22rpx;
 }
 .intro-card { margin-top: 20rpx; }
-.title { font-size: 38rpx; line-height: 1.3; font-weight: 800; color: #4a2b13; }
+.title { font-size: 40rpx; line-height: 1.3; font-weight: 900; color: #4a2b13; }
 .desc { margin-top: 12rpx; font-size: 24rpx; line-height: 1.55; color: #7f6650; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 18rpx; }
 .highlight-chip {
   padding: 8rpx 16rpx;
   border-radius: 999rpx;
-  background: rgba(191, 134, 80, 0.1);
-  color: #9f6736;
+  background: rgba(255, 122, 0, 0.1);
+  color: #ff6a00;
   font-size: 22rpx;
+  font-weight: 700;
 }
 .price-row {
   margin-top: 22rpx;
@@ -473,13 +525,13 @@ const createAndPay = async () => {
 }
 .price-main-wrap { display: flex; align-items: baseline; gap: 6rpx; }
 .price-symbol { font-size: 26rpx; font-weight: 800; color: var(--brand-accent); }
-.price-main { font-size: 52rpx; line-height: 1; font-weight: 800; color: var(--brand-accent); }
+.price-main { font-size: 52rpx; line-height: 1; font-weight: 900; color: var(--brand-accent); }
 .price-origin { font-size: 22rpx; color: #b9a393; text-decoration: line-through; }
 .mini-tip { font-size: 22rpx; color: #9a7e67; }
 .pay-card { overflow: hidden; }
 .quantity-row {
   padding: 20rpx;
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   background: #fff8ef;
   border: 1rpx solid rgba(198, 161, 124, 0.14);
 }
@@ -501,7 +553,7 @@ const createAndPay = async () => {
 .pay-options { margin-top: 18rpx; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; }
 .pay-option {
   padding: 18rpx;
-  border-radius: 20rpx;
+  border-radius: 22rpx;
   border: 2rpx solid rgba(198, 161, 124, 0.14);
   background: #fffdf9;
 }
@@ -514,7 +566,7 @@ const createAndPay = async () => {
 .points-box {
   margin-top: 18rpx;
   padding: 18rpx;
-  border-radius: 20rpx;
+  border-radius: 22rpx;
   background: #fbf5ef;
   display: flex;
   align-items: center;
@@ -534,7 +586,7 @@ const createAndPay = async () => {
 }
 .pay-summary { margin-top: 18rpx; display: flex; flex-direction: column; gap: 12rpx; }
 .summary-line { display: flex; justify-content: space-between; color: #7f6650; font-size: 24rpx; }
-.summary-line.strong { color: #c96a14; font-weight: 800; font-size: 30rpx; }
+.summary-line.strong { color: #ff6a00; font-weight: 900; font-size: 30rpx; }
 .feature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
 .feature-item {
   padding: 18rpx 16rpx;

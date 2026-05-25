@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -393,7 +393,7 @@ class SupplierService:
         supplier: Supplier | None,
         applicant: User | None,
     ) -> dict:
-        base = {
+        base: dict[str, object] = {
             'source_type': qualification.qualification_type.value,
             'source_name': None,
             'source_status': None,

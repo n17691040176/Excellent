@@ -99,6 +99,7 @@ const roles = [
 const permissionLabels = {
   'dashboard:view': '查看首页经营概览',
   'users:view': '查看用户列表与邀请关系',
+  'users:manage-commerce': '维护用户收货地址、购物车、收藏和足迹',
   'users:status': '启用或禁用用户账号',
   'teams:view': '查看团队与成员信息',
   'teams:edit': '编辑团队基础信息',
@@ -111,6 +112,8 @@ const permissionLabels = {
   'products:edit': '编辑或删除专区商品',
   'products:submit-review': '提交商品审核',
   'products:shelf': '执行商品上架与下架',
+  'orders:view': '查看商城订单、支付和物流状态',
+  'orders:manage': '执行订单支付、完成和关闭操作',
   'commission:view': '查看佣金配置与返现流水',
   'withdraws:view': '查看提现申请列表',
   'withdraws:review': '审核提现申请',

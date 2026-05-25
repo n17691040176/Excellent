@@ -1,4 +1,4 @@
-﻿from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -6,14 +6,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.logger import configure_logging
+from app.core.redis import get_redis_client
 from app.db.init_db import init_db
-from app.db.session import SessionLocal
 from app.db.seed import seed_defaults
+from app.db.session import SessionLocal
 from app.services.page_decoration_service import PageDecorationService
 
 
@@ -79,7 +81,35 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 @app.get('/health')
 def health():
-    return {'code': 0, 'message': 'success', 'data': {'status': 'ok'}}
+    services = {'mysql': 'ok', 'redis': 'ok'}
+    status_code = 200
+
+    db = SessionLocal()
+    try:
+        db.execute(text('SELECT 1'))
+    except Exception:
+        services['mysql'] = 'error'
+        status_code = 503
+    finally:
+        db.close()
+
+    try:
+        get_redis_client().ping()
+    except Exception:
+        services['redis'] = 'error'
+        status_code = 503
+
+    return ORJSONResponse(
+        status_code=status_code,
+        content={
+            'code': 0 if status_code == 200 else 50001,
+            'message': 'success' if status_code == 200 else 'dependency unavailable',
+            'data': {
+                'status': 'ok' if status_code == 200 else 'degraded',
+                'services': services,
+            },
+        },
+    )
 
 
 app.include_router(api_router)

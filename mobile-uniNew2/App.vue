@@ -2,7 +2,6 @@
 import {
   clearApiBaseUrl,
   clearInviteWebBaseUrl,
-  clearRuntimeConfig,
   getApiBaseUrlConfig,
   getInviteWebBaseUrlConfig,
   setApiBaseUrl,
@@ -55,8 +54,20 @@ function logRuntimeConfig() {
   const apiBaseUrl = getApiBaseUrlConfig();
   const inviteWebBaseUrl = getInviteWebBaseUrlConfig();
 
-  console.info('[excellent-mobile] apiBaseUrl:', apiBaseUrl.value, `source=${apiBaseUrl.source}`);
-  console.info('[excellent-mobile] inviteWebBaseUrl:', inviteWebBaseUrl.value, `source=${inviteWebBaseUrl.source}`);
+  console.info('[excellent-mobile] resolved apiBaseUrl:', {
+    value: apiBaseUrl.value,
+    source: apiBaseUrl.source,
+    runtimeValue: apiBaseUrl.runtimeValue,
+    envValue: apiBaseUrl.envValue,
+    fallback: apiBaseUrl.fallback
+  });
+  console.info('[excellent-mobile] resolved inviteWebBaseUrl:', {
+    value: inviteWebBaseUrl.value,
+    source: inviteWebBaseUrl.source,
+    runtimeValue: inviteWebBaseUrl.runtimeValue,
+    envValue: inviteWebBaseUrl.envValue,
+    fallback: inviteWebBaseUrl.fallback
+  });
 
   if (apiBaseUrl.source === 'runtime') {
     console.warn('[excellent-mobile] excellent_api_base_url is coming from local storage.');
@@ -113,8 +124,6 @@ function retryCurrentPage() {
 export default {
   onLaunch() {
     syncRuntimeConfigFromBuild();
-    clearRuntimeConfig();
-    syncRuntimeConfigFromBuild();
 
     logRuntimeConfig();
     bindH5DebugEvents();
@@ -149,10 +158,17 @@ export default {
 @import './styles/common.css';
 
 page {
+  padding-top: calc(env(safe-area-inset-top) + 24rpx);
   background:
-    radial-gradient(circle at 0% 0%, rgba(233, 176, 120, 0.18), transparent 24%),
-    radial-gradient(circle at 100% 8%, rgba(208, 220, 244, 0.56), transparent 24%),
-    linear-gradient(180deg, #fbf8f3 0%, #f6f4ef 42%, #f3f1ec 100%);
+    radial-gradient(circle at 0% 0%, rgba(255, 184, 125, 0.18), transparent 24%),
+    radial-gradient(circle at 100% 8%, rgba(255, 140, 94, 0.14), transparent 24%),
+    linear-gradient(180deg, #fff9f3 0%, #fff3e8 42%, #fffaf7 100%);
   color: #191613;
+}
+
+@supports not (padding-top: env(safe-area-inset-top)) {
+  page {
+    padding-top: calc(var(--status-bar-height) + 24rpx);
+  }
 }
 </style>

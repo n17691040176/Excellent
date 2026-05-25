@@ -211,9 +211,196 @@
               </el-table-column>
             </el-table>
           </div>
+
+          <div class="legacy-section">
+            <div class="soft-tag">商城行为概览</div>
+            <div class="tiny-stat-grid">
+              <div class="tiny-stat">
+                <div class="title">收货地址</div>
+                <div class="number">{{ commerceSummary.address_count ?? 0 }}</div>
+              </div>
+              <div class="tiny-stat">
+                <div class="title">默认地址</div>
+                <div class="number">{{ commerceSummary.default_address_count ?? 0 }}</div>
+              </div>
+              <div class="tiny-stat">
+                <div class="title">收藏商品</div>
+                <div class="number">{{ commerceSummary.favorite_count ?? 0 }}</div>
+              </div>
+              <div class="tiny-stat">
+                <div class="title">浏览足迹</div>
+                <div class="number">{{ commerceSummary.footprint_count ?? 0 }}</div>
+              </div>
+              <div class="tiny-stat">
+                <div class="title">购物车</div>
+                <div class="number">{{ commerceSummary.cart_item_count ?? 0 }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="legacy-section">
+            <div class="section-heading">
+              <div class="soft-tag">收货地址</div>
+              <el-button v-permission="'users:manage-commerce'" type="primary" plain size="small" @click="openAddressCreate">
+                新增地址
+              </el-button>
+            </div>
+            <el-table :data="addressRows" size="small" border>
+              <el-table-column prop="receiver_name" label="收货人" min-width="120" />
+              <el-table-column prop="receiver_phone" label="手机号" min-width="140" />
+              <el-table-column label="地址" min-width="260">
+                <template #default="{ row }">{{ row.full_address || '--' }}</template>
+              </el-table-column>
+              <el-table-column label="默认地址" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="row.is_default ? 'success' : 'info'">{{ row.is_default ? '是' : '否' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="更新时间" min-width="160">
+                <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="220" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    v-permission="'users:manage-commerce'"
+                    link
+                    type="primary"
+                    :disabled="row.is_default"
+                    @click="setDefaultAddress(row)"
+                  >
+                    设默认
+                  </el-button>
+                  <el-button v-permission="'users:manage-commerce'" link type="primary" @click="openAddressEdit(row)">
+                    编辑
+                  </el-button>
+                  <el-button v-permission="'users:manage-commerce'" link type="danger" @click="deleteAddress(row)">
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <div class="legacy-section">
+            <div class="soft-tag">购物车</div>
+            <el-table :data="cartRows" size="small" border>
+              <el-table-column label="商品" min-width="220">
+                <template #default="{ row }">
+                  <div>{{ row.title || '--' }}</div>
+                  <div class="drawer-meta">{{ zoneLabel(row.zone_type) }} / {{ row.product?.status || '--' }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="quantity" label="数量" width="90" />
+              <el-table-column label="已选中" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="row.selected ? 'success' : 'info'">{{ row.selected ? '已选' : '未选' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="单价" min-width="100">
+                <template #default="{ row }">{{ formatAmount(row.price) }}</template>
+              </el-table-column>
+              <el-table-column label="小计" min-width="100">
+                <template #default="{ row }">{{ formatAmount(row.subtotal_amount) }}</template>
+              </el-table-column>
+              <el-table-column label="更新时间" min-width="160">
+                <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="100" fixed="right">
+                <template #default="{ row }">
+                  <el-button v-permission="'users:manage-commerce'" link type="danger" @click="deleteCartItem(row)">
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <div class="legacy-section">
+            <div class="soft-tag">收藏商品</div>
+            <el-table :data="favoriteRows" size="small" border>
+              <el-table-column label="商品" min-width="220">
+                <template #default="{ row }">
+                  <div>{{ row.title || '--' }}</div>
+                  <div class="drawer-meta">{{ zoneLabel(row.zone_type) }} / {{ row.status || '--' }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="售价" min-width="100">
+                <template #default="{ row }">{{ formatAmount(row.sale_price) }}</template>
+              </el-table-column>
+              <el-table-column label="收藏时间" min-width="160">
+                <template #default="{ row }">{{ formatDate(row.favorited_at) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="100" fixed="right">
+                <template #default="{ row }">
+                  <el-button v-permission="'users:manage-commerce'" link type="danger" @click="deleteFavorite(row)">
+                    移除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <div class="legacy-section">
+            <div class="soft-tag">浏览足迹</div>
+            <el-table :data="footprintRows" size="small" border>
+              <el-table-column label="商品" min-width="220">
+                <template #default="{ row }">
+                  <div>{{ row.title || '--' }}</div>
+                  <div class="drawer-meta">{{ zoneLabel(row.zone_type) }} / {{ row.status || '--' }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="view_count" label="浏览次数" width="100" />
+              <el-table-column label="最近浏览" min-width="160">
+                <template #default="{ row }">{{ formatDate(row.last_viewed_at) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="100" fixed="right">
+                <template #default="{ row }">
+                  <el-button v-permission="'users:manage-commerce'" link type="danger" @click="deleteFootprint(row)">
+                    移除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </template>
       </div>
     </el-drawer>
+
+    <el-dialog
+      v-model="addressDialogVisible"
+      :title="addressDialogTitle"
+      width="560px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-width="84px">
+        <el-form-item label="收货人">
+          <el-input v-model="addressForm.receiver_name" maxlength="32" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="addressForm.receiver_phone" maxlength="20" />
+        </el-form-item>
+        <el-form-item label="省份">
+          <el-input v-model="addressForm.province" maxlength="32" />
+        </el-form-item>
+        <el-form-item label="城市">
+          <el-input v-model="addressForm.city" maxlength="32" />
+        </el-form-item>
+        <el-form-item label="区县">
+          <el-input v-model="addressForm.district" maxlength="32" />
+        </el-form-item>
+        <el-form-item label="详细地址">
+          <el-input v-model="addressForm.detail_address" type="textarea" :rows="3" maxlength="120" show-word-limit />
+        </el-form-item>
+        <el-form-item label="默认地址">
+          <el-switch v-model="addressForm.is_default" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addressDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="addressSubmitting" @click="submitAddress">保存</el-button>
+      </template>
+    </el-dialog>
 
     <el-drawer v-model="drawerVisible" title="邀请关系" size="520px">
       <div class="panel-card data-card">
@@ -292,12 +479,19 @@ const powerBankForm = ref({
   device_name: '',
   remark: ''
 })
+const addressDialogVisible = ref(false)
+const addressSubmitting = ref(false)
+const addressDialogMode = ref('create')
+const editingAddressId = ref(null)
+const addressForm = ref(createEmptyAddressForm())
 
 const scopeHint = computed(() =>
   userStore.role === 'TEAM_ADMIN'
     ? '仅查看当前团队用户，支持按来源和角色筛选。'
     : '查看全平台用户，支持筛选历史导入与当前注册用户。'
 )
+
+const addressDialogTitle = computed(() => (addressDialogMode.value === 'edit' ? '编辑地址' : '新增地址'))
 
 const legacyFields = computed(() => {
   const payload = legacyProfile.value?.legacy_profile || {}
@@ -320,6 +514,23 @@ const assetRows = computed(() => {
 })
 
 const powerBankRows = computed(() => userDetail.value?.power_banks || [])
+const commerceSummary = computed(() => userDetail.value?.commerce_summary || {})
+const addressRows = computed(() => userDetail.value?.addresses || [])
+const favoriteRows = computed(() => userDetail.value?.favorites || [])
+const footprintRows = computed(() => userDetail.value?.footprints || [])
+const cartRows = computed(() => userDetail.value?.cart_items || [])
+
+function createEmptyAddressForm() {
+  return {
+    receiver_name: '',
+    receiver_phone: '',
+    province: '',
+    city: '',
+    district: '',
+    detail_address: '',
+    is_default: false
+  }
+}
 
 function formatAmount(value) {
   return value == null ? '--' : Number(value).toFixed(2)
@@ -330,12 +541,57 @@ function formatDate(value) {
   return String(value).replace('T', ' ').slice(0, 19)
 }
 
+function zoneLabel(value) {
+  return {
+    REPURCHASE: '复购区',
+    SELF_OPERATED: '自营商城',
+    HOT_SALE: '爆款区',
+    LOCAL_LIFE: '本地生活'
+  }[value] || value || '--'
+}
+
 function resetPowerBankForm() {
   powerBankForm.value = {
     device_code: '',
     device_name: '',
     remark: ''
   }
+}
+
+function resetAddressForm() {
+  addressDialogMode.value = 'create'
+  editingAddressId.value = null
+  addressForm.value = createEmptyAddressForm()
+}
+
+function fillAddressForm(row) {
+  addressForm.value = {
+    receiver_name: row.receiver_name || '',
+    receiver_phone: row.receiver_phone || '',
+    province: row.province || '',
+    city: row.city || '',
+    district: row.district || '',
+    detail_address: row.detail_address || '',
+    is_default: Boolean(row.is_default)
+  }
+}
+
+function validateAddressForm() {
+  const requiredFields = [
+    ['receiver_name', '收货人'],
+    ['receiver_phone', '手机号'],
+    ['province', '省份'],
+    ['city', '城市'],
+    ['district', '区县'],
+    ['detail_address', '详细地址']
+  ]
+  for (const [field, label] of requiredFields) {
+    if (!String(addressForm.value[field] || '').trim()) {
+      ElMessage.warning(`请输入${label}`)
+      return false
+    }
+  }
+  return true
 }
 
 async function fetchUsers(nextPage = page.value) {
@@ -353,6 +609,16 @@ async function fetchUsers(nextPage = page.value) {
 
 async function loadUserDetail(userId) {
   userDetail.value = await userApi.detail(userId)
+}
+
+async function refreshUserDetail() {
+  if (!userDetail.value?.id) return
+  detailLoading.value = true
+  try {
+    await loadUserDetail(userDetail.value.id)
+  } finally {
+    detailLoading.value = false
+  }
 }
 
 async function openUserDetail(row) {
@@ -381,6 +647,93 @@ async function openLegacyProfile(row) {
   }
 }
 
+function openAddressCreate() {
+  resetAddressForm()
+  addressDialogVisible.value = true
+}
+
+function openAddressEdit(row) {
+  addressDialogMode.value = 'edit'
+  editingAddressId.value = row.id
+  fillAddressForm(row)
+  addressDialogVisible.value = true
+}
+
+async function submitAddress() {
+  if (!userDetail.value?.id || !validateAddressForm()) return
+  addressSubmitting.value = true
+  try {
+    const payload = {
+      receiver_name: addressForm.value.receiver_name.trim(),
+      receiver_phone: addressForm.value.receiver_phone.trim(),
+      province: addressForm.value.province.trim(),
+      city: addressForm.value.city.trim(),
+      district: addressForm.value.district.trim(),
+      detail_address: addressForm.value.detail_address.trim(),
+      is_default: Boolean(addressForm.value.is_default)
+    }
+    if (addressDialogMode.value === 'edit' && editingAddressId.value) {
+      await userApi.updateAddress(userDetail.value.id, editingAddressId.value, payload)
+      ElMessage.success('地址已更新')
+    } else {
+      await userApi.createAddress(userDetail.value.id, payload)
+      ElMessage.success('地址已新增')
+    }
+    addressDialogVisible.value = false
+    resetAddressForm()
+    await refreshUserDetail()
+  } finally {
+    addressSubmitting.value = false
+  }
+}
+
+async function setDefaultAddress(row) {
+  if (!userDetail.value?.id || !row?.id || row.is_default) return
+  await userApi.setDefaultAddress(userDetail.value.id, row.id)
+  ElMessage.success('默认地址已更新')
+  await refreshUserDetail()
+}
+
+async function deleteAddress(row) {
+  if (!userDetail.value?.id || !row?.id) return
+  await ElMessageBox.confirm('确认删除该收货地址吗？', '删除地址', {
+    type: 'warning'
+  })
+  await userApi.deleteAddress(userDetail.value.id, row.id)
+  ElMessage.success('地址已删除')
+  await refreshUserDetail()
+}
+
+async function deleteCartItem(row) {
+  if (!userDetail.value?.id || !row?.id) return
+  await ElMessageBox.confirm('确认删除该购物车商品吗？', '删除购物车商品', {
+    type: 'warning'
+  })
+  await userApi.deleteCartItem(userDetail.value.id, row.id)
+  ElMessage.success('购物车商品已删除')
+  await refreshUserDetail()
+}
+
+async function deleteFavorite(row) {
+  if (!userDetail.value?.id || !row?.product_id) return
+  await ElMessageBox.confirm('确认移除该收藏商品吗？', '移除收藏', {
+    type: 'warning'
+  })
+  await userApi.deleteFavorite(userDetail.value.id, row.product_id)
+  ElMessage.success('收藏商品已移除')
+  await refreshUserDetail()
+}
+
+async function deleteFootprint(row) {
+  if (!userDetail.value?.id || !row?.product_id) return
+  await ElMessageBox.confirm('确认移除该浏览足迹吗？', '移除足迹', {
+    type: 'warning'
+  })
+  await userApi.deleteFootprint(userDetail.value.id, row.product_id)
+  ElMessage.success('浏览足迹已移除')
+  await refreshUserDetail()
+}
+
 async function submitPowerBank() {
   if (!userDetail.value?.id) return
   if (!String(powerBankForm.value.device_code || '').trim()) {
@@ -392,7 +745,7 @@ async function submitPowerBank() {
     await userApi.bindPowerBank(userDetail.value.id, powerBankForm.value)
     ElMessage.success('充电宝已绑定')
     resetPowerBankForm()
-    await loadUserDetail(userDetail.value.id)
+    await refreshUserDetail()
   } finally {
     powerBankSubmitting.value = false
   }
@@ -406,7 +759,7 @@ async function togglePowerBankStatus(row) {
   })
   await userApi.updatePowerBank(userDetail.value.id, row.id, { status: nextStatus })
   ElMessage.success('充电宝状态已更新')
-  await loadUserDetail(userDetail.value.id)
+  await refreshUserDetail()
 }
 
 async function toggleStatus(row) {
@@ -415,6 +768,7 @@ async function toggleStatus(row) {
     type: 'warning'
   })
   await userApi.updateStatus(row.id, { status: nextStatus })
+  ElMessage.success('用户状态已更新')
   await fetchUsers()
 }
 
@@ -427,12 +781,53 @@ onMounted(fetchUsers)
   gap: 18px;
 }
 
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 122, 0, 0.14);
+  background: linear-gradient(180deg, #fffdfb 0%, #fff7ef 100%);
+  box-shadow: 0 12px 28px rgba(255, 108, 46, 0.08);
+}
+
+.page-heading h2 {
+  margin: 0;
+  color: #4a2410;
+}
+
+.page-heading p {
+  margin: 8px 0 0;
+  color: #7b5e4b;
+}
+
+.panel-card {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 154, 106, 0.14);
+  background: linear-gradient(180deg, #ffffff 0%, #fffaf5 100%);
+  box-shadow: 0 12px 28px rgba(255, 108, 46, 0.08);
+}
+
+.data-card {
+  padding: 18px;
+}
+
+.toolbar-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 .toolbar-wrap {
   flex-wrap: wrap;
 }
 
 .drawer-meta {
-  margin: 14px 0 10px;
+  margin: 6px 0 0;
+  color: #7b5e4b;
+  font-size: 12px;
 }
 
 .legacy-card {
@@ -443,6 +838,54 @@ onMounted(fetchUsers)
 .legacy-section {
   display: grid;
   gap: 12px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.tiny-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.tiny-stat {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 154, 106, 0.14);
+  background: linear-gradient(180deg, #fffdfb 0%, #fff5ea 100%);
+}
+
+.tiny-stat .title {
+  font-size: 12px;
+  color: #8c6f5a;
+}
+
+.tiny-stat .number {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #4a2410;
+}
+
+.soft-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+:deep(.el-table) {
+  --el-table-header-bg-color: #fff7ef;
+  --el-table-tr-bg-color: #ffffff;
 }
 
 :deep(.el-table .el-button.is-link) {

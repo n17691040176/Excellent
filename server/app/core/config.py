@@ -1,7 +1,5 @@
-﻿from functools import lru_cache
-from typing import List
+from functools import lru_cache
 
-from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,7 +39,6 @@ class Settings(BaseSettings):
         extra='ignore',
     )
 
-    @computed_field
     @property
     def database_url(self) -> str:
         return (
@@ -49,12 +46,10 @@ class Settings(BaseSettings):
             f'@{self.mysql_host}:{self.mysql_port}/{self.mysql_db}?charset=utf8mb4'
         )
 
-    @computed_field
     @property
-    def parsed_cors_origins(self) -> List[str]:
+    def parsed_cors_origins(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(',') if item.strip()]
 
-    @computed_field
     @property
     def redis_url(self) -> str:
         auth = f':{self.redis_password}@' if self.redis_password else ''

@@ -448,6 +448,10 @@
 
           <template v-if="zoneConfigForm.zone_type === 'SELF_OPERATED'">
             <div class="form-split">
+              <el-form-item label="积分支付"><el-switch v-model="zoneConfigForm.points_purchase_enabled" /></el-form-item>
+              <el-form-item label="余额支付"><el-switch v-model="zoneConfigForm.balance_purchase_enabled" /></el-form-item>
+            </div>
+            <div class="form-split">
               <el-form-item label="兑换券最低抵扣比例（%）">
                 <el-input-number
                   v-model="zoneConfigForm.voucher_deduct_min_rate"
@@ -518,6 +522,19 @@
               <el-form-item label="设备收益联动"><el-switch v-model="zoneConfigForm.device_revenue_enabled" /></el-form-item>
             </div>
           </template>
+
+          <div class="purchase-mode-box">
+            <div class="cell-title small">购买方式控制</div>
+            <div class="form-split">
+              <el-form-item label="纯积分购买"><el-switch v-model="zoneConfigForm.points_only_enabled" /></el-form-item>
+              <el-form-item label="积分加现金购买"><el-switch v-model="zoneConfigForm.points_cash_enabled" /></el-form-item>
+            </div>
+            <div class="form-split">
+              <el-form-item label="纯现金购买"><el-switch v-model="zoneConfigForm.cash_only_enabled" /></el-form-item>
+              <el-form-item label="余额纯支付"><el-switch v-model="zoneConfigForm.balance_only_enabled" /></el-form-item>
+            </div>
+            <el-form-item label="余额+积分支付"><el-switch v-model="zoneConfigForm.balance_points_enabled" /></el-form-item>
+          </div>
         </el-form>
 
         <div class="config-tips">
@@ -627,6 +644,11 @@ function createDefaultZoneConfig() {
     ai_coupon_max_deduct_rate: null,
     points_purchase_enabled: false,
     balance_purchase_enabled: false,
+    points_only_enabled: false,
+    points_cash_enabled: true,
+    cash_only_enabled: true,
+    balance_only_enabled: true,
+    balance_points_enabled: true,
     flash_sale_enabled: false,
     per_user_limit: null,
     merchant_commission_rule_id: null,
@@ -731,20 +753,40 @@ function buildZoneSummary(config = {}) {
     if (config.repurchase_discount_rate != null) badges.push(`复购折扣 ${Number(config.repurchase_discount_rate).toFixed(2).replace(/\.00$/, '')}%`)
     if (config.points_purchase_enabled) badges.push('支持积分支付')
     if (config.balance_purchase_enabled) badges.push('支持余额支付')
+    if (config.points_only_enabled) badges.push('纯积分')
+    if (config.points_cash_enabled) badges.push('积分+现金')
+    if (config.cash_only_enabled) badges.push('纯现金')
+    if (config.balance_purchase_enabled && config.balance_only_enabled) badges.push('余额纯付')
+    if (config.balance_purchase_enabled && config.balance_points_enabled) badges.push('余额+积分')
   } else if (config.zone_type === 'SELF_OPERATED') {
     if (config.voucher_deduct_min_rate != null && config.voucher_deduct_max_rate != null) {
       badges.push(`兑换券 ${Number(config.voucher_deduct_min_rate)}-${Number(config.voucher_deduct_max_rate)}%`)
     }
     if (config.ai_coupon_reward_rate != null) badges.push(`返 AI 券 ${Number(config.ai_coupon_reward_rate)}%`)
     if (config.ai_coupon_max_deduct_rate != null) badges.push(`AI 券抵扣 ${Number(config.ai_coupon_max_deduct_rate)}%`)
+    if (config.points_only_enabled) badges.push('纯积分')
+    if (config.points_cash_enabled) badges.push('积分+现金')
+    if (config.cash_only_enabled) badges.push('纯现金')
+    if (config.balance_purchase_enabled && config.balance_only_enabled) badges.push('余额纯付')
+    if (config.balance_purchase_enabled && config.balance_points_enabled) badges.push('余额+积分')
   } else if (config.zone_type === 'HOT_SALE') {
     if (config.points_purchase_enabled) badges.push('支持积分支付')
     if (config.balance_purchase_enabled) badges.push('支持余额支付')
+    if (config.points_only_enabled) badges.push('纯积分')
+    if (config.points_cash_enabled) badges.push('积分+现金')
+    if (config.cash_only_enabled) badges.push('纯现金')
+    if (config.balance_purchase_enabled && config.balance_only_enabled) badges.push('余额纯付')
+    if (config.balance_purchase_enabled && config.balance_points_enabled) badges.push('余额+积分')
     if (config.flash_sale_enabled) badges.push('开启闪购')
     if (config.per_user_limit != null) badges.push(`每人限购 ${config.per_user_limit} 件`)
   } else if (config.zone_type === 'LOCAL_LIFE') {
     if (config.points_purchase_enabled) badges.push('支持积分支付')
     if (config.balance_purchase_enabled) badges.push('支持余额支付')
+    if (config.points_only_enabled) badges.push('纯积分')
+    if (config.points_cash_enabled) badges.push('积分+现金')
+    if (config.cash_only_enabled) badges.push('纯现金')
+    if (config.balance_purchase_enabled && config.balance_only_enabled) badges.push('余额纯付')
+    if (config.balance_purchase_enabled && config.balance_points_enabled) badges.push('余额+积分')
     if (config.merchant_commission_rule_id) badges.push(`分佣规则 #${config.merchant_commission_rule_id}`)
     if (config.device_revenue_enabled) badges.push('联动设备收益')
   }
@@ -892,6 +934,11 @@ function normalizeZoneConfig(data = {}) {
     package_required: Boolean(data.package_required),
     points_purchase_enabled: Boolean(data.points_purchase_enabled),
     balance_purchase_enabled: Boolean(data.balance_purchase_enabled),
+    points_only_enabled: Boolean(data.points_only_enabled),
+    points_cash_enabled: data.points_cash_enabled == null ? true : Boolean(data.points_cash_enabled),
+    cash_only_enabled: data.cash_only_enabled == null ? true : Boolean(data.cash_only_enabled),
+    balance_only_enabled: data.balance_only_enabled == null ? true : Boolean(data.balance_only_enabled),
+    balance_points_enabled: data.balance_points_enabled == null ? true : Boolean(data.balance_points_enabled),
     flash_sale_enabled: Boolean(data.flash_sale_enabled),
     device_revenue_enabled: Boolean(data.device_revenue_enabled)
   }
@@ -1048,6 +1095,9 @@ async function openZoneConfig(row) {
 }
 
 async function saveZoneConfig() {
+  if (!zoneConfigForm.value.points_only_enabled && !zoneConfigForm.value.points_cash_enabled && !zoneConfigForm.value.cash_only_enabled) {
+    return ElMessage.warning('请至少开启一种购买方式')
+  }
   zoneConfigSaving.value = true
   try {
     await productApi.updateZoneConfig(zoneConfigProduct.value.id, {
@@ -1060,6 +1110,11 @@ async function saveZoneConfig() {
       ai_coupon_max_deduct_rate: zoneConfigForm.value.ai_coupon_max_deduct_rate,
       points_purchase_enabled: zoneConfigForm.value.points_purchase_enabled,
       balance_purchase_enabled: zoneConfigForm.value.balance_purchase_enabled,
+      points_only_enabled: zoneConfigForm.value.points_only_enabled,
+      points_cash_enabled: zoneConfigForm.value.points_cash_enabled,
+      cash_only_enabled: zoneConfigForm.value.cash_only_enabled,
+      balance_only_enabled: zoneConfigForm.value.balance_only_enabled,
+      balance_points_enabled: zoneConfigForm.value.balance_points_enabled,
       flash_sale_enabled: zoneConfigForm.value.flash_sale_enabled,
       per_user_limit: zoneConfigForm.value.per_user_limit,
       merchant_commission_rule_id: zoneConfigForm.value.merchant_commission_rule_id,
@@ -1205,6 +1260,7 @@ onMounted(loadData)
 .config-head { margin-bottom: 16px; }
 .config-head h3 { margin: 12px 0 8px; color: var(--brand-deep); }
 .config-tips { margin-top: 12px; padding: 14px 16px; background: rgba(198, 132, 79, 0.1); border-radius: 14px; color: rgba(58, 45, 36, 0.78); line-height: 1.7; }
+.purchase-mode-box { margin-top: 14px; padding: 14px; border-radius: 14px; border: 1px solid rgba(198, 132, 79, 0.16); background: rgba(255, 255, 255, 0.7); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 18px; }
 @media (max-width: 1260px) { .drawer-layout { grid-template-columns: 1fr; } .preview-panel { position: static; } }
 @media (max-width: 960px) { .form-split, .product-cell, .mobile-card { grid-template-columns: 1fr; } .batch-toolbar { flex-direction: column; align-items: stretch; } }

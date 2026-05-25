@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_roles
@@ -46,8 +46,8 @@ def get_package(package_id: int, db: Session = Depends(get_db), current_user: Us
 
     try:
         package = PackageService.get_package(db, package_id)
-    except NotFoundError:
-        raise NotFoundError('Product not found')
+    except NotFoundError as exc:
+        raise NotFoundError('Product not found') from exc
     return {'code': 0, 'message': 'success', 'data': serialize_package(package)}
 
 

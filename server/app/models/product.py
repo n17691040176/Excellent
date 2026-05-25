@@ -1,10 +1,18 @@
-﻿from datetime import datetime
+from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import BigInteger, DECIMAL, DateTime, Enum, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import DECIMAL, JSON, BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
-from app.models.enums import ProductOwnerType, ProductStatus, ProductType, QualificationStatus, QualificationType, ZoneType
+from app.models.enums import (
+    ProductOwnerType,
+    ProductStatus,
+    ProductType,
+    QualificationStatus,
+    QualificationType,
+    ZoneType,
+)
 
 
 class Product(TimestampMixin, Base):
@@ -17,7 +25,7 @@ class Product(TimestampMixin, Base):
     owner_id: Mapped[int | None] = mapped_column(nullable=True)
     zone_type: Mapped[ZoneType] = mapped_column(Enum(ZoneType), nullable=False)
     market_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
-    sale_price: Mapped[float] = mapped_column(DECIMAL(18, 2), nullable=False)
+    sale_price: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     cost_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
     stock: Mapped[int] = mapped_column(default=0, nullable=False)
     sold_count: Mapped[int] = mapped_column(default=0, nullable=False)
@@ -71,7 +79,7 @@ class ProductSku(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), nullable=False)
     sku_code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     sku_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    sale_price: Mapped[float] = mapped_column(DECIMAL(18, 2), nullable=False)
+    sale_price: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     stock: Mapped[int] = mapped_column(default=0, nullable=False)
     spec_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[ProductStatus] = mapped_column(Enum(ProductStatus), default=ProductStatus.ON_SHELF, nullable=False)
@@ -93,6 +101,11 @@ class ProductZoneConfig(TimestampMixin, Base):
     ai_coupon_max_deduct_rate: Mapped[float | None] = mapped_column(DECIMAL(5, 2), nullable=True)
     points_purchase_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     balance_purchase_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    points_only_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    points_cash_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    cash_only_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    balance_only_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    balance_points_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
     flash_sale_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     per_user_limit: Mapped[int | None] = mapped_column(nullable=True)
     merchant_commission_rule_id: Mapped[int | None] = mapped_column(nullable=True)

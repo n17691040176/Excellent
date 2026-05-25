@@ -1,14 +1,26 @@
 <template>
   <view class="container invite-page">
     <view class="card poster">
-      <view class="section-title">邀请好友</view>
-      <view class="muted">分享专属邀请码，跟进注册与转化结果</view>
-      <view class="invite-code mt-20">邀请码：{{ inviteCode }}</view>
-      <button class="btn btn-primary mt-24" @click="share">立即分享</button>
+      <view class="poster-tag">邀请有礼</view>
+      <view class="section-title mt-12">分享邀请码，好友下单你得奖励</view>
+      <view class="muted">专属邀请码全程跟踪，注册和转化数据实时可看</view>
+
+      <view class="invite-code-wrap mt-20">
+        <view class="invite-code-label">我的邀请码</view>
+        <view class="invite-code">{{ inviteCode }}</view>
+      </view>
+
+      <view class="poster-actions mt-24">
+        <button class="btn btn-primary" @click="share">立即分享</button>
+        <button class="btn btn-ghost" @click="copyCode">复制邀请码</button>
+      </view>
     </view>
 
-    <view class="card mt-24">
-      <view class="section-title">邀请数据</view>
+    <view class="card mt-24 data-card">
+      <view class="row-between">
+        <view class="section-title no-margin">邀请数据</view>
+        <view class="data-chip">实时更新</view>
+      </view>
       <StateView v-if="loading" title="加载中..." custom-class="mt-16" />
       <StateView v-else-if="failed" title="邀请数据加载失败" :show-retry="true" custom-class="mt-16" @retry="loadInvite" />
       <view v-else class="grid-2 mt-20">
@@ -64,6 +76,10 @@ const loadInvite = async () => {
 };
 
 const share = () => uni.showToast({ title: '已生成分享卡片', icon: 'none' });
+const copyCode = async () => {
+  await uni.setClipboardData({ data: inviteCode.value });
+  uni.showToast({ title: '邀请码已复制', icon: 'none' });
+};
 
 onShow(() => {
   loadInvite();
@@ -78,11 +94,54 @@ onPullDownRefresh(async () => {
 <style scoped>
 @import '@/styles/common.css';
 .invite-page { padding-bottom: 36rpx; }
-.poster { background: radial-gradient(circle at 95% 10%, rgba(30,143,100,.2), transparent 40%), #fff; }
-.invite-code { font-size: 30rpx; font-weight: 700; color: #1f4032; }
+.poster {
+  background: linear-gradient(135deg, #fff6ec 0%, #ffe2c9 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+  overflow: hidden;
+  position: relative;
+}
+.poster::after {
+  content: '';
+  position: absolute;
+  right: -36rpx;
+  top: -36rpx;
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: rgba(255, 122, 0, 0.08);
+}
+.poster-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+.invite-code-wrap {
+  padding: 18rpx;
+  border-radius: 22rpx;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1rpx solid rgba(255, 154, 106, 0.12);
+}
+.invite-code-label { font-size: 20rpx; color: #8b7158; }
+.invite-code { margin-top: 8rpx; font-size: 32rpx; font-weight: 900; color: #ff6a00; letter-spacing: 1.4rpx; }
+.poster-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
+.data-card { border: 1rpx solid rgba(255, 154, 106, 0.16); }
+.data-chip {
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 122, 0, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+.no-margin { margin-bottom: 0; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
-.item { border-radius: 16rpx; background: #eff6f2; padding: 14rpx; }
-.num { font-size: 34rpx; color: #1d5c42; font-weight: 800; }
+.item { border-radius: 18rpx; background: linear-gradient(180deg, #fffaf7, #fff1e7); padding: 14rpx; border: 1rpx solid rgba(255, 154, 106, 0.14); }
+.num { font-size: 34rpx; color: #ff6a00; font-weight: 900; }
 .label { margin-top: 4rpx; font-size: 22rpx; color: #6c8378; }
 .state-wrap { text-align: center; }
 .retry-btn { width: 180rpx; }

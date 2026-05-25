@@ -1,6 +1,7 @@
-﻿from datetime import datetime
+from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import BigInteger, DECIMAL, DateTime, Enum, ForeignKey, String
+from sqlalchemy import DECIMAL, BigInteger, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -49,7 +50,7 @@ class LocalLifeService(Base):
     store_id: Mapped[int | None] = mapped_column(ForeignKey('merchant_stores.id'), nullable=True)
     service_name: Mapped[str] = mapped_column(String(150), nullable=False)
     market_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
-    sale_price: Mapped[float] = mapped_column(DECIMAL(18, 2), nullable=False)
+    sale_price: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     service_type: Mapped[str] = mapped_column(String(32), nullable=False)
     verification_type: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default='ON_SHELF')
@@ -74,12 +75,12 @@ class MerchantCommissionRule(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     merchant_id: Mapped[int | None] = mapped_column(ForeignKey('local_life_merchants.id'), nullable=True)
-    county_agent_rate: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
-    city_agent_rate: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
-    user_rate: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
-    merchant_rate: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
-    device_rate: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
-    ad_rate: Mapped[float] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    county_agent_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    city_agent_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    user_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    merchant_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    device_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    ad_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
 
@@ -90,7 +91,7 @@ class DeviceRevenueFlow(Base):
     device_type: Mapped[str] = mapped_column(String(32), nullable=False)
     business_ref_no: Mapped[str] = mapped_column(String(64), nullable=False)
     beneficiary_user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
-    amount: Mapped[float] = mapped_column(DECIMAL(18, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     source_desc: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -101,6 +102,6 @@ class AdRevenueFlow(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     ad_ref_no: Mapped[str] = mapped_column(String(64), nullable=False)
     beneficiary_user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
-    amount: Mapped[float] = mapped_column(DECIMAL(18, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     source_desc: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

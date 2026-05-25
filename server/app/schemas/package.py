@@ -1,4 +1,4 @@
-﻿from app.models.enums import ProductStatus
+from app.models.enums import ProductStatus
 from app.schemas.common import AppBaseModel
 
 

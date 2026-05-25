@@ -1,5 +1,5 @@
 <template>
-  <view class="container life-page">
+  <view class="life-page">
     <view class="card hero">
       <view class="row-between">
         <view>
@@ -149,26 +149,81 @@ const go = (path) => {
 <style scoped>
 @import '@/styles/common.css';
 
-.life-page { padding-bottom: 36rpx; }
-.hero { background: radial-gradient(circle at 95% 12%, rgba(207,171,132,.2), transparent 42%), #fff; border: 1rpx solid rgba(198,161,124,.2); }
-.hero-banner { height: 150rpx; border-radius: 18rpx; background: linear-gradient(120deg, #ebd8c2, #d7b28b); border: 1rpx solid rgba(198,161,124,.2); }
-.entry-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10rpx; }
-.entry-item { border-radius: 14rpx; padding: 14rpx 8rpx; text-align: center; background: #faf4ec; border: 1rpx solid rgba(196,159,120,.16); }
-.entry-icon { width: 42rpx; height: 42rpx; border-radius: 50%; margin: 0 auto 8rpx; background: #bf8650; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20rpx; box-shadow: 0 8rpx 14rpx rgba(130, 88, 50, 0.2); }
+.life-page {
+  padding: 0 18rpx 28rpx;
+  box-sizing: border-box;
+}
+
+.hero {
+  background: linear-gradient(135deg, #fff7ef 0%, #ffe7d4 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.18);
+}
+
+.badge-blue {
+  background: linear-gradient(135deg, #ff7a00, #ff4f3a);
+  color: #fff;
+}
+
+.hero-banner {
+  height: 150rpx;
+  border-radius: 22rpx;
+  background:
+    radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.24), transparent 26%),
+    linear-gradient(120deg, #ffe1c2, #ffbc87 44%, #ff8a4a);
+  border: 1rpx solid rgba(255, 154, 106, 0.18);
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10rpx;
+}
+
+.entry-item {
+  border-radius: 18rpx;
+  padding: 14rpx 8rpx;
+  text-align: center;
+  background: linear-gradient(180deg, #fffaf7, #fff1e7);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+}
+
+.entry-icon {
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 50%;
+  margin: 0 auto 8rpx;
+  background: linear-gradient(135deg, #ff8a2a, #ff6a00);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20rpx;
+  box-shadow: 0 8rpx 14rpx rgba(130, 88, 50, 0.2);
+}
+
 .entry-title { font-size: 21rpx; color: #6d5138; font-weight: 700; letter-spacing: 0.3rpx; }
+
 .benefit-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10rpx; }
-.benefit-item { border-radius: 14rpx; padding: 12rpx; background: linear-gradient(145deg, #fffefd, #fbf4ec); border: 1rpx solid rgba(196,159,120,.16); }
+
+.benefit-item {
+  border-radius: 18rpx;
+  padding: 12rpx;
+  background: linear-gradient(145deg, #fffefd, #fff3e8);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+}
+
 .benefit-title { font-size: 22rpx; font-weight: 700; color: #65492f; }
 .benefit-desc { margin-top: 4rpx; font-size: 20rpx; color: #8d745d; }
-.scene-card { min-height: 180rpx; background: linear-gradient(180deg, #ffffff 0%, #fbf6ef 100%); border: 1rpx solid rgba(198,161,124,.18); box-shadow: 0 12rpx 28rpx rgba(141,100,60,.08); border-radius: 20rpx; }
+
+.scene-card { min-height: 180rpx; background: linear-gradient(180deg, #ffffff 0%, #fff8f2 100%); border: 1rpx solid rgba(255, 154, 106, 0.16); box-shadow: 0 12rpx 28rpx rgba(141,100,60,.08); border-radius: 24rpx; }
 .scene-title { margin-top: 6rpx; font-size: 30rpx; font-weight: 700; color: #503522; letter-spacing: 0.4rpx; }
 .scene-desc { margin-top: 10rpx; color: #7d6753; font-size: 23rpx; line-height: 1.5; }
-.scene-link { margin-top: 12rpx; color: #9f6736; font-weight: 700; font-size: 23rpx; }
-.service-card { margin-bottom: 16rpx; border: 1rpx solid rgba(198,161,124,.18); box-shadow: 0 12rpx 28rpx rgba(141,100,60,.08); border-radius: 20rpx; }
-.service-cover { height: 170rpx; border-radius: 16rpx; background: linear-gradient(130deg, #f0e2d1, #e3c8aa 44%, #d5aa7f); }
+.scene-link { margin-top: 12rpx; color: #ff6a00; font-weight: 700; font-size: 23rpx; }
+.service-card { margin-bottom: 16rpx; border: 1rpx solid rgba(255, 154, 106, 0.16); box-shadow: 0 12rpx 28rpx rgba(141,100,60,.08); border-radius: 24rpx; }
+.service-cover { height: 170rpx; border-radius: 18rpx; background: linear-gradient(130deg, #ffe1c5, #ffbd8c 44%, #ff8a4a); }
 .service-title { font-size: 30rpx; font-weight: 700; color: #503522; letter-spacing: 0.4rpx; }
 .service-desc { margin-top: 10rpx; color: #7d6753; font-size: 24rpx; line-height: 1.55; }
-.service-link { color: #9f6736; font-size: 24rpx; font-weight: 700; }
+.service-link { color: #ff6a00; font-size: 24rpx; font-weight: 700; }
 
 .interactive { transition: transform 180ms ease, opacity 180ms ease; }
 .interactive:active { transform: scale(0.98); opacity: 0.92; }

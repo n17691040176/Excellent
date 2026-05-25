@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from random import choices
 from string import digits
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -120,7 +121,7 @@ class AuthService:
     def send_login_code(phone: str) -> dict:
         redis = get_redis_client()
         cooldown_key = AuthService._login_code_cooldown_key(phone)
-        ttl = redis.ttl(cooldown_key)
+        ttl = cast(int, redis.ttl(cooldown_key))
         if ttl and ttl > 0:
             raise ConflictError(f'Code already sent, retry in {ttl}s')
 
@@ -128,7 +129,7 @@ class AuthService:
         redis.setex(AuthService._login_code_key(phone), AuthService.LOGIN_CODE_TTL_SECONDS, code)
         redis.setex(cooldown_key, AuthService.LOGIN_CODE_RESEND_INTERVAL_SECONDS, '1')
 
-        response = {
+        response: dict[str, int | str] = {
             'expires_in': AuthService.LOGIN_CODE_TTL_SECONDS,
             'retry_in': AuthService.LOGIN_CODE_RESEND_INTERVAL_SECONDS,
         }

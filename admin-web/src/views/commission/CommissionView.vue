@@ -248,7 +248,93 @@ onMounted(loadData)
   gap: 18px;
 }
 
+.page-heading,
+.metric-card,
+.panel-card,
+.tiny-stat,
+.notice-item {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 122, 0, 0.14);
+  background: linear-gradient(180deg, #fffdfb 0%, #fff6ee 100%);
+  box-shadow: 0 12px 28px rgba(255, 108, 46, 0.08);
+}
+
+.page-heading {
+  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.page-heading h2,
+.section-title h3 {
+  margin: 0;
+  color: #4a2410;
+}
+
+.page-heading p,
+.section-title p,
+.notice-item {
+  color: #7b5e4b;
+}
+
+.metric-grid,
+.tiny-stat-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-card,
+.tiny-stat {
+  padding: 18px;
+}
+
+.metric-card .label,
+.tiny-stat .title {
+  color: #8b6a57;
+}
+
+.metric-card .value,
+.tiny-stat .number {
+  color: #ff6a00;
+}
+
+.metric-card .subtext,
+.tiny-stat .meta,
+.notice-item {
+  color: #8d6f5a;
+}
+
+.panel-card {
+  padding: 20px;
+}
+
+.notice-list {
+  display: grid;
+  gap: 12px;
+}
+
+.notice-item {
+  padding: 14px 16px;
+}
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
 .block-gap {
   margin-top: 18px;
+}
+
+@media (max-width: 1200px) {
+  .metric-grid,
+  .tiny-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

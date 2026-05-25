@@ -1,18 +1,18 @@
 page {
-  --brand-accent: #c96a14;
-  --brand-accent-strong: #b85d11;
-  --brand-accent-soft: #f3b46d;
-  --brand-ink: #4f321a;
-  --brand-muted: #8b7158;
-  --brand-card-border: rgba(198, 161, 124, 0.18);
-  --brand-card-shadow: 0 14rpx 36rpx rgba(168, 86, 22, 0.12);
-  --brand-glass-shadow: 0 20rpx 42rpx rgba(117, 74, 34, 0.16);
+  --brand-accent: #ff6a00;
+  --brand-accent-strong: #e85a2f;
+  --brand-accent-soft: #ffbe93;
+  --brand-ink: #4a2410;
+  --brand-muted: #8c6b5a;
+  --brand-card-border: rgba(255, 142, 78, 0.2);
+  --brand-card-shadow: 0 16rpx 34rpx rgba(198, 92, 34, 0.12);
+  --brand-glass-shadow: 0 20rpx 42rpx rgba(165, 78, 34, 0.14);
   min-height: 100%;
   background:
-    radial-gradient(circle at 0% 0%, rgba(255, 166, 82, 0.26), transparent 30%),
-    radial-gradient(circle at 100% 0%, rgba(255, 122, 0, 0.2), transparent 26%),
-    linear-gradient(180deg, #fff8f0 0%, #fff4e8 46%, #fffaf3 100%);
-  color: #2b1b0f;
+    radial-gradient(circle at 0% 0%, rgba(255, 184, 125, 0.28), transparent 28%),
+    radial-gradient(circle at 100% 0%, rgba(255, 136, 88, 0.22), transparent 24%),
+    linear-gradient(180deg, #fff9f3 0%, #fff3e8 46%, #fffaf7 100%);
+  color: #36231a;
   font-size: 28rpx;
 }
 
@@ -23,7 +23,7 @@ page {
 
 .card {
   background: linear-gradient(180deg, #ffffff 0%, #fffdfa 100%);
-  border-radius: 24rpx;
+  border-radius: 28rpx;
   padding: 24rpx;
   box-sizing: border-box;
   border: 1rpx solid var(--brand-card-border);
@@ -31,7 +31,7 @@ page {
 }
 
 .card-tight {
-  border-radius: 18rpx;
+  border-radius: 20rpx;
   padding: 18rpx;
 }
 
@@ -73,21 +73,6 @@ page {
   font-weight: 700;
 }
 
-.badge-green {
-  background: rgba(42, 168, 119, 0.14);
-  color: #0f7a54;
-}
-
-.badge-orange {
-  background: rgba(255, 138, 43, 0.18);
-  color: var(--brand-accent);
-}
-
-.badge-blue {
-  background: rgba(45, 121, 255, 0.14);
-  color: #225cc2;
-}
-
 .row {
   display: flex;
   align-items: center;
@@ -120,13 +105,13 @@ page {
 }
 
 .btn-primary {
-  background: linear-gradient(120deg, #ff6f00, #ff9f2f);
+  background: linear-gradient(120deg, #ff6a00, #ff8451);
   color: #ffffff;
-  box-shadow: 0 10rpx 22rpx rgba(201, 106, 20, 0.26);
+  box-shadow: 0 10rpx 22rpx rgba(221, 107, 61, 0.26);
 }
 
 .btn-ghost {
-  background: #fff2e6;
+  background: #fff1e7;
   color: var(--brand-accent);
 }
 

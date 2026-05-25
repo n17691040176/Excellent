@@ -1,4 +1,4 @@
-﻿# OS
+﻿﻿# OS
 .DS_Store
 Thumbs.db
 
@@ -49,6 +49,10 @@ coverage/
 # Frontend build output
 admin-web/dist/
 mobile-h5/dist/
+mobile-uniNew2/dist/
+
+# Data dump files (legacy, root level only)
+/*.sql
 
 # Python build output
 server/.pytest_cache/

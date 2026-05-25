@@ -2,7 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user
-from app.api.v1.mobile_serializers import page_slice, serialize_cart_item, serialize_favorite_product, serialize_footprint, serialize_shipment
+from app.api.v1.mobile_serializers import (
+    page_slice,
+    serialize_cart_item,
+    serialize_favorite_product,
+    serialize_footprint,
+    serialize_shipment,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.commerce import CartCheckoutRequest, CartItemCreateRequest, CartItemUpdateRequest

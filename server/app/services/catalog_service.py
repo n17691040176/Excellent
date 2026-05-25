@@ -204,6 +204,8 @@ class PackageService:
 
     @staticmethod
     def handle_paid_package_order(db: Session, order: Order) -> None:
+        if order.source_ref_id is None:
+            raise NotFoundError('Package not found')
         package = PackageService.get_package(db, int(order.source_ref_id))
         voucher_reward = quantize_amount(Decimal(str(order.total_amount)) * Decimal(str(package.voucher_reward_rate)) / Decimal('100'))
         if voucher_reward > 0:
@@ -279,6 +281,11 @@ class ProductService:
         'AI券最大抵扣比例',
         '积分支付',
         '余额支付',
+        '纯积分购买',
+        '积分加现金购买',
+        '纯现金购买',
+        '余额纯支付',
+        '余额加积分支付',
         '开启闪购',
         '每人限购件数',
         '分佣规则ID',
@@ -344,6 +351,11 @@ class ProductService:
         'ai_coupon_max_deduct_rate': ['AI券最大抵扣比例', 'ai_coupon_max_deduct_rate'],
         'points_purchase_enabled': ['积分支付', 'points_purchase_enabled'],
         'balance_purchase_enabled': ['余额支付', 'balance_purchase_enabled'],
+        'points_only_enabled': ['纯积分购买', 'points_only_enabled'],
+        'points_cash_enabled': ['积分加现金购买', 'points_cash_enabled'],
+        'cash_only_enabled': ['纯现金购买', 'cash_only_enabled'],
+        'balance_only_enabled': ['余额纯支付', 'balance_only_enabled'],
+        'balance_points_enabled': ['余额加积分支付', 'balance_points_enabled'],
         'flash_sale_enabled': ['开启闪购', 'flash_sale_enabled'],
         'per_user_limit': ['每人限购件数', 'per_user_limit'],
         'merchant_commission_rule_id': ['分佣规则ID', 'merchant_commission_rule_id'],
@@ -363,6 +375,11 @@ class ProductService:
                 'ai_coupon_max_deduct_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': False,
+                'points_only_enabled': False,
+                'points_cash_enabled': True,
+                'cash_only_enabled': True,
+                'balance_only_enabled': True,
+                'balance_points_enabled': True,
                 'flash_sale_enabled': False,
                 'per_user_limit': None,
                 'merchant_commission_rule_id': None,
@@ -379,6 +396,11 @@ class ProductService:
                 'ai_coupon_max_deduct_rate': 20.0,
                 'points_purchase_enabled': False,
                 'balance_purchase_enabled': False,
+                'points_only_enabled': False,
+                'points_cash_enabled': True,
+                'cash_only_enabled': True,
+                'balance_only_enabled': True,
+                'balance_points_enabled': True,
                 'flash_sale_enabled': False,
                 'per_user_limit': None,
                 'merchant_commission_rule_id': None,
@@ -395,6 +417,11 @@ class ProductService:
                 'ai_coupon_max_deduct_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
+                'points_only_enabled': False,
+                'points_cash_enabled': True,
+                'cash_only_enabled': True,
+                'balance_only_enabled': True,
+                'balance_points_enabled': True,
                 'flash_sale_enabled': True,
                 'per_user_limit': 1,
                 'merchant_commission_rule_id': None,
@@ -410,6 +437,11 @@ class ProductService:
             'ai_coupon_max_deduct_rate': None,
             'points_purchase_enabled': True,
             'balance_purchase_enabled': True,
+            'points_only_enabled': False,
+            'points_cash_enabled': True,
+            'cash_only_enabled': True,
+            'balance_only_enabled': True,
+            'balance_points_enabled': True,
             'flash_sale_enabled': False,
             'per_user_limit': None,
             'merchant_commission_rule_id': None,
@@ -712,6 +744,20 @@ class ProductService:
                 badges.append('联动设备收益')
             description = '影响到店服务的分佣、设备收益和支付规则。'
 
+        purchase_badges = []
+        if snapshot.get('points_only_enabled'):
+            purchase_badges.append('纯积分')
+        if snapshot.get('points_cash_enabled'):
+            purchase_badges.append('积分+现金')
+        if snapshot.get('cash_only_enabled'):
+            purchase_badges.append('纯现金')
+        if snapshot.get('balance_only_enabled') and snapshot.get('balance_purchase_enabled'):
+            purchase_badges.append('余额纯付')
+        if snapshot.get('balance_points_enabled') and snapshot.get('balance_purchase_enabled'):
+            purchase_badges.append('余额+积分')
+        if purchase_badges:
+            badges.extend(purchase_badges)
+
         return {
             'configured': bool(snapshot.get('configured')),
             'headline': headline,
@@ -815,6 +861,11 @@ class ProductService:
                 'drop_shipping_enabled': bool(mobile_payload.get('drop_shipping_enabled')),
             },
             'zone_config': zone_config,
+            'points_only_enabled': bool(zone_config.get('points_only_enabled')),
+            'points_cash_enabled': bool(zone_config.get('points_cash_enabled')),
+            'cash_only_enabled': bool(zone_config.get('cash_only_enabled')),
+            'balance_only_enabled': bool(zone_config.get('balance_only_enabled')),
+            'balance_points_enabled': bool(zone_config.get('balance_points_enabled')),
             'zone_rule_summary': ProductService._zone_config_summary(zone_config),
             'created_at': product.created_at.isoformat() if product.created_at else None,
             'updated_at': product.updated_at.isoformat() if product.updated_at else None,
@@ -1083,6 +1134,9 @@ class ProductService:
             '1',
             '0',
             '0',
+            '1',
+            '1',
+            '0',
             '',
             '',
             '0',
@@ -1119,11 +1173,14 @@ class ProductService:
             '0',
             '0',
             '0',
+            '1',
+            '1',
+            '0',
             '',
             '',
             '0',
         ])
-        return f'\ufeff{buffer.getvalue()}'.encode('utf-8')
+        return f'\ufeff{buffer.getvalue()}'.encode()
 
     @staticmethod
     def _extract_import_value(row: dict[str, Any], field_name: str) -> str:
@@ -1195,6 +1252,11 @@ class ProductService:
             'ai_coupon_max_deduct_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'ai_coupon_max_deduct_rate'), 'ai_coupon_max_deduct_rate'),
             'points_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'points_purchase_enabled')),
             'balance_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'balance_purchase_enabled')),
+            'points_only_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'points_only_enabled')),
+            'points_cash_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'points_cash_enabled')),
+            'cash_only_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'cash_only_enabled')),
+            'balance_only_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'balance_only_enabled')),
+            'balance_points_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'balance_points_enabled')),
             'flash_sale_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'flash_sale_enabled')),
             'per_user_limit': ProductService._parse_import_int(ProductService._extract_import_value(row, 'per_user_limit'), 'per_user_limit'),
             'merchant_commission_rule_id': ProductService._parse_import_int(ProductService._extract_import_value(row, 'merchant_commission_rule_id'), 'merchant_commission_rule_id'),
@@ -1336,6 +1398,22 @@ class ProductService:
             raise ConflictError('Repurchase zone does not support flash sale')
         if product.zone_type == ZoneType.HOT_SALE and payload.get('package_required'):
             raise ConflictError('Hot-sale zone does not support package qualification')
+        if not any((
+            payload.get('points_only_enabled'),
+            payload.get('points_cash_enabled'),
+            payload.get('cash_only_enabled'),
+        )):
+            raise ConflictError('At least one purchase mode must be enabled')
+        if payload.get('points_purchase_enabled') and not any((
+            payload.get('points_only_enabled'),
+            payload.get('points_cash_enabled'),
+        )):
+            raise ConflictError('Points payment must enable at least one points purchase mode')
+        if payload.get('balance_purchase_enabled') and not any((
+            payload.get('balance_only_enabled'),
+            payload.get('balance_points_enabled'),
+        )):
+            raise ConflictError('Balance payment must enable at least one balance purchase mode')
 
     @staticmethod
     def update_zone_config_for_admin(db: Session, product_id: int, current_user: User, payload: dict) -> ProductZoneConfig:

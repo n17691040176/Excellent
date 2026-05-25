@@ -1,21 +1,30 @@
 <template>
   <view class="container cart-page">
-    <StateView v-if="loading" title="购物车加载中..." />
-    <StateView v-else-if="failed" title="购物车加载失败" :show-retry="true" @retry="loadData" />
+    <view class="card hero-card">
+      <view class="hero-tag">购物车</view>
+      <view class="section-title mt-12">统一管理待结算商品</view>
+      <view class="muted">加入购物车后可在这里统一选择、改数量并完成结算</view>
+    </view>
+
+    <StateView v-if="loading" title="购物车加载中..." custom-class="mt-24" />
+    <StateView v-else-if="failed" title="购物车加载失败" :show-retry="true" custom-class="mt-24" @retry="loadData" />
     <StateView
       v-else-if="!items.length"
       title="购物车还是空的"
       description="去商品详情页加入购物车后，就可以在这里统一结算。"
+      custom-class="mt-24"
     />
 
     <template v-else>
-      <view class="card-list">
+      <view class="card-list mt-24">
         <view v-for="item in items" :key="item.id" class="card cart-card">
           <view class="select-box interactive" :class="{ active: item.selected }" @click="toggleSelected(item)">
             {{ item.selected ? '选' : '' }}
           </view>
-          <image v-if="item.image || item.product?.image" class="goods-cover" :src="item.image || item.product?.image" mode="aspectFill" />
-          <view v-else class="goods-cover goods-fallback" />
+          <view class="goods-thumb-wrap">
+            <image v-if="item.image || item.product?.image" class="goods-cover" :src="item.image || item.product?.image" mode="aspectFill" />
+            <view v-else class="goods-cover goods-fallback" />
+          </view>
 
           <view class="goods-main">
             <view class="goods-title">{{ item.title || item.product?.title }}</view>
@@ -42,10 +51,10 @@
         <view class="pay-options">
           <view
             v-for="item in paymentOptions"
-            :key="item.value"
+            :key="item.key"
             class="pay-option interactive"
-            :class="{ active: payChannel === item.value }"
-            @click="payChannel = item.value"
+            :class="{ active: selectedPayKey === item.key }"
+            @click="selectPaymentOption(item)"
           >
             <view class="pay-title">{{ item.label }}</view>
             <view class="pay-desc">{{ item.desc }}</view>
@@ -98,8 +107,10 @@ import { onShow } from '@dcloudio/uni-app';
 import StateView from '@/components/StateView.vue';
 import { commerceApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
+import { requestPayment as requestPlatformPayment } from '@/utils/payment';
 
 const PAYMENT_LABEL_MAP = {
+  POINTS: '纯积分',
   BALANCE: '余额',
   VOUCHER: '消费金',
   WECHAT: '微信支付',
@@ -107,6 +118,7 @@ const PAYMENT_LABEL_MAP = {
 };
 
 const PAYMENT_DESC_MAP = {
+  POINTS: '全部使用积分完成支付',
   BALANCE: '使用余额支付剩余金额',
   VOUCHER: '使用消费金支付剩余金额',
   WECHAT: '已预留微信支付接口',
@@ -119,31 +131,61 @@ const checkingOut = ref(false);
 const items = ref([]);
 const pointsAmount = ref('');
 const payChannel = ref('BALANCE');
+const purchaseMode = ref('CASH_ONLY');
+const selectedPayKey = ref('');
 
 const selectedItems = computed(() => items.value.filter((item) => item.selected));
 const selectedProducts = computed(() => selectedItems.value.map((item) => item.product || {}).filter(Boolean));
 const selectedZones = computed(() => Array.from(new Set(selectedProducts.value.map((item) => item.zone_type).filter(Boolean))));
-const supportsPoints = computed(() => {
-  if (!selectedProducts.value.length) return true;
-  return selectedProducts.value.every((item) => item.points_purchase_enabled !== false);
-});
+
+function optionKey(item) {
+  return `${item.value || ''}|${item.purchase_mode || (item.supports_points ? 'POINTS_CASH' : 'CASH_ONLY')}`;
+}
+
+function paymentLabel(item, mode) {
+  if (item.label) return item.label;
+  if (item.value === 'BALANCE' && mode === 'POINTS_CASH') return '余额+积分支付';
+  if (item.value === 'BALANCE' && mode === 'CASH_ONLY') return '余额纯支付';
+  return `${PAYMENT_LABEL_MAP[item.value] || item.value}${item.supports_points ? ' + 积分' : ''}`;
+}
+
+function paymentDesc(item) {
+  if (item.desc) return item.desc;
+  return PAYMENT_DESC_MAP[item.value] || '按当前渠道支付';
+}
+
 const paymentOptions = computed(() => {
   if (!selectedProducts.value.length) return [];
   if (selectedZones.value.length > 1) return [];
-  const channelSets = selectedProducts.value.map((item) => new Set(item.supported_pay_channels || []));
-  const channels = [...channelSets[0]].filter((channel) => channelSets.every((set) => set.has(channel)));
-  return channels.map((value) => ({
-    value,
-    label: `${PAYMENT_LABEL_MAP[value] || value}${supportsPoints.value ? ' + 积分' : ''}`,
-    desc: PAYMENT_DESC_MAP[value] || '按当前渠道支付'
-  }));
+  const optionSets = selectedProducts.value.map((product) => new Set(
+    (product.payment_options || []).map((item) => optionKey(item))
+  ));
+  if (!optionSets.length || optionSets.some((set) => !set.size)) return [];
+  const keys = [...optionSets[0]].filter((key) => optionSets.every((set) => set.has(key)));
+  const firstOptions = selectedProducts.value[0].payment_options || [];
+  return keys.map((key) => {
+    const raw = firstOptions.find((item) => optionKey(item) === key) || {};
+    const mode = raw.purchase_mode || (raw.supports_points ? 'POINTS_CASH' : 'CASH_ONLY');
+    return {
+      key,
+      value: raw.value,
+      purchase_mode: mode,
+      supports_points: Boolean(raw.supports_points),
+      label: paymentLabel(raw, mode),
+      desc: paymentDesc(raw)
+    };
+  });
 });
+const selectedPaymentOption = computed(() => paymentOptions.value.find((item) => item.key === selectedPayKey.value) || paymentOptions.value[0] || null);
 const selectedCount = computed(() => selectedItems.value.length);
 const totalAmount = computed(() => selectedItems.value.reduce((sum, item) => sum + Number(item.subtotal_amount || 0), 0).toFixed(2));
 const normalizedPoints = computed(() => {
-  if (!supportsPoints.value) return '0.00';
+  const option = selectedPaymentOption.value;
+  if (!option || option.purchase_mode === 'CASH_ONLY') return '0.00';
+  if (option.purchase_mode === 'POINTS_ONLY') return Number(totalAmount.value).toFixed(2);
   const amount = Math.max(0, Number(pointsAmount.value || 0));
-  return Math.min(amount, Number(totalAmount.value)).toFixed(2);
+  const maxPoints = Math.max(0, Number(totalAmount.value) - 0.01);
+  return Math.min(amount, maxPoints).toFixed(2);
 });
 const cashAmount = computed(() => Math.max(0, Number(totalAmount.value) - Number(normalizedPoints.value)).toFixed(2));
 const cashLabel = computed(() => ({
@@ -157,12 +199,21 @@ watch(
   paymentOptions,
   (options) => {
     if (!options.length) return;
-    if (!options.some((item) => item.value === payChannel.value)) {
-      payChannel.value = options[0].value;
+    if (!options.some((item) => item.key === selectedPayKey.value)) {
+      selectPaymentOption(options[0]);
     }
   },
   { immediate: true }
 );
+
+function selectPaymentOption(option) {
+  selectedPayKey.value = option.key;
+  payChannel.value = option.value;
+  purchaseMode.value = option.purchase_mode;
+  if (option.purchase_mode !== 'POINTS_CASH') {
+    pointsAmount.value = '';
+  }
+}
 
 function money(value) {
   return Number(value || 0).toFixed(2);
@@ -227,8 +278,21 @@ async function checkout() {
       pay_channel: payChannel.value,
       auto_complete: true
     });
+    let toastTitle = '支付完成';
+    let toastIcon = 'success';
+    if (res?.payment && res.payment.status !== 'PAID') {
+      try {
+        const platformResult = await requestPlatformPayment(res.payment);
+        toastTitle = platformResult?.mocked ? '支付单已创建' : '支付已提交';
+        toastIcon = platformResult?.mocked ? 'none' : 'success';
+      } catch (error) {
+        const errMsg = String(error?.errMsg || error?.message || '');
+        toastTitle = errMsg.includes('cancel') ? '已取消支付' : '支付失败';
+        toastIcon = 'none';
+      }
+    }
     await loadData();
-    uni.showToast({ title: '支付完成', icon: 'success' });
+    uni.showToast({ title: toastTitle, icon: toastIcon });
     setTimeout(() => {
       uni.navigateTo({ url: `/subpackages/order/detail?id=${res.order_id}` });
     }, 500);

@@ -11,9 +11,10 @@
 
     <template v-else>
       <view class="card summary-card">
-          <view class="row-between summary-head">
+        <view class="summary-tag">余额提现</view>
+        <view class="row-between summary-head mt-12">
           <view>
-            <view class="section-title">余额提现</view>
+            <view class="section-title slim-title">余额提现</view>
             <view class="muted mt-8">审核通过后，80% 提现到账，20% 自动转入消费金。</view>
           </view>
           <view class="summary-link interactive" @click="goBalanceDetail">余额明细</view>
@@ -56,7 +57,7 @@
         </button>
       </view>
 
-      <view class="card mt-24">
+      <view class="card mt-24 rule-card">
         <view class="row-between section-row">
           <view>
             <view class="section-title slim-title">提现说明</view>
@@ -76,7 +77,7 @@
         </view>
       </view>
 
-      <view class="card mt-24">
+      <view class="card mt-24 record-card">
         <view class="row-between section-row">
           <view>
             <view class="section-title slim-title">提现记录</view>
@@ -468,17 +469,37 @@ onPullDownRefresh(async () => {
 
 .summary-card {
   background:
-    radial-gradient(circle at 100% 0%, rgba(255, 193, 120, 0.28), transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(255, 193, 120, 0.22), transparent 32%),
     radial-gradient(circle at 8% 8%, rgba(255, 255, 255, 0.24), transparent 24%),
     linear-gradient(180deg, #fffaf2 0%, #fff1df 100%);
   border: 1rpx solid rgba(198, 161, 124, 0.16);
+  position: relative;
+  overflow: hidden;
 }
-
+.summary-card::after {
+  content: '';
+  position: absolute;
+  right: -26rpx;
+  top: -26rpx;
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 50%;
+  background: rgba(255, 122, 0, 0.08);
+}
+.summary-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #c96a14;
+  font-size: 20rpx;
+  font-weight: 800;
+}
 .summary-head {
   align-items: flex-start;
   gap: 20rpx;
 }
-
 .summary-link {
   flex-shrink: 0;
   padding: 12rpx 20rpx;
@@ -488,16 +509,13 @@ onPullDownRefresh(async () => {
   font-size: 22rpx;
   font-weight: 700;
 }
-
 .section-row {
   margin-bottom: 16rpx;
 }
-
 .tips-list {
   display: grid;
   gap: 16rpx;
 }
-
 .tip-item {
   display: flex;
   align-items: flex-start;
@@ -507,7 +525,6 @@ onPullDownRefresh(async () => {
   background: #fffaf4;
   border: 1rpx solid rgba(198, 161, 124, 0.14);
 }
-
 .tip-index {
   flex-shrink: 0;
   min-width: 56rpx;
@@ -520,54 +537,45 @@ onPullDownRefresh(async () => {
   font-size: 22rpx;
   font-weight: 800;
 }
-
 .tip-content {
   min-width: 0;
 }
-
 .tip-title {
   font-size: 26rpx;
   font-weight: 700;
   color: #4f321a;
 }
-
 .tip-desc {
   margin-top: 8rpx;
   font-size: 22rpx;
   line-height: 1.6;
   color: #8d745d;
 }
-
 .slim-title {
   margin-bottom: 0;
 }
-
 .stat-grid,
 .withdraw-preview,
 .withdraw-record-list {
   display: grid;
   gap: 12rpx;
 }
-
 .stat-grid,
 .withdraw-preview {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-
 .stat-item,
 .preview-item {
   padding: 16rpx;
   border-radius: 18rpx;
   background: rgba(255, 255, 255, 0.72);
 }
-
 .stat-label,
 .preview-label {
   display: block;
   font-size: 20rpx;
   color: #8b7158;
 }
-
 .stat-value,
 .preview-value {
   display: block;
@@ -576,17 +584,14 @@ onPullDownRefresh(async () => {
   font-weight: 800;
   color: #4f321a;
 }
-
 .preview-value-warm {
   color: #c96a14;
 }
-
 .withdraw-input-wrap {
   display: flex;
   align-items: center;
   gap: 12rpx;
 }
-
 .withdraw-input {
   flex: 1;
   min-width: 0;
@@ -599,7 +604,6 @@ onPullDownRefresh(async () => {
   font-size: 26rpx;
   color: #4f321a;
 }
-
 .withdraw-shortcut {
   flex-shrink: 0;
   padding: 0 22rpx;
@@ -611,24 +615,20 @@ onPullDownRefresh(async () => {
   font-size: 24rpx;
   font-weight: 700;
 }
-
 .asset-empty {
   padding: 16rpx 0 8rpx;
 }
-
 .withdraw-record-item {
   padding: 20rpx;
   border-radius: 24rpx;
   background: #fffdf9;
   border: 1rpx solid rgba(198, 161, 124, 0.16);
 }
-
 .withdraw-record-title {
   font-size: 28rpx;
   font-weight: 700;
   color: #4f321a;
 }
-
 .withdraw-record-line,
 .withdraw-record-time {
   margin-top: 8rpx;
@@ -636,7 +636,6 @@ onPullDownRefresh(async () => {
   line-height: 1.5;
   color: #8d745d;
 }
-
 .withdraw-record-copy {
   display: flex;
   align-items: center;
@@ -644,7 +643,6 @@ onPullDownRefresh(async () => {
   gap: 12rpx;
   flex-wrap: wrap;
 }
-
 .copy-link {
   padding: 4rpx 12rpx;
   border-radius: 999rpx;
@@ -653,17 +651,14 @@ onPullDownRefresh(async () => {
   font-size: 20rpx;
   line-height: 1.4;
 }
-
 .withdraw-record-action {
   margin-top: 10rpx;
   display: flex;
   justify-content: flex-end;
 }
-
 .interactive {
   transition: transform 180ms ease, opacity 180ms ease;
 }
-
 .interactive:active {
   transform: scale(0.98);
   opacity: 0.92;

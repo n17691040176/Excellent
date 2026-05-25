@@ -1,21 +1,29 @@
 <template>
   <view class="container settings-page">
-    <view class="card">
-      <view class="section-title">账号设置</view>
-      <view class="muted">管理资料、安全与偏好配置</view>
+    <view class="card hero-card">
+      <view class="hero-tag">账号设置</view>
+      <view class="section-title mt-12">管理资料、安全与偏好配置</view>
+      <view class="muted">切换环境、查看账号偏好，方便调试和联调</view>
 
-      <view class="setting-item interactive" v-for="item in items" :key="item.title" @click="preview(item.title)">
-        <view>
-          <view class="item-title">{{ item.title }}</view>
-          <view class="item-desc">{{ item.desc }}</view>
+      <view class="setting-list mt-20">
+        <view class="setting-item interactive" v-for="item in items" :key="item.title" @click="preview(item.title)">
+          <view>
+            <view class="item-title">{{ item.title }}</view>
+            <view class="item-desc">{{ item.desc }}</view>
+          </view>
+          <view class="arrow">查看</view>
         </view>
-        <view class="arrow">查看</view>
       </view>
     </view>
 
-    <view class="card mt-20">
-      <view class="section-title">环境切换</view>
-      <view class="muted">用于控制移动端打包后访问的 API 地址</view>
+    <view class="card mt-20 env-card">
+      <view class="row-between">
+        <view>
+          <view class="section-title slim-title">环境切换</view>
+          <view class="muted">用于控制移动端打包后访问的 API 地址</view>
+        </view>
+        <view class="env-current-value">{{ currentEnvLabel }}</view>
+      </view>
 
       <view class="env-grid mt-16">
         <view
@@ -45,14 +53,24 @@
       </view>
     </view>
 
-    <button class="btn btn-ghost mt-24" @click="logout">退出登录</button>
+    <button class="btn btn-ghost mt-24 logout-btn" @click="logout">退出登录</button>
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { clearAuth } from '@/utils/auth'
-import { APP_ENV, clearAppEnv, getApiBaseUrl, getAppEnv, setAppEnv } from '@/config'
+import {
+  APP_ENV,
+  clearApiBaseUrl,
+  clearAppEnv,
+  clearInviteWebBaseUrl,
+  getApiBaseUrl,
+  getAppEnv,
+  setApiBaseUrl,
+  setAppEnv,
+  setInviteWebBaseUrl
+} from '@/config'
 
 const items = [
   { title: '个人资料', desc: '头像、昵称和联系方式' },
@@ -96,6 +114,21 @@ const currentEnvLabel = computed(() => {
   return matched ? `${matched.label}（${matched.tag}）` : currentEnv.value
 })
 
+const envRuntimeConfig = {
+  [APP_ENV.LOCAL]: {
+    apiUrl: 'http://127.0.0.1:8000',
+    inviteUrl: 'http://127.0.0.1:5174'
+  },
+  [APP_ENV.DEV]: {
+    apiUrl: 'http://156.238.241.213:8000',
+    inviteUrl: 'http://156.238.241.213:5174'
+  },
+  [APP_ENV.PROD]: {
+    apiUrl: '',
+    inviteUrl: ''
+  }
+}
+
 const logout = () => {
   clearAuth()
   uni.reLaunch({ url: '/pages/login/index' })
@@ -113,8 +146,13 @@ const applyEnv = (env) => {
 
   if (env === APP_ENV.PROD) {
     clearAppEnv()
+    clearApiBaseUrl()
+    clearInviteWebBaseUrl()
   } else {
     setAppEnv(env)
+    const runtimeConfig = envRuntimeConfig[env]
+    setApiBaseUrl(runtimeConfig?.apiUrl || '')
+    setInviteWebBaseUrl(runtimeConfig?.inviteUrl || '')
   }
 
   currentEnv.value = getAppEnv()
@@ -136,8 +174,28 @@ const applyEnv = (env) => {
 <style scoped>
 @import '@/styles/common.css';
 .settings-page { padding-bottom: 36rpx; }
+.hero-card {
+  background:
+    radial-gradient(circle at 95% 8%, rgba(255, 166, 82, 0.16), transparent 36%),
+    linear-gradient(180deg, #fffdf9 0%, #fff6ec 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+.setting-list {
+  display: grid;
+  gap: 12rpx;
+}
 .setting-item {
-  padding: 22rpx 0;
+  padding: 18rpx 0;
   border-bottom: 1rpx solid #ebf2ef;
   display: flex;
   justify-content: space-between;
@@ -146,7 +204,8 @@ const applyEnv = (env) => {
 .setting-item:last-child { border-bottom: none; }
 .item-title { font-size: 28rpx; color: #1f4032; }
 .item-desc { margin-top: 6rpx; font-size: 22rpx; color: #7a8d84; }
-.arrow { font-size: 22rpx; color: #b27a46; font-weight: 700; }
+.arrow { font-size: 22rpx; color: #ff6a00; font-weight: 700; }
+.env-card { border: 1rpx solid rgba(255, 154, 106, 0.16); }
 .env-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -207,6 +266,9 @@ const applyEnv = (env) => {
   line-height: 1.6;
   color: #5f4a37;
   word-break: break-all;
+}
+.logout-btn {
+  width: 100%;
 }
 .interactive { transition: transform 180ms ease, opacity 180ms ease; }
 .interactive:active { transform: scale(0.99); opacity: 0.92; }

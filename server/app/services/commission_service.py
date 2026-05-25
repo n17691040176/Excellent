@@ -6,14 +6,26 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.asset import UserAssetLedger
 from app.models.commission import CommissionConfig, CommissionFlow, UserCommission, WithdrawRequest
-from app.models.enums import AssetType, CommissionStatus, WithdrawStatus, WithdrawType
-from app.models.order import Order
+from app.models.enums import (
+    AssetType,
+    BusinessIdentity,
+    CommissionStatus,
+    OrderStatus,
+    OrderType,
+    PayStatus,
+    WithdrawStatus,
+    WithdrawType,
+)
+from app.models.order import Order, OrderItem
+from app.models.product import Product
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
+from app.services.earning_rule_service import EarningRuleService
 from app.utils.helpers import now, quantize_amount
 
 BALANCE_WITHDRAW_VOUCHER_RATE = Decimal('0.20')
+TEAM_REWARD_FLOW_LEVEL = 100
 BALANCE_WITHDRAW_APPLY = 'BALANCE_WITHDRAW_APPLY'
 BALANCE_WITHDRAW_REJECT = 'BALANCE_WITHDRAW_REJECT'
 POINTS_WITHDRAW_APPLY = 'POINTS_WITHDRAW_APPLY'
@@ -82,36 +94,18 @@ class CommissionService:
 
     @staticmethod
     def freeze_for_order(db: Session, order: Order, buyer: User) -> None:
-        config = CommissionService.get_config(db)
-        beneficiaries = []
-        if buyer.parent_id:
-            beneficiaries.append((buyer.parent_id, Decimal(str(config.level1_rate)) / Decimal('100'), 1))
-        if buyer.grandparent_id:
-            beneficiaries.append((buyer.grandparent_id, Decimal(str(config.level2_rate)) / Decimal('100'), 2))
-        for user_id, rate, level in beneficiaries:
-            amount = quantize_amount(Decimal(str(order.paid_amount)) * rate)
-            commission = db.query(UserCommission).filter(UserCommission.user_id == user_id).first()
-            if not commission:
-                commission = UserCommission(user_id=user_id, updated_at=now())
-                db.add(commission)
-                db.flush()
-            commission.frozen_amount = quantize_amount(commission.frozen_amount) + amount
-            commission.total_amount = quantize_amount(commission.total_amount) + amount
-            commission.updated_at = now()
-            db.add(
-                CommissionFlow(
-                    beneficiary_user_id=user_id,
-                    source_user_id=buyer.id,
-                    order_id=order.id,
-                    team_id=buyer.team_id,
-                    level=level,
-                    rate=rate * 100,
-                    base_amount=order.paid_amount,
-                    commission_amount=amount,
-                    status=CommissionStatus.FROZEN,
-                    created_at=now(),
-                )
-            )
+        if db.query(CommissionFlow.id).filter(CommissionFlow.order_id == order.id).first():
+            return
+
+        profit_items = CommissionService._order_profit_items(db, order.id)
+        if not profit_items:
+            return
+
+        if order.order_type == OrderType.REPURCHASE_ORDER:
+            CommissionService._freeze_repurchase_reward(db, order, buyer, profit_items)
+        else:
+            CommissionService._freeze_distribution_rewards(db, order, buyer, profit_items)
+        CommissionService._freeze_direct_team_reward(db, order, buyer, profit_items)
 
     @staticmethod
     def settle_for_order(db: Session, order_id: int) -> None:
@@ -165,6 +159,7 @@ class CommissionService:
 
         source_no = CommissionService._withdraw_source_no(record.id)
         if withdraw_type == WithdrawType.COMMISSION:
+            assert summary is not None
             summary.available_amount = quantize_amount(summary.available_amount) - quantized
             summary.frozen_amount = quantize_amount(summary.frozen_amount) + quantized
             summary.updated_at = now()
@@ -258,6 +253,157 @@ class CommissionService:
     @staticmethod
     def _withdraw_source_no(withdraw_id: int) -> str:
         return f'WD-{withdraw_id}'
+
+    @staticmethod
+    def _freeze_distribution_rewards(
+        db: Session,
+        order: Order,
+        buyer: User,
+        profit_items: list[tuple[int, Decimal]],
+    ) -> None:
+        ancestors = CommissionService._ancestor_users(db, buyer, max_level=3)
+        for level, beneficiary in ancestors:
+            if not CommissionService._distribution_enabled(db, beneficiary):
+                continue
+            for product_id, base_amount in profit_items:
+                rate = EarningRuleService.rate_for_commission_level(
+                    db,
+                    level,
+                    product_id=product_id,
+                    trigger_event='ORDER_COMPLETE',
+                )
+                CommissionService._add_frozen_flow(db, order, buyer, beneficiary, level, rate, base_amount)
+
+    @staticmethod
+    def _freeze_repurchase_reward(
+        db: Session,
+        order: Order,
+        buyer: User,
+        profit_items: list[tuple[int, Decimal]],
+    ) -> None:
+        if not buyer.parent_id:
+            return
+        beneficiary = db.get(User, buyer.parent_id)
+        if not beneficiary or not CommissionService._distribution_enabled(db, beneficiary):
+            return
+        for product_id, base_amount in profit_items:
+            rate = EarningRuleService.rate_for_commission_level(
+                db,
+                1,
+                product_id=product_id,
+                trigger_event='REPEAT_PURCHASE',
+            )
+            CommissionService._add_frozen_flow(db, order, buyer, beneficiary, 1, rate, base_amount)
+
+    @staticmethod
+    def _freeze_direct_team_reward(
+        db: Session,
+        order: Order,
+        buyer: User,
+        profit_items: list[tuple[int, Decimal]],
+    ) -> None:
+        if not buyer.parent_id:
+            return
+        beneficiary = db.get(User, buyer.parent_id)
+        if not beneficiary or not CommissionService._distribution_enabled(db, beneficiary):
+            return
+        rate = EarningRuleService.rate_for_team_member_level(db, beneficiary.business_identity)
+        total_profit = quantize_amount(sum((amount for _, amount in profit_items), Decimal('0')))
+        CommissionService._add_frozen_flow(db, order, buyer, beneficiary, TEAM_REWARD_FLOW_LEVEL, rate, total_profit)
+
+    @staticmethod
+    def _add_frozen_flow(
+        db: Session,
+        order: Order,
+        buyer: User,
+        beneficiary: User,
+        level: int,
+        rate: Decimal,
+        base_amount: Decimal,
+    ) -> None:
+        base = quantize_amount(base_amount)
+        if base <= Decimal('0') or rate <= Decimal('0'):
+            return
+        amount = quantize_amount(base * rate)
+        if amount <= Decimal('0'):
+            return
+        commission = db.query(UserCommission).filter(UserCommission.user_id == beneficiary.id).first()
+        if not commission:
+            commission = UserCommission(user_id=beneficiary.id, updated_at=now())
+            db.add(commission)
+            db.flush()
+        commission.frozen_amount = quantize_amount(commission.frozen_amount) + amount
+        commission.total_amount = quantize_amount(commission.total_amount) + amount
+        commission.updated_at = now()
+        db.add(
+            CommissionFlow(
+                beneficiary_user_id=beneficiary.id,
+                source_user_id=buyer.id,
+                order_id=order.id,
+                team_id=buyer.team_id,
+                level=level,
+                rate=quantize_amount(rate * Decimal('100')),
+                base_amount=base,
+                commission_amount=amount,
+                status=CommissionStatus.FROZEN,
+                created_at=now(),
+            )
+        )
+
+    @staticmethod
+    def _order_profit_items(db: Session, order_id: int) -> list[tuple[int, Decimal]]:
+        items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        if not items:
+            return []
+        product_ids = {item.product_id for item in items}
+        products = {
+            product.id: product
+            for product in db.query(Product).filter(Product.id.in_(product_ids)).all()
+        }
+        profit_items: list[tuple[int, Decimal]] = []
+        for item in items:
+            product = products.get(item.product_id)
+            if not product or product.cost_price is None:
+                profit = Decimal('0')
+            else:
+                unit_price = Decimal(str(item.unit_price or '0'))
+                cost_price = Decimal(str(product.cost_price or '0'))
+                quantity = Decimal(str(item.quantity or 0))
+                profit = max(Decimal('0'), unit_price - cost_price) * quantity
+            profit_items.append((item.product_id, quantize_amount(profit)))
+        return profit_items
+
+    @staticmethod
+    def _ancestor_users(db: Session, buyer: User, max_level: int) -> list[tuple[int, User]]:
+        ancestors: list[tuple[int, User]] = []
+        next_user_id = buyer.parent_id
+        level = 1
+        visited: set[int] = {buyer.id}
+        while next_user_id and level <= max_level and next_user_id not in visited:
+            user = db.get(User, next_user_id)
+            if not user:
+                break
+            ancestors.append((level, user))
+            visited.add(user.id)
+            next_user_id = user.parent_id
+            level += 1
+        return ancestors
+
+    @staticmethod
+    def _distribution_enabled(db: Session, user: User) -> bool:
+        if user.business_identity in {
+            BusinessIdentity.VIP_MEMBER,
+            BusinessIdentity.DEALER,
+            BusinessIdentity.MASTER_DEALER,
+        }:
+            return True
+        if user.business_identity != BusinessIdentity.NORMAL_MEMBER:
+            return False
+        return db.query(Order.id).filter(
+            Order.user_id == user.id,
+            Order.pay_status == PayStatus.PAID,
+            Order.order_status.notin_([OrderStatus.CLOSED, OrderStatus.REFUNDED]),
+        ).first() is not None
 
     @staticmethod
     def _asset_withdraw_meta(withdraw_type: WithdrawType) -> tuple[AssetType, str, str]:

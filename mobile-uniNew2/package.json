@@ -13,7 +13,8 @@
     "build:app": "node scripts/run-uni.mjs build -p app",
     "build:app-android": "node scripts/run-uni.mjs build -p app-android",
     "build:app-ios": "node scripts/run-uni.mjs build -p app-ios",
-    "build:mp-weixin": "node scripts/run-uni.mjs build -p mp-weixin"
+    "build:mp-weixin": "node scripts/run-uni.mjs build -p mp-weixin",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-3080720230703001",
@@ -31,6 +32,9 @@
     "@dcloudio/uni-cli-shared": "3.0.0-3080720230703001",
     "@dcloudio/uni-stacktracey": "3.0.0-3080720230703001",
     "@dcloudio/vite-plugin-uni": "3.0.0-3080720230703001",
+    "eslint": "^9.10.0",
+    "@eslint/js": "^9.10.0",
+    "eslint-plugin-vue": "^9.28.0",
     "mini-types": "latest",
     "miniprogram-api-typings": "latest",
     "vite": "4.1.4"

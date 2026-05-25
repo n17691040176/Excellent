@@ -1,14 +1,31 @@
 <template>
   <view class="container commission-page">
     <view class="card summary-card">
-      <view class="section-title">佣金中心</view>
-      <view class="muted">收益趋势与结算进度实时同步</view>
-      <view class="row-between mt-20">
+      <view class="summary-tag">佣金中心</view>
+      <view class="section-title mt-12">收益趋势与结算进度实时同步</view>
+      <view class="muted">查看可提现金额、历史收益和结算状态，提现操作更直观</view>
+
+      <view class="summary-main mt-20">
         <view>
+          <view class="summary-label">可提现金额</view>
           <view class="num">¥{{ withdrawable }}</view>
-          <view class="muted">可提现</view>
         </view>
         <button class="btn btn-primary withdraw-btn" @click="withdraw">立即提现</button>
+      </view>
+
+      <view class="summary-strip mt-20">
+        <view class="summary-chip">
+          <view class="chip-value">{{ list.length }}</view>
+          <view class="chip-label">收益记录</view>
+        </view>
+        <view class="summary-chip">
+          <view class="chip-value">{{ settledCount }}</view>
+          <view class="chip-label">已结算</view>
+        </view>
+        <view class="summary-chip">
+          <view class="chip-value">{{ pendingCount }}</view>
+          <view class="chip-label">待结算</view>
+        </view>
       </view>
     </view>
 
@@ -16,21 +33,26 @@
     <StateView v-else-if="failed" title="佣金记录加载失败" :show-retry="true" custom-class="mt-24" @retry="loadCommission" />
     <StateView v-else-if="!list.length" title="暂无佣金记录" description="产生收益后会同步展示结算进度" custom-class="mt-24" />
 
-    <view class="card mt-24" v-else v-for="item in list" :key="item.id">
-      <view class="row-between">
-        <view class="name">{{ item.name }}</view>
-        <view class="badge" :class="item.status === '已结算' ? 'badge-green' : 'badge-orange'">{{ item.status }}</view>
-      </view>
-      <view class="row-between mt-16">
-        <view class="muted">{{ item.time }}</view>
-        <view class="income">+¥{{ item.amount }}</view>
+    <view v-else class="record-list mt-24">
+      <view class="card record-card" v-for="item in list" :key="item.id">
+        <view class="row-between record-top">
+          <view>
+            <view class="name">{{ item.name }}</view>
+            <view class="muted mt-8">{{ item.time }}</view>
+          </view>
+          <view class="badge" :class="item.status === '已结算' ? 'badge-green' : 'badge-orange'">{{ item.status }}</view>
+        </view>
+        <view class="record-bottom mt-16">
+          <view class="record-desc">{{ item.desc || '收益入账记录' }}</view>
+          <view class="income">+¥{{ item.amount }}</view>
+        </view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import StateView from '@/components/StateView.vue';
 import { commissionApi } from '@/api/modules';
@@ -40,6 +62,9 @@ const loading = ref(false);
 const failed = ref(false);
 const withdrawable = ref('0.00');
 const list = ref([]);
+
+const settledCount = computed(() => list.value.filter((item) => item.status === '已结算').length);
+const pendingCount = computed(() => list.value.filter((item) => item.status !== '已结算').length);
 
 const loadCommission = async () => {
   loading.value = true;
@@ -99,14 +124,61 @@ onPullDownRefresh(async () => {
 .commission-page { padding-bottom: 36rpx; }
 .summary-card {
   background:
-    radial-gradient(circle at 95% 8%, rgba(255, 166, 82, 0.2), transparent 40%),
-    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
-  border: 1rpx solid rgba(198, 161, 124, 0.18);
+    radial-gradient(circle at 95% 8%, rgba(255, 166, 82, 0.16), transparent 36%),
+    linear-gradient(180deg, #fffdf9 0%, #fff5eb 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.18);
+  position: relative;
+  overflow: hidden;
 }
-.num { font-size: 44rpx; color: #b85d11; font-weight: 800; }
+.summary-card::after {
+  content: '';
+  position: absolute;
+  right: -30rpx;
+  top: -30rpx;
+  width: 150rpx;
+  height: 150rpx;
+  border-radius: 50%;
+  background: rgba(255, 122, 0, 0.08);
+}
+.summary-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+.summary-main {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.summary-label { font-size: 22rpx; color: #8b7158; }
+.num { margin-top: 6rpx; font-size: 48rpx; color: #ff6a00; font-weight: 900; }
 .withdraw-btn { width: 200rpx; padding: 0; }
-.name { font-size: 28rpx; color: #4f321a; }
-.income { color: #c96a14; font-size: 30rpx; font-weight: 700; }
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+}
+.summary-chip {
+  padding: 14rpx 12rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1rpx solid rgba(255, 154, 106, 0.12);
+}
+.chip-value { font-size: 30rpx; font-weight: 900; color: #4f321a; }
+.chip-label { margin-top: 4rpx; font-size: 20rpx; color: #8b7158; }
+.record-list { display: grid; gap: 14rpx; }
+.record-card { border: 1rpx solid rgba(255, 154, 106, 0.16); border-radius: 24rpx; }
+.record-top { align-items: flex-start; }
+.name { font-size: 28rpx; color: #4f321a; font-weight: 800; }
+.record-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; }
+.record-desc { font-size: 22rpx; color: #8b7158; }
+.income { color: #ff6a00; font-size: 30rpx; font-weight: 800; }
 .state-card { text-align: center; }
 .retry-btn { width: 180rpx; }
 </style>

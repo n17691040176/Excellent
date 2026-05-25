@@ -3,13 +3,17 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_roles
+from app.api.v1.mobile_serializers import serialize_address
 from app.db.session import get_db
 from app.models.enums import GlobalRole, PowerBankStatus, UserStatus
 from app.models.team import TeamMember
 from app.models.user import User
+from app.schemas.address import AddressCreateRequest, AddressUpdateRequest
 from app.schemas.asset import AdminPowerBankCreateRequest, AdminPowerBankUpdateRequest
 from app.schemas.user import UpdateProfileRequest, UpdateUserStatusRequest
+from app.services.address_service import AddressService
 from app.services.asset_service import AssetService
+from app.services.commerce_service import CommerceService
 from app.services.user_service import UserService
 
 app_router = APIRouter(prefix='/app/users')
@@ -137,6 +141,91 @@ def update_user_status(
 ):
     user = UserService.update_user_status(db, user_id, UserStatus(payload.status))
     return {'code': 0, 'message': 'success', 'data': user}
+
+
+@admin_router.post('/{user_id}/addresses')
+def create_user_address(
+    user_id: int,
+    payload: AddressCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.get_user(db, user_id, current_user)
+    data = AddressService.create_address(db, user.id, payload.model_dump())
+    return {'code': 0, 'message': 'success', 'data': serialize_address(data)}
+
+
+@admin_router.put('/{user_id}/addresses/{address_id}')
+def update_user_address(
+    user_id: int,
+    address_id: int,
+    payload: AddressUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.get_user(db, user_id, current_user)
+    data = AddressService.update_address(db, user.id, address_id, payload.model_dump(exclude_none=True))
+    return {'code': 0, 'message': 'success', 'data': serialize_address(data)}
+
+
+@admin_router.delete('/{user_id}/addresses/{address_id}')
+def delete_user_address(
+    user_id: int,
+    address_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.get_user(db, user_id, current_user)
+    AddressService.delete_address(db, user.id, address_id)
+    return {'code': 0, 'message': 'success', 'data': {'success': True}}
+
+
+@admin_router.patch('/{user_id}/addresses/{address_id}/default')
+def set_user_default_address(
+    user_id: int,
+    address_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.get_user(db, user_id, current_user)
+    data = AddressService.set_default(db, user.id, address_id)
+    return {'code': 0, 'message': 'success', 'data': serialize_address(data)}
+
+
+@admin_router.delete('/{user_id}/favorites/{product_id}')
+def delete_user_favorite(
+    user_id: int,
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.get_user(db, user_id, current_user)
+    CommerceService.remove_favorite(db, user.id, product_id)
+    return {'code': 0, 'message': 'success', 'data': {'success': True}}
+
+
+@admin_router.delete('/{user_id}/footprints/{product_id}')
+def delete_user_footprint(
+    user_id: int,
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.get_user(db, user_id, current_user)
+    CommerceService.remove_footprint(db, user.id, product_id)
+    return {'code': 0, 'message': 'success', 'data': {'success': True}}
+
+
+@admin_router.delete('/{user_id}/cart-items/{item_id}')
+def delete_user_cart_item(
+    user_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.get_user(db, user_id, current_user)
+    CommerceService.remove_cart_item(db, user.id, item_id)
+    return {'code': 0, 'message': 'success', 'data': {'success': True}}
 
 
 @admin_router.get('/{user_id}/invite-tree')

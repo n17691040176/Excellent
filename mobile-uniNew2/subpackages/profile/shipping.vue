@@ -1,15 +1,22 @@
 <template>
   <view class="container feature-page">
-    <StateView v-if="loading" title="快递加载中..." />
-    <StateView v-else-if="failed" title="快递加载失败" :show-retry="true" @retry="loadData" />
+    <view class="card hero-card">
+      <view class="hero-tag">快递服务</view>
+      <view class="section-title mt-12">统一查看运输进度、单号和签收状态</view>
+      <view class="muted">已支付且需要发货的订单，会在这里展示运输进度</view>
+    </view>
+
+    <StateView v-if="loading" title="快递加载中..." custom-class="mt-24" />
+    <StateView v-else-if="failed" title="快递加载失败" :show-retry="true" custom-class="mt-24" @retry="loadData" />
     <StateView
       v-else-if="!items.length"
       title="暂无快递包裹"
       description="已支付且需要发货的订单，会在这里展示运输进度。"
+      custom-class="mt-24"
     />
 
     <template v-else>
-      <view class="card summary-card">
+      <view class="card summary-card mt-24">
         <view class="row-between">
           <view>
             <view class="section-title summary-title">快递服务</view>
@@ -154,54 +161,61 @@ onShow(loadData);
 @import '@/styles/common.css';
 
 .feature-page { padding-bottom: 36rpx; }
-
+.hero-card {
+  background:
+    radial-gradient(circle at 96% 8%, rgba(94, 151, 255, 0.14), transparent 42%),
+    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
 .summary-card {
   background:
     radial-gradient(circle at 96% 8%, rgba(94, 151, 255, 0.14), transparent 42%),
     linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
 }
-
 .summary-title {
   margin-bottom: 0;
 }
-
 .summary-subtitle {
   margin-top: 10rpx;
   font-size: 22rpx;
   color: #8b7158;
 }
-
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12rpx;
 }
-
 .summary-item {
   padding: 16rpx;
   border-radius: 18rpx;
   background: #fcf6ef;
   border: 1rpx solid rgba(198, 161, 124, 0.14);
 }
-
 .summary-num {
   font-size: 34rpx;
   font-weight: 800;
   color: #4f321a;
 }
-
 .summary-label {
   margin-top: 6rpx;
   font-size: 22rpx;
   color: #8b7158;
 }
-
 .status-wrap {
   display: flex;
   gap: 12rpx;
   overflow-x: auto;
 }
-
 .status-chip {
   flex-shrink: 0;
   padding: 12rpx 22rpx;
@@ -211,28 +225,24 @@ onShow(loadData);
   font-size: 24rpx;
   border: 1rpx solid rgba(194, 156, 117, 0.18);
 }
-
 .status-chip.active {
-  background: #bf8752;
+  background: linear-gradient(135deg, #ff7a00, #ff5f3d);
   color: #ffffff;
-  border-color: #bf8752;
+  border-color: transparent;
 }
-
 .card-list {
   display: flex;
   flex-direction: column;
   gap: 16rpx;
 }
-
 .ship-card {
   border-radius: 24rpx;
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
 }
-
 .ship-company {
   font-size: 24rpx;
   color: #8b7158;
 }
-
 .ship-title {
   margin-top: 14rpx;
   font-size: 30rpx;
@@ -240,14 +250,12 @@ onShow(loadData);
   color: #4f321a;
   line-height: 1.35;
 }
-
 .ship-hint {
   margin-top: 10rpx;
   font-size: 22rpx;
   color: #7d6753;
   line-height: 1.5;
 }
-
 .progress-track {
   margin-top: 16rpx;
   height: 10rpx;
@@ -255,38 +263,32 @@ onShow(loadData);
   overflow: hidden;
   background: #f1e4d6;
 }
-
 .progress-fill {
   height: 100%;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #4c93ff, #6ab4ff);
+  background: linear-gradient(90deg, #ff7a00, #ff5f3d);
 }
-
 .ship-message {
   margin-top: 14rpx;
   font-size: 23rpx;
   line-height: 1.5;
   color: #7d6753;
 }
-
 .meta-grid {
   display: flex;
   flex-direction: column;
   gap: 8rpx;
   margin-top: 14rpx;
 }
-
 .ship-meta {
   font-size: 21rpx;
   color: #9f8a77;
 }
-
 .ship-actions {
   margin-top: 18rpx;
   display: flex;
   gap: 12rpx;
 }
-
 .mini-btn {
   flex: 1;
   min-width: 0;
@@ -295,7 +297,6 @@ onShow(loadData);
   padding: 0;
   font-size: 23rpx;
 }
-
 .interactive { transition: transform 180ms ease, opacity 180ms ease; }
 .interactive:active { transform: scale(0.98); opacity: 0.92; }
 </style>

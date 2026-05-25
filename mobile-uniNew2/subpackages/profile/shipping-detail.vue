@@ -1,10 +1,16 @@
 <template>
   <view class="container detail-page">
-    <StateView v-if="loading" title="快递详情加载中..." />
-    <StateView v-else-if="failed" title="快递详情加载失败" :show-retry="true" @retry="loadData" />
+    <view class="card hero-card">
+      <view class="hero-tag">快递详情</view>
+      <view class="section-title mt-12">统一查看运输进度、单号和签收状态</view>
+      <view class="muted">更直观地查看当前包裹的物流信息</view>
+    </view>
+
+    <StateView v-if="loading" title="快递详情加载中..." custom-class="mt-24" />
+    <StateView v-else-if="failed" title="快递详情加载失败" :show-retry="true" custom-class="mt-24" @retry="loadData" />
 
     <template v-else>
-      <view class="card head-card">
+      <view class="card head-card mt-24">
         <view class="row-between">
           <view class="section-title">快递详情</view>
           <view class="badge" :class="detail.status === 'delivered' ? 'badge-green' : 'badge-blue'">{{ detail.status_text }}</view>
@@ -187,13 +193,27 @@ onShow(() => {
 @import '@/styles/common.css';
 
 .detail-page { padding-bottom: 36rpx; }
-
+.hero-card {
+  background:
+    radial-gradient(circle at 96% 8%, rgba(255, 166, 82, 0.14), transparent 42%),
+    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 138, 43, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
 .head-card {
   background:
     radial-gradient(circle at 96% 8%, rgba(94, 151, 255, 0.16), transparent 42%),
     linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
 }
-
 .head-title {
   margin-top: 8rpx;
   font-size: 30rpx;
@@ -201,14 +221,12 @@ onShow(() => {
   font-weight: 700;
   line-height: 1.35;
 }
-
 .head-desc {
   margin-top: 12rpx;
   font-size: 22rpx;
   color: #8b7158;
   line-height: 1.5;
 }
-
 .progress-track {
   margin-top: 18rpx;
   height: 10rpx;
@@ -216,31 +234,26 @@ onShow(() => {
   overflow: hidden;
   background: #f1e4d6;
 }
-
 .progress-fill {
   height: 100%;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #4c93ff, #6ab4ff);
+  background: linear-gradient(90deg, #ff7a00, #ff5f3d);
 }
-
 .head-grid {
   margin-top: 18rpx;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12rpx;
 }
-
 .head-cell {
   padding: 16rpx;
   border-radius: 18rpx;
   background: #fcf6ef;
 }
-
 .head-label {
   font-size: 20rpx;
   color: #9b8169;
 }
-
 .head-value {
   margin-top: 8rpx;
   font-size: 24rpx;
@@ -248,13 +261,11 @@ onShow(() => {
   color: #4f321a;
   word-break: break-all;
 }
-
 .action-row {
   margin-top: 18rpx;
   display: flex;
   gap: 12rpx;
 }
-
 .mini-btn {
   flex: 1;
   min-width: 0;
@@ -263,44 +274,37 @@ onShow(() => {
   padding: 0;
   font-size: 23rpx;
 }
-
 .status-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10rpx;
 }
-
 .strip-item {
   border-radius: 14rpx;
   padding: 12rpx;
   background: linear-gradient(145deg, #fffdf9, #fbf2e7);
   border: 1rpx solid rgba(198, 161, 124, 0.16);
 }
-
 .strip-title {
   font-size: 22rpx;
   font-weight: 700;
   color: #6b4422;
 }
-
 .strip-desc {
   margin-top: 6rpx;
   font-size: 20rpx;
   color: #8b7158;
   line-height: 1.4;
 }
-
 .timeline {
   display: flex;
   gap: 12rpx;
   margin-top: 18rpx;
 }
-
 .timeline-main {
   flex: 1;
   min-width: 0;
 }
-
 .dot {
   width: 16rpx;
   height: 16rpx;
@@ -308,46 +312,38 @@ onShow(() => {
   background: #e6cfb6;
   margin-top: 10rpx;
 }
-
-.dot.active { background: #2d73f5; }
-
+.dot.active { background: #ff6a00; }
 .t-title {
   font-size: 26rpx;
   color: #4f321a;
 }
-
 .t-time {
   margin-top: 4rpx;
   color: #8b7158;
   font-size: 22rpx;
 }
-
 .goods-row {
   padding: 18rpx 0;
   border-bottom: 1rpx solid #efe4d7;
 }
-
 .goods-row:last-child {
   border-bottom: none;
   padding-bottom: 0;
 }
-
 .goods-title {
   font-size: 26rpx;
   color: #4f321a;
   font-weight: 700;
 }
-
 .goods-meta {
   margin-top: 8rpx;
   font-size: 22rpx;
   color: #8b7158;
 }
-
 .goods-amount {
   margin-top: 8rpx;
   font-size: 24rpx;
-  color: #c96a14;
+  color: #ff6a00;
   font-weight: 700;
 }
 </style>

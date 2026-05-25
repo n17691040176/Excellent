@@ -1,6 +1,6 @@
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from copy import deepcopy
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -451,7 +451,7 @@ class PageDecorationService:
         rows = []
         for item in source:
             item = item or {}
-            row = {'enabled': PageDecorationService._clean_bool(item.get('enabled'), True)}
+            row: dict[str, object] = {'enabled': PageDecorationService._clean_bool(item.get('enabled'), True)}
             for field, fallback in field_rules.items():
                 row[field] = PageDecorationService._clean_text(item.get(field), fallback)
             if row['enabled'] or any(value for key, value in row.items() if key != 'enabled'):

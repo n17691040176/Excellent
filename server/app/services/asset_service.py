@@ -7,11 +7,17 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
-from app.models.asset import DailySigninRecord, UserAssetAccount, UserAssetLedger, UserPowerBank, UserPowerBankIncomeRecord
+from app.models.asset import (
+    DailySigninRecord,
+    UserAssetAccount,
+    UserAssetLedger,
+    UserPowerBank,
+    UserPowerBankIncomeRecord,
+)
 from app.models.enums import AssetDirection, AssetType, PowerBankStatus
 from app.models.user import User
+from app.services.earning_rule_service import PB_OWNER_DAILY_RULE, PB_REFERRAL_DAILY_RULE, EarningRuleService
 from app.utils.helpers import now, quantize_amount, today
-
 
 DEFAULT_ASSET_TYPES = [AssetType.BALANCE, AssetType.POINTS, AssetType.VOUCHER, AssetType.AI_COUPON, AssetType.POWER_BANK]
 VISIBLE_ASSET_TOTAL_TYPES = {AssetType.BALANCE, AssetType.POINTS, AssetType.VOUCHER}
@@ -466,6 +472,9 @@ class AssetService:
         if not power_banks:
             return
 
+        owner_income_amount = EarningRuleService.fixed_amount(db, PB_OWNER_DAILY_RULE, POWER_BANK_OWNER_DAILY_INCOME)
+        referrer_income_amount = EarningRuleService.fixed_amount(db, PB_REFERRAL_DAILY_RULE, POWER_BANK_REFERRAL_DAILY_INCOME)
+
         owner_cache: dict[int, User | None] = {}
         changed = False
         for power_bank in power_banks:
@@ -493,7 +502,7 @@ class AssetService:
                     db,
                     power_bank.user_id,
                     AssetType.BALANCE,
-                    POWER_BANK_OWNER_DAILY_INCOME,
+                    owner_income_amount,
                     'POWER_BANK_DAILY_INCOME',
                     source_id=power_bank.id,
                     source_no=power_bank.device_code,
@@ -506,13 +515,13 @@ class AssetService:
                         db,
                         owner.parent_id,
                         AssetType.BALANCE,
-                        POWER_BANK_REFERRAL_DAILY_INCOME,
+                        referrer_income_amount,
                         'POWER_BANK_REFERRAL_INCOME',
                         source_id=power_bank.id,
                         source_no=power_bank.device_code,
                         remark=f'Power bank referral {power_bank.device_code} income {income_date.isoformat()}',
                     )
-                    referrer_income = POWER_BANK_REFERRAL_DAILY_INCOME
+                    referrer_income = referrer_income_amount
 
                 db.add(
                     UserPowerBankIncomeRecord(
@@ -520,13 +529,13 @@ class AssetService:
                         user_id=power_bank.user_id,
                         referrer_user_id=owner.parent_id,
                         income_date=income_date,
-                        owner_income_amount=POWER_BANK_OWNER_DAILY_INCOME,
+                        owner_income_amount=owner_income_amount,
                         referrer_income_amount=referrer_income,
                         created_at=now(),
                     )
                 )
                 power_bank.last_income_date = income_date
-                power_bank.total_income_amount = quantize_amount(power_bank.total_income_amount) + POWER_BANK_OWNER_DAILY_INCOME
+                power_bank.total_income_amount = quantize_amount(power_bank.total_income_amount) + owner_income_amount
                 power_bank.total_referral_income_amount = (
                     quantize_amount(power_bank.total_referral_income_amount) + referrer_income
                 )

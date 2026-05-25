@@ -171,6 +171,12 @@
           "style": {
             "navigationBarTitleText": "快递详情"
           }
+        },
+        {
+          "path": "mini-webview",
+          "style": {
+            "navigationBarTitleText": "共享充电宝"
+          }
         }
       ]
     }

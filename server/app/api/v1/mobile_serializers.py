@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.models.address import UserAddress
 from app.models.asset import UserAssetAccount, UserAssetLedger, UserPowerBank
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
 from app.models.commission import CommissionFlow, WithdrawRequest
@@ -15,6 +16,8 @@ from app.models.order import Order, OrderAssetDeduction, OrderItem
 from app.models.package import Package
 from app.models.product import Product, ProductZoneConfig
 from app.models.supplier import Supplier
+from app.models.team import Team
+from app.models.user import User
 
 
 def enum_value(value: Any) -> Any:
@@ -102,7 +105,12 @@ def _product_owner_name(db: Session, product: Product) -> str | None:
 def _split_media(value: str | None) -> list[str]:
     if not value:
         return []
-    return [_normalize_media_url(item.strip()) for item in value.split(',') if item and item.strip()]
+    urls: list[str] = []
+    for item in value.split(','):
+        normalized = _normalize_media_url(item.strip()) if item and item.strip() else None
+        if normalized:
+            urls.append(normalized)
+    return urls
 
 
 def _normalize_media_url(value: str | None) -> str | None:
@@ -200,34 +208,91 @@ def _product_payment_flags(db: Session, product: Product) -> dict[str, bool]:
 
     points_enabled = default_points_enabled.get(product.zone_type, True)
     balance_enabled = default_balance_enabled.get(product.zone_type, True)
+    points_only_enabled = False
+    points_cash_enabled = True
+    cash_only_enabled = True
+    balance_only_enabled = True
+    balance_points_enabled = True
     if config:
         points_enabled = bool(config.points_purchase_enabled)
-        if product.zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED}:
+        if product.zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED, ZoneType.LOCAL_LIFE, ZoneType.REPURCHASE}:
             balance_enabled = bool(config.balance_purchase_enabled)
+        points_only_enabled = bool(config.points_only_enabled)
+        points_cash_enabled = bool(config.points_cash_enabled)
+        cash_only_enabled = bool(config.cash_only_enabled)
+        balance_only_enabled = bool(getattr(config, 'balance_only_enabled', True))
+        balance_points_enabled = bool(getattr(config, 'balance_points_enabled', True))
 
     return {
         'points_purchase_enabled': points_enabled,
         'balance_purchase_enabled': balance_enabled,
+        'points_only_enabled': points_only_enabled,
+        'points_cash_enabled': points_cash_enabled,
+        'cash_only_enabled': cash_only_enabled,
+        'balance_only_enabled': balance_only_enabled,
+        'balance_points_enabled': balance_points_enabled,
+    }
+
+
+def _payment_option(channel: str, purchase_mode: str) -> dict[str, Any]:
+    label_map = {
+        ('POINTS', 'POINTS_ONLY'): '纯积分',
+        ('BALANCE', 'POINTS_CASH'): '余额+积分支付',
+        ('BALANCE', 'CASH_ONLY'): '余额纯支付',
+        ('VOUCHER', 'POINTS_CASH'): '消费金+积分支付',
+        ('VOUCHER', 'CASH_ONLY'): '消费金支付',
+        ('WECHAT', 'POINTS_CASH'): '微信+积分支付',
+        ('WECHAT', 'CASH_ONLY'): '微信支付',
+        ('ALIPAY', 'POINTS_CASH'): '支付宝+积分支付',
+        ('ALIPAY', 'CASH_ONLY'): '支付宝支付',
+    }
+    desc_map = {
+        ('POINTS', 'POINTS_ONLY'): '全部使用积分完成支付',
+        ('BALANCE', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额从余额扣除',
+        ('BALANCE', 'CASH_ONLY'): '全部使用账户余额完成支付',
+        ('VOUCHER', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额从消费金扣除',
+        ('VOUCHER', 'CASH_ONLY'): '全部使用消费金完成支付',
+        ('WECHAT', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额走微信支付',
+        ('WECHAT', 'CASH_ONLY'): '全部使用微信支付',
+        ('ALIPAY', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额走支付宝支付',
+        ('ALIPAY', 'CASH_ONLY'): '全部使用支付宝支付',
+    }
+    return {
+        'value': channel,
+        'label': label_map.get((channel, purchase_mode), channel),
+        'desc': desc_map.get((channel, purchase_mode), '按当前方式支付'),
+        'purchase_mode': purchase_mode,
+        'supports_points': purchase_mode in {'POINTS_ONLY', 'POINTS_CASH'},
     }
 
 
 def _product_payment_options(product: Product, payment_flags: dict[str, bool]) -> list[dict[str, Any]]:
-    if product.zone_type == ZoneType.REPURCHASE:
-        channels = ['BALANCE']
-    elif product.zone_type == ZoneType.SELF_OPERATED:
-        channels = ['VOUCHER', 'WECHAT', 'ALIPAY']
-    else:
-        channels = ['WECHAT', 'ALIPAY']
-        if payment_flags.get('balance_purchase_enabled'):
-            channels.insert(0, 'BALANCE')
-
-    return [
-        {
-            'value': channel,
-            'supports_points': bool(payment_flags.get('points_purchase_enabled')),
-        }
-        for channel in channels
-    ]
+    options: list[dict[str, Any]] = []
+    if payment_flags.get('points_purchase_enabled') and payment_flags.get('points_only_enabled'):
+        options.append(_payment_option('POINTS', 'POINTS_ONLY'))
+    cash_channels = ['WECHAT', 'ALIPAY']
+    if product.zone_type == ZoneType.SELF_OPERATED:
+        cash_channels = ['VOUCHER', 'WECHAT', 'ALIPAY']
+    if payment_flags.get('balance_purchase_enabled'):
+        cash_channels.insert(0, 'BALANCE')
+    if payment_flags.get('points_purchase_enabled') and payment_flags.get('points_cash_enabled'):
+        for channel in cash_channels:
+            if channel == 'BALANCE' and not payment_flags.get('balance_points_enabled'):
+                continue
+            options.append(_payment_option(channel, 'POINTS_CASH'))
+    if payment_flags.get('cash_only_enabled'):
+        for channel in cash_channels:
+            if channel == 'BALANCE' and not payment_flags.get('balance_only_enabled'):
+                continue
+            options.append(_payment_option(channel, 'CASH_ONLY'))
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in options:
+        key = (item['value'], item['purchase_mode'])
+        if key not in seen:
+            deduped.append(item)
+            seen.add(key)
+    return deduped
 
 
 def serialize_product(db: Session, product: Product) -> dict[str, Any]:
@@ -279,10 +344,15 @@ def serialize_product(db: Session, product: Product) -> dict[str, Any]:
         'requires_shipping': product.requires_shipping,
         'drop_shipping_enabled': product.drop_shipping_enabled,
         'payment_options': payment_options,
-        'supported_pay_channels': [item['value'] for item in payment_options],
+        'supported_pay_channels': list(dict.fromkeys(item['value'] for item in payment_options)),
         'default_pay_channel': payment_options[0]['value'] if payment_options else None,
         'points_purchase_enabled': bool(payment_flags['points_purchase_enabled']),
         'balance_purchase_enabled': bool(payment_flags['balance_purchase_enabled']),
+        'points_only_enabled': bool(payment_flags['points_only_enabled']),
+        'points_cash_enabled': bool(payment_flags['points_cash_enabled']),
+        'cash_only_enabled': bool(payment_flags['cash_only_enabled']),
+        'balance_only_enabled': bool(payment_flags['balance_only_enabled']),
+        'balance_points_enabled': bool(payment_flags['balance_points_enabled']),
         'old_name': product.legacy_name,
         'old_type': product.legacy_type,
         'old_price': money(product.old_price) if product.old_price is not None else None,
@@ -451,6 +521,30 @@ def serialize_power_bank(power_bank: UserPowerBank) -> dict[str, Any]:
     }
 
 
+def serialize_address(address: UserAddress) -> dict[str, Any]:
+    return {
+        'id': address.id,
+        'address_id': address.id,
+        'user_id': address.user_id,
+        'receiver_name': address.receiver_name,
+        'receiver_phone': address.receiver_phone,
+        'province': address.province,
+        'city': address.city,
+        'district': address.district,
+        'detail_address': address.detail_address,
+        'full_address': ' '.join(
+            [
+                item
+                for item in [address.province, address.city, address.district, address.detail_address]
+                if item
+            ]
+        ),
+        'is_default': bool(address.is_default),
+        'created_at': iso_datetime(address.created_at),
+        'updated_at': iso_datetime(address.updated_at),
+    }
+
+
 def serialize_commission_flow(flow: CommissionFlow) -> dict[str, Any]:
     return {
         'id': flow.id,
@@ -519,6 +613,8 @@ def _payment_combo(order: Order, deductions: list[OrderAssetDeduction] | None = 
         return '余额 + 积分'
     if 'VOUCHER' in deduction_types and 'POINTS' in deduction_types:
         return '消费金 + 积分'
+    if 'POINTS' in deduction_types and payable_amount <= 0:
+        return '纯积分'
     if 'BALANCE' in deduction_types:
         return '余额支付'
     if 'VOUCHER' in deduction_types:
@@ -543,6 +639,8 @@ def _order_pay_channel_options(order: Order, deductions: list[OrderAssetDeductio
     order_type = enum_value(order.order_type)
     zone_type = enum_value(order.zone_type)
     deduction_types = {str(item.asset_type) for item in (deductions or [])}
+    if 'POINTS' in deduction_types and money(order.payable_amount) <= 0:
+        return ['POINTS']
     if 'BALANCE' in deduction_types:
         return ['BALANCE']
     if 'VOUCHER' in deduction_types:
@@ -628,7 +726,7 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         data['payment_combo'] = _payment_combo(order, deductions)
         data['pay_channel_options'] = _order_pay_channel_options(order, deductions)
         data['default_pay_channel'] = data['pay_channel_options'][0] if data['pay_channel_options'] else None
-        data['payment_message'] = '微信支付、支付宝支付接口已预留，当前使用模拟支付完成链路。' if payable_amount > 0 else '订单已完成支付。'
+        data['payment_message'] = '支付单已生成，请按所选渠道完成支付。' if payable_amount > 0 else '订单已完成支付。'
     else:
         data['payment_combo'] = _payment_combo(order)
     return data
@@ -712,7 +810,7 @@ def serialize_footprint(db: Session, footprint: UserProductFootprint) -> dict[st
 
 def serialize_cart_item(db: Session, item: ShoppingCartItem) -> dict[str, Any]:
     product = db.get(Product, item.product_id)
-    subtotal = money((product.sale_price if product else 0) * item.quantity) if product else 0
+    subtotal = money(Decimal(str(product.sale_price)) * item.quantity) if product else 0
     payload: dict[str, Any] = {
         'id': item.id,
         'cart_item_id': item.id,
@@ -838,4 +936,51 @@ def serialize_shipment(db: Session, order: Order, include_detail: bool = False) 
     }
     if include_detail:
         data['items'] = [serialize_order_item(item) for item in items]
+    return data
+
+
+def serialize_admin_order(db: Session, order: Order, include_detail: bool = False) -> dict[str, Any]:
+    user = db.get(User, order.user_id)
+    team = db.get(Team, order.team_id) if order.team_id else None
+    items = _shipment_items(db, order)
+    products = [db.get(Product, item.product_id) for item in items]
+    item_count = sum(int(item.quantity or 0) for item in items)
+    item_names = [item.product_name for item in items if item.product_name]
+    requires_shipping = any(bool(product.requires_shipping) for product in products if product)
+    shipment = serialize_shipment(db, order, include_detail=include_detail) if requires_shipping else None
+
+    data = serialize_order(db, order, include_detail=include_detail)
+    data.update(
+        {
+            'user_nickname': user.nickname if user else None,
+            'user_phone': user.phone if user else None,
+            'user_status': enum_value(user.status) if user else None,
+            'team_name': team.name if team else None,
+            'item_count': item_count,
+            'item_names': item_names,
+            'products_summary': ' / '.join(item_names[:3]),
+            'requires_shipping': requires_shipping,
+            'shipment': shipment,
+            'delivery_status': shipment['status'] if shipment else 'not_required',
+            'delivery_status_text': shipment['status_text'] if shipment else '无需物流',
+            'tracking_no': shipment['tracking_no'] if shipment else None,
+            'delivery_mode_text': shipment['delivery_mode_text'] if shipment else None,
+            'carrier_name': shipment['carrier_name'] if shipment else None,
+            'carrier_phone': shipment['carrier_phone'] if shipment else None,
+        }
+    )
+
+    if include_detail:
+        data['user'] = {
+            'id': user.id if user else None,
+            'nickname': user.nickname if user else None,
+            'phone': user.phone if user else None,
+            'status': enum_value(user.status) if user else None,
+            'global_role': enum_value(user.global_role) if user else None,
+        }
+        data['team'] = {
+            'id': team.id if team else None,
+            'name': team.name if team else None,
+            'status': enum_value(team.status) if team else None,
+        }
     return data

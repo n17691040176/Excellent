@@ -1,10 +1,10 @@
-﻿from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_roles
-from app.api.v1.mobile_serializers import enum_value, page_slice, serialize_order
+from app.api.v1.mobile_serializers import enum_value, page_slice, serialize_admin_order, serialize_order
 from app.db.session import get_db
-from app.models.enums import GlobalRole, OrderStatus, OrderType, ZoneType
+from app.models.enums import GlobalRole, OrderStatus, OrderType, PayStatus, ZoneType
 from app.models.user import User
 from app.schemas.product import CreateOrderRequest, OrderPayRequest
 from app.services.order_service import OrderService
@@ -108,7 +108,74 @@ def pay_order(
     }
 
 
-@admin_router.post('/{order_id}/pay')
-def mark_paid(order_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN))):
-    return {'code': 0, 'message': 'success', 'data': OrderService.mark_paid(db, order_id)}
+@admin_router.get('')
+def admin_list_orders(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    keyword: str | None = Query(default=None),
+    order_status: OrderStatus | None = Query(default=None),
+    pay_status: PayStatus | None = Query(default=None),
+    order_type: OrderType | None = Query(default=None),
+    zone_type: ZoneType | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    result = OrderService.list_orders_for_admin(
+        db,
+        current_user,
+        keyword=keyword,
+        order_status=enum_value(order_status),
+        pay_status=enum_value(pay_status),
+        order_type=enum_value(order_type),
+        zone_type=enum_value(zone_type),
+        page=page,
+        page_size=page_size,
+    )
+    return {
+        'code': 0,
+        'message': 'success',
+        'data': {
+            **result,
+            'items': [serialize_admin_order(db, row) for row in result['items']],
+        },
+    }
 
+
+@admin_router.get('/{order_id}')
+def admin_order_detail(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    order = OrderService.get_order_for_admin(db, order_id, current_user)
+    return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}
+
+
+@admin_router.post('/{order_id}/pay')
+def mark_paid(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    order = OrderService.mark_paid_for_admin(db, order_id, current_user)
+    return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}
+
+
+@admin_router.post('/{order_id}/confirm')
+def admin_confirm_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    order = OrderService.confirm_order_for_admin(db, order_id, current_user)
+    return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}
+
+
+@admin_router.post('/{order_id}/close')
+def admin_close_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    order = OrderService.close_order_for_admin(db, order_id, current_user)
+    return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}

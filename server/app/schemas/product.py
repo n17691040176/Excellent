@@ -42,6 +42,11 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     ai_coupon_max_deduct_rate: float | None = None
     points_purchase_enabled: bool = False
     balance_purchase_enabled: bool = False
+    points_only_enabled: bool = False
+    points_cash_enabled: bool = True
+    cash_only_enabled: bool = True
+    balance_only_enabled: bool = True
+    balance_points_enabled: bool = True
     flash_sale_enabled: bool = False
     per_user_limit: int | None = None
     merchant_commission_rule_id: int | None = None

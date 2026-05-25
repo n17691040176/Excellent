@@ -1,5 +1,5 @@
 <template>
-  <view class="container profile-page">
+  <view class="profile-page">
     <view class="hero-card">
       <view class="hero-top">
         <view class="hero-user">
@@ -12,35 +12,25 @@
               <text class="level-pill">{{ overview.levelText }}</text>
             </view>
             <view class="hero-subline">{{ heroSubline }}</view>
-            <view class="hero-tip">余额、消费金、积分和充电宝，都统一收进我的资产。</view>
           </view>
         </view>
         <view class="hero-settings interactive" @click="go('/subpackages/profile/settings')">设置</view>
       </view>
 
-      <view class="hero-summary mt-20">
+      <view class="hero-summary">
         <view
           v-for="item in platformCurrencies"
           :key="item.label"
           class="summary-chip interactive"
           @click="handleAction(item)"
         >
-          <view class="summary-chip-label">{{ item.label }}</view>
           <view class="summary-chip-value">{{ item.value }}</view>
-          <view class="summary-chip-meta">{{ item.meta }}</view>
+          <view class="summary-chip-label">{{ item.label }}</view>
         </view>
-      </view>
-
-      <view class="notice-bar">
-        <view class="notice-left">
-          <view class="notice-badge">荐</view>
-          <text class="notice-text">{{ noticeText }}</text>
-        </view>
-        <view class="notice-btn interactive" @click="go(noticePath)">{{ noticeActionText }}</view>
       </view>
     </view>
 
-    <view class="card orders-card mt-20">
+    <view class="section-card orders-card mt-20">
       <view class="row-between">
         <view class="section-title slim-title">我的订单</view>
         <view class="more-link interactive" @click="go('/pages/orders/list')">全部</view>
@@ -61,7 +51,7 @@
       </view>
     </view>
 
-    <view class="card tool-card mt-20">
+    <view class="section-card tool-card mt-20">
       <view class="row-between">
         <view class="section-title slim-title">常用工具</view>
         <view class="more-link interactive" @click="go('/pages/home/index')">更多</view>
@@ -73,33 +63,31 @@
           class="tool-item interactive"
           @click="handleAction(item)"
         >
-          <view class="tool-main">
-            <view class="tool-icon" :class="item.iconClass">{{ item.icon }}</view>
-            <view class="tool-copy">
-              <view class="tool-title-row">
-                <view class="tool-title">{{ item.title }}</view>
-                <view class="tool-chip">{{ item.chip }}</view>
-              </view>
-              <view class="tool-desc">{{ item.desc }}</view>
-            </view>
+          <view class="tool-title-row">
+            <view class="tool-icon">{{ item.icon }}</view>
+            <view class="tool-title">{{ item.title }}</view>
           </view>
-          <view class="tool-foot">
-            <view class="tool-note">{{ item.note }}</view>
-            <view class="tool-link">{{ item.actionText }}</view>
+          <view class="tool-note">{{ item.note }}</view>
+          <view class="tool-preview" :class="item.previewClass">
+            <view class="tool-preview-mark">{{ item.previewMark }}</view>
           </view>
+          <view class="tool-link">{{ item.actionText }}</view>
         </view>
       </view>
     </view>
 
-    <view class="mt-24">
-      <view class="row-between">
-        <view class="section-title slim-title">
-          <text class="section-accent">超级 88</text>
-          <text> 成长权益</text>
+    <view class="section-card power-card mt-20 interactive" @click="openPowerBank">
+      <view class="power-top">
+        <view>
+          <view class="section-title slim-title">共享充电宝</view>
+          <view class="power-desc">进入内置小程序，按配置好的 appId 和 path 打开</view>
         </view>
-        <view class="more-link interactive" @click="go('/subpackages/invite/index')">更多</view>
+        <view class="power-chip">小程序</view>
       </view>
+      <view class="power-meta">支持 App 内打开小程序；若当前环境不支持，会自动走兜底页。</view>
+    </view>
 
+    <view class="section-card benefit-section mt-20">
       <view class="benefit-grid">
         <view
           v-for="item in benefitEntries"
@@ -110,23 +98,11 @@
         >
           <view class="benefit-amount">{{ item.amount }}</view>
           <view class="benefit-title">{{ item.title }}</view>
-          <view class="benefit-desc">{{ item.desc }}</view>
           <view class="benefit-btn">去查看</view>
         </view>
       </view>
     </view>
 
-    <view class="entry-strip mt-24">
-      <view
-        v-for="item in footerEntries"
-        :key="item.title"
-        class="entry-bubble interactive"
-        @click="handleAction(item)"
-      >
-        <view class="entry-icon" :class="item.iconClass">{{ item.icon }}</view>
-        <view class="entry-text">{{ item.title }}</view>
-      </view>
-    </view>
   </view>
 </template>
 
@@ -134,6 +110,7 @@
 import { computed, ref } from 'vue';
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import { assetApi, commissionApi, userApi } from '@/api/modules';
+import { openPowerBankMiniApp } from '@/utils/miniapp';
 import { toProfileOverview } from '@/utils/adapters';
 import { trackEvent, trackPageView } from '@/utils/track';
 
@@ -168,42 +145,38 @@ const orderEntries = [
 const commonTools = [
   {
     title: '快递',
-    desc: '查看包裹运输与签收进度',
     icon: '递',
-    iconClass: 'icon-orange',
-    chip: '物流',
-    note: '已支付订单可查',
+    note: '1件待发货',
+    previewMark: '箱',
+    previewClass: 'preview-orange',
     actionText: '去查看',
     path: '/subpackages/profile/shipping'
   },
   {
     title: '收藏',
-    desc: '保存心仪商品，方便随时回看',
     icon: '藏',
-    iconClass: 'icon-gold',
-    chip: '回看',
-    note: '常看的商品都在这里',
-    actionText: '去查看',
+    note: '收藏的宝贝',
+    previewMark: '夹',
+    previewClass: 'preview-gold',
+    actionText: '逛更多宝贝',
     path: '/subpackages/profile/favorites'
   },
   {
     title: '购物车',
-    desc: '统一管理待下单商品',
     icon: '车',
-    iconClass: 'icon-blue',
-    chip: '下单',
-    note: '支持直接前往结算',
-    actionText: '去下单',
+    note: '待下单商品',
+    previewMark: '袋',
+    previewClass: 'preview-mint',
+    actionText: '去查看',
     path: '/subpackages/profile/cart'
   },
   {
     title: '足迹',
-    desc: '回到最近浏览过的商品',
     icon: '迹',
-    iconClass: 'icon-rose',
-    chip: '最近',
-    note: '继续浏览感兴趣商品',
-    actionText: '继续看',
+    note: '看过的内容',
+    previewMark: '钟',
+    previewClass: 'preview-amber',
+    actionText: '逛更多宝贝',
     path: '/subpackages/profile/footprints'
   }
 ];
@@ -224,24 +197,17 @@ function buildBalanceWithdrawPath(range = null) {
   return `/subpackages/assets/withdraw${query.length ? `?${query.join('&')}` : ''}`;
 }
 
-const footerEntries = computed(() => {
-  const entries = [
-    { title: '我的资产', icon: '资', iconClass: 'icon-green', path: buildAssetIndexPath() }
-  ];
-
-  if (isLegacyUser.value) {
-    entries.push({ title: '佣金', icon: '佣', iconClass: 'icon-orange', path: '/subpackages/commission/index' });
+async function openPowerBank() {
+  trackEvent('profile_click_power_bank');
+  try {
+    await openPowerBankMiniApp({
+      userId: overview.value.userId,
+      inviteCode: inviteCode.value
+    });
+  } catch (error) {
+    uni.showToast({ title: '打开失败，请检查配置', icon: 'none' });
   }
-
-  entries.push({ title: '签到', icon: '签', iconClass: 'icon-red', action: 'toast', name: '每日签到' });
-
-  if (isLegacyUser.value) {
-    entries.push({ title: '团队', icon: '团', iconClass: 'icon-purple', path: '/subpackages/team/index' });
-  }
-
-  entries.push({ title: '邀请', icon: '邀', iconClass: 'icon-pink', path: '/subpackages/invite/index' });
-  return entries;
-});
+}
 
 const initials = computed(() => String(overview.value.nickname || 'EX').slice(0, 2).toUpperCase());
 
@@ -256,36 +222,24 @@ const platformCurrencies = computed(() => ([
   {
     label: '余额',
     value: formatAmount(assetSummary.value.BALANCE ?? assetSummary.value.balance),
-    meta: '去提现 · 查看明细',
     path: buildBalanceWithdrawPath()
   },
   {
     label: '消费金',
     value: formatAmount(assetSummary.value.VOUCHER ?? assetSummary.value.voucher),
-    meta: '商城抵扣 · 查看明细',
     path: buildAssetIndexPath('voucher')
   },
   {
     label: '积分',
     value: formatAmount(assetSummary.value.POINTS ?? assetSummary.value.points),
-    meta: '补贴转赠 · 查看明细',
     path: buildAssetIndexPath('points')
   },
   {
     label: '充电宝',
     value: `${formatCount(assetSummary.value.POWER_BANK ?? assetSummary.value.power_bank ?? assetSummary.value.power_bank_count)}台`,
-    meta: '已绑定设备 · 查看明细',
     path: buildAssetIndexPath('power_bank')
   }
 ]));
-
-const noticePath = computed(() => (inviteCode.value ? '/subpackages/invite/index' : '/pages/packages/list'));
-const noticeText = computed(() => (
-  inviteCode.value
-    ? `邀请码 ${inviteCode.value} 已生成，邀请好友可解锁更多成长权益。`
-    : '成长权益持续更新，限定商品与服务专区可用。'
-));
-const noticeActionText = computed(() => (inviteCode.value ? '去邀请' : '去使用'));
 
 const benefitEntries = computed(() => {
   const entries = [
@@ -415,25 +369,27 @@ onPullDownRefresh(async () => {
 @import '@/styles/common.css';
 
 .profile-page {
-  padding-bottom: 44rpx;
+  padding: 18rpx 18rpx 44rpx;
+  box-sizing: border-box;
 }
 
 .hero-card {
-  border-radius: 32rpx;
-  padding: 26rpx;
-  background:
-    radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.34), transparent 26%),
-    radial-gradient(circle at 100% 0%, rgba(255, 224, 187, 0.42), transparent 28%),
-    linear-gradient(180deg, #f6c389 0%, #ecab68 42%, #e4964d 100%);
-  box-shadow: 0 28rpx 48rpx rgba(170, 97, 28, 0.2);
-  color: #fff;
+  border-radius: 24rpx;
+  padding: 36rpx 14rpx 8rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #4f321b;
 }
 
 .hero-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16rpx;
+  gap: 18rpx;
 }
 
 .hero-user {
@@ -444,13 +400,8 @@ onPullDownRefresh(async () => {
 }
 
 .avatar-shell {
-  width: 98rpx;
-  height: 98rpx;
-  border-radius: 50%;
-  padding: 4rpx;
-  box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.28);
-  border: 1rpx solid rgba(255, 255, 255, 0.5);
+  width: 84rpx;
+  height: 84rpx;
 }
 
 .avatar {
@@ -460,9 +411,9 @@ onPullDownRefresh(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 240, 222, 0.92));
-  color: #9d5c1d;
-  font-size: 28rpx;
+  background: linear-gradient(135deg, #ff9a3d, #ff6a00);
+  color: #fff;
+  font-size: 26rpx;
   font-weight: 800;
   letter-spacing: 1rpx;
 }
@@ -484,128 +435,81 @@ onPullDownRefresh(async () => {
   font-size: 36rpx;
   font-weight: 800;
   letter-spacing: 0.4rpx;
+  color: #4a2b13;
 }
 
 .level-pill {
   display: inline-flex;
   align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
+  padding: 0;
+  border-radius: 0;
   font-size: 20rpx;
-  color: #9a4f13;
-  background: rgba(255, 245, 231, 0.92);
+  color: #c18347;
+  background: transparent;
 }
 
 .hero-subline {
   margin-top: 8rpx;
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.hero-tip {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: rgba(255, 247, 239, 0.9);
+  color: #8d745d;
 }
 
 .hero-settings {
   flex-shrink: 0;
-  padding: 0 20rpx;
-  height: 58rpx;
-  line-height: 58rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1rpx solid rgba(255, 255, 255, 0.32);
+  padding: 4rpx 0 4rpx 12rpx;
+  border-radius: 0;
+  background: transparent;
+  color: #6b5545;
   font-size: 22rpx;
-  color: #fff;
+  font-weight: 700;
+  border: none;
 }
 
 .hero-summary {
+  margin-top: 76rpx;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12rpx;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8rpx;
 }
 
 .summary-chip {
-  border-radius: 22rpx;
-  padding: 18rpx 16rpx;
-  box-sizing: border-box;
-  background: rgba(255, 251, 247, 0.18);
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
+  min-width: 0;
+  padding: 0;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .summary-chip-label {
-  font-size: 22rpx;
-  color: rgba(255, 244, 236, 0.9);
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  line-height: 1.3;
+  color: #8f765f;
 }
 
 .summary-chip-value {
-  margin-top: 10rpx;
-  font-size: 28rpx;
+  font-size: 34rpx;
   line-height: 1.1;
   font-weight: 800;
-  color: #fff;
+  color: #4a2b13;
 }
 
-.summary-chip-meta {
-  margin-top: 8rpx;
-  font-size: 19rpx;
-  color: rgba(255, 248, 243, 0.76);
+.section-card {
+  padding: 18rpx 16rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #fffdf9 100%);
+  border: 1rpx solid rgba(210, 186, 164, 0.18);
+  box-shadow: none;
 }
 
-.notice-bar {
-  margin-top: 16rpx;
-  border-radius: 20rpx;
-  padding: 14rpx 16rpx;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12rpx;
-  background: linear-gradient(180deg, rgba(255, 241, 228, 0.92), rgba(255, 231, 206, 0.92));
-  color: #9e5320;
+.orders-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fbf7f3 100%);
 }
 
-.notice-left {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.notice-badge {
-  width: 34rpx;
-  height: 34rpx;
-  flex-shrink: 0;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(180deg, #ff6f53, #ff4233);
-  color: #fff;
-  font-size: 20rpx;
-  font-weight: 700;
-}
-
-.notice-text {
-  font-size: 22rpx;
-  line-height: 1.4;
-  color: #9d5b2a;
-}
-
-.notice-btn {
-  flex-shrink: 0;
-  padding: 10rpx 18rpx;
-  border-radius: 999rpx;
-  background: linear-gradient(120deg, #ff6b33, #ff844b);
-  color: #fff;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.orders-card,
-.tool-card {
-  border-radius: 28rpx;
+.tool-card,
+.benefit-section {
+  background: linear-gradient(180deg, #fbf9f7 0%, #f7f2ed 100%);
 }
 
 .slim-title {
@@ -674,103 +578,152 @@ onPullDownRefresh(async () => {
 }
 
 .tool-grid {
-  margin-top: 18rpx;
+  margin-top: 16rpx;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14rpx;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10rpx;
 }
 
 .tool-item {
-  padding: 18rpx;
-  border-radius: 22rpx;
-  background: #fffdf9;
-  border: 1rpx solid rgba(198, 161, 124, 0.16);
-  box-shadow: 0 10rpx 22rpx rgba(146, 103, 63, 0.06);
-}
-
-.tool-main {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14rpx;
+  padding: 14rpx 8rpx 12rpx;
+  border-radius: 18rpx;
+  background: #fffdf9;
+  border: 1rpx solid rgba(198, 161, 124, 0.12);
 }
 
 .tool-icon {
-  width: 60rpx;
-  height: 60rpx;
-  border-radius: 18rpx;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 24rpx;
-  font-weight: 800;
+  color: #695446;
+  font-size: 18rpx;
+  font-weight: 700;
   flex-shrink: 0;
-}
-
-.tool-copy {
-  flex: 1;
-  min-width: 0;
+  border: 1rpx solid rgba(105, 84, 70, 0.24);
 }
 
 .tool-title-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10rpx;
+  justify-content: center;
+  gap: 6rpx;
+  width: 100%;
 }
 
 .tool-title {
-  font-size: 26rpx;
+  font-size: 24rpx;
   font-weight: 700;
   color: #4f321a;
-}
-
-.tool-chip {
-  flex-shrink: 0;
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
-  background: #f7efe5;
-  color: #9a6a3d;
-  font-size: 18rpx;
-  font-weight: 700;
-}
-
-.tool-desc {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  line-height: 1.4;
-  color: #8b7158;
-}
-
-.tool-foot {
-  margin-top: 16rpx;
-  padding-top: 14rpx;
-  border-top: 1rpx solid rgba(198, 161, 124, 0.12);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12rpx;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .tool-note {
-  flex: 1;
-  min-width: 0;
-  font-size: 20rpx;
+  margin-top: 8rpx;
+  min-height: 40rpx;
+  font-size: 18rpx;
+  line-height: 1.2;
   color: #9b8268;
-  white-space: nowrap;
+  text-align: center;
+}
+
+.tool-preview {
+  width: 100%;
+  height: 88rpx;
+  margin-top: 10rpx;
+  border-radius: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.tool-preview-mark {
+  font-size: 44rpx;
+  line-height: 1;
+  font-weight: 800;
 }
 
 .tool-link {
-  flex-shrink: 0;
+  margin-top: 10rpx;
   font-size: 20rpx;
-  color: #c96a14;
+  line-height: 1.2;
+  color: #ff7a00;
   font-weight: 700;
+  text-align: center;
 }
 
-.section-accent {
-  color: #ff4f60;
+.preview-orange {
+  background: linear-gradient(180deg, #fff1df 0%, #ffd4a6 100%);
+}
+
+.preview-orange .tool-preview-mark {
+  color: #ff7a00;
+}
+
+.preview-gold {
+  background: linear-gradient(180deg, #fff6e5 0%, #ffe39f 100%);
+}
+
+.preview-gold .tool-preview-mark {
+  color: #f2a100;
+}
+
+.preview-mint {
+  background: linear-gradient(180deg, #eef6ef 0%, #cfe7d1 100%);
+}
+
+.preview-mint .tool-preview-mark {
+  color: #6a8d6d;
+}
+
+.preview-amber {
+  background: linear-gradient(180deg, #fff3dc 0%, #ffd49d 100%);
+}
+
+.preview-amber .tool-preview-mark {
+  color: #d78b1f;
+}
+
+.power-card {
+  border: 1rpx solid rgba(255, 154, 106, 0.16);
+  background: linear-gradient(180deg, #fff8f1 0%, #fff0e4 100%);
+  box-shadow: 0 14rpx 28rpx rgba(175, 90, 39, 0.08);
+}
+.power-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.power-desc {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.45;
+  color: #8f765f;
+}
+.power-chip {
+  flex-shrink: 0;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 122, 0, 0.12);
+  color: #ff6a00;
+  font-size: 20rpx;
+  font-weight: 800;
+}
+.power-meta {
+  margin-top: 14rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid rgba(255, 154, 106, 0.14);
+  font-size: 22rpx;
+  line-height: 1.45;
+  color: #9b8268;
 }
 
 .benefit-grid {
@@ -800,13 +753,6 @@ onPullDownRefresh(async () => {
   font-weight: 700;
 }
 
-.benefit-desc {
-  margin-top: 8rpx;
-  font-size: 21rpx;
-  line-height: 1.45;
-  color: rgba(115, 48, 30, 0.82);
-}
-
 .benefit-btn {
   margin-top: 14rpx;
   width: 110rpx;
@@ -819,46 +765,6 @@ onPullDownRefresh(async () => {
   font-size: 20rpx;
   font-weight: 700;
 }
-
-.entry-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12rpx;
-}
-
-.entry-bubble {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.entry-icon {
-  width: 76rpx;
-  height: 76rpx;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 26rpx;
-  font-weight: 800;
-  box-shadow: 0 12rpx 20rpx rgba(161, 89, 26, 0.12);
-}
-
-.entry-text {
-  font-size: 22rpx;
-  color: #6a4a31;
-}
-
-.icon-orange { background: linear-gradient(180deg, #ff9942, #ff7124); }
-.icon-gold { background: linear-gradient(180deg, #f7b84a, #eb8e14); }
-.icon-blue { background: linear-gradient(180deg, #60a3ff, #2d73f5); }
-.icon-rose { background: linear-gradient(180deg, #ff8c78, #ff5a4b); }
-.icon-green { background: linear-gradient(180deg, #4fcf88, #18a85b); }
-.icon-red { background: linear-gradient(180deg, #ff7d73, #ff4d43); }
-.icon-purple { background: linear-gradient(180deg, #9b86ff, #7158f4); }
-.icon-pink { background: linear-gradient(180deg, #ff9dc6, #ff5da5); }
 
 .benefit-orange {
   background: linear-gradient(180deg, #fff0e3 0%, #ffd9bd 100%);

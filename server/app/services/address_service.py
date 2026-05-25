@@ -1,4 +1,4 @@
-﻿from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
 from app.models.address import UserAddress
