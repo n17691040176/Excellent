@@ -54,27 +54,23 @@ if grep -q "YOUR_SECRET_KEY_HERE\|change-me" .env; then
 fi
 
 echo ""
-echo "步骤 1: 构建 Docker 镜像..."
-"${COMPOSE[@]}" build --no-cache server admin-web mobile-app
+echo "步骤 1: 拉取阿里云最新镜像..."
+"${COMPOSE[@]}" pull server admin-web mobile-app
 
 echo ""
-echo "步骤 2: 停止旧容器..."
-"${COMPOSE[@]}" down
+echo "步骤 2: 重建并启动服务..."
+"${COMPOSE[@]}" up -d --force-recreate
 
 echo ""
-echo "步骤 3: 启动服务..."
-"${COMPOSE[@]}" up -d
-
-echo ""
-echo "步骤 4: 等待服务就绪..."
+echo "步骤 3: 等待服务就绪..."
 sleep 10
 
 echo ""
-echo "步骤 5: 检查服务状态..."
+echo "步骤 4: 检查服务状态..."
 "${COMPOSE[@]}" ps
 
 echo ""
-echo "步骤 6: 健康检查..."
+echo "步骤 5: 健康检查..."
 for i in {1..30}; do
     if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
         echo "✓ 后端服务健康"
