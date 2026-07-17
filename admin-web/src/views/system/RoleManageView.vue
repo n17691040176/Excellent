@@ -1,143 +1,284 @@
-﻿<template>
+<template>
   <div>
     <div class="page-heading">
       <div>
-        <h2>权限管理</h2>
-        <p>展示系统角色、后台菜单边界与按钮级权限矩阵。</p>
+        <h2>角色管理</h2>
+        <p>创建业务角色，配置后台权限和全平台/所属团队数据范围。</p>
+      </div>
+      <div class="toolbar-row">
+        <el-button @click="loadData">刷新</el-button>
+        <el-button v-if="canManage" type="primary" @click="openCreate">新增角色</el-button>
       </div>
     </div>
 
-    <div class="metric-grid">
-      <div v-for="item in metrics" :key="item.label" class="metric-card">
-        <div class="label">{{ item.label }}</div>
-        <div class="value">{{ item.value }}</div>
-        <div class="subtext">{{ item.subtext }}</div>
-      </div>
-    </div>
-
-    <div class="split-grid" style="margin-top: 18px;">
+    <div class="split-grid">
       <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>角色定义</h3>
-            <p>当前系统采用全局角色控制后台访问边界。</p>
-          </div>
-        </div>
-        <el-table :data="roles" border>
-          <el-table-column prop="code" label="角色编码" width="160" />
-          <el-table-column prop="name" label="角色名称" width="140" />
-          <el-table-column prop="scope" label="可见范围" min-width="180" />
-          <el-table-column prop="description" label="说明" min-width="240" />
+        <el-table v-loading="loading" :data="roles" border highlight-current-row @row-click="selectRole">
+          <el-table-column prop="name" label="角色名称" min-width="130" />
+          <el-table-column prop="code" label="角色编码" min-width="150" />
+          <el-table-column label="数据范围" width="110">
+            <template #default="{ row }">{{ scopeLabel(row.data_scope) }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">
+                {{ row.status === 'ENABLED' ? '启用' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="user_count" label="管理员数" width="100" />
         </el-table>
       </div>
 
-      <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>权限说明</h3>
-            <p>路由、菜单和按钮权限统一依赖 JWT 身份与角色矩阵拦截。</p>
+      <div class="panel-card data-card" v-loading="detailLoading">
+        <template v-if="selectedRole">
+          <div class="section-title">
+            <div>
+              <h3>{{ selectedRole.name }}</h3>
+              <p>角色编码创建后不可修改；系统角色可调整权限，但不能删除。</p>
+            </div>
           </div>
-        </div>
-        <div class="notice-list">
-          <div class="notice-item">
-            <strong>超级管理员</strong>
-            拥有全局权限，可查看账号管理与权限管理，并执行高风险状态变更。
+
+          <el-form :model="form" label-position="top" :disabled="!canManage">
+            <div class="form-grid">
+              <el-form-item label="角色名称">
+                <el-input v-model="form.name" maxlength="64" />
+              </el-form-item>
+              <el-form-item label="数据范围">
+                <el-select v-model="form.data_scope" :disabled="selectedRole.is_system" style="width: 100%;">
+                  <el-option label="全平台" value="ALL" />
+                  <el-option label="所属团队" value="TEAM" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="状态">
+                <el-select v-model="form.status" style="width: 100%;">
+                  <el-option label="启用" value="ENABLED" />
+                  <el-option label="停用" value="DISABLED" />
+                </el-select>
+              </el-form-item>
+            </div>
+            <el-form-item label="角色说明">
+              <el-input v-model="form.description" type="textarea" :rows="2" maxlength="500" />
+            </el-form-item>
+          </el-form>
+
+          <div class="permission-actions">
+            <strong>角色权限</strong>
+            <el-button v-if="canManage" size="small" @click="checkAll">全选</el-button>
+            <el-button v-if="canManage" size="small" @click="checkedPermissions = []">清空</el-button>
           </div>
-          <div class="notice-item">
-            <strong>团队管理员</strong>
-            可管理团队业务数据、提现审核与本地生活核销，不可查看系统账号和角色配置。
+          <div class="permission-groups">
+            <section v-for="group in permissionGroups" :key="group.label" class="permission-group">
+              <div class="group-title">{{ group.label }}</div>
+              <el-checkbox-group v-model="checkedPermissions" :disabled="!canManage">
+                <el-checkbox v-for="item in group.permissions" :key="item.key" :label="item.key">
+                  {{ item.label }}
+                </el-checkbox>
+              </el-checkbox-group>
+            </section>
           </div>
-          <div class="notice-item">
-            <strong>普通用户</strong>
-            只能进入用户端 APP，无后台访问权限，进入后台即跳转 403。
+
+          <div v-if="canManage" class="toolbar-row" style="margin-top: 18px;">
+            <el-button type="primary" :loading="saving" @click="saveRole">保存角色</el-button>
+            <el-button
+              v-if="!selectedRole.is_system"
+              type="danger"
+              plain
+              :disabled="selectedRole.user_count > 0"
+              @click="removeRole"
+            >删除角色</el-button>
           </div>
-        </div>
+        </template>
+        <el-empty v-else description="请选择一个角色" />
       </div>
     </div>
 
-    <div class="panel-card data-card" style="margin-top: 18px;">
-      <div class="section-title">
-        <div>
-          <h3>权限矩阵</h3>
-          <p>按钮级权限按最小必要原则划分，避免团队管理员越权操作。</p>
-        </div>
-      </div>
-      <el-table :data="permissionRows" border>
-        <el-table-column prop="permission" label="权限标识" min-width="220" />
-        <el-table-column prop="label" label="权限说明" min-width="220" />
-        <el-table-column label="超级管理员" width="120">
-          <template #default>
-            <el-tag type="success">允许</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="团队管理员" width="120">
-          <template #default="scope">
-            <el-tag :type="scope.row.teamAdmin ? 'success' : 'info'">{{ scope.row.teamAdmin ? '允许' : '禁止' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="普通用户" width="110">
-          <template #default>
-            <el-tag type="info">禁止</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
+    <el-dialog v-model="createVisible" title="新增角色" width="520px" destroy-on-close>
+      <el-form :model="createForm" label-position="top">
+        <el-form-item label="角色编码">
+          <el-input v-model="createForm.code" placeholder="例如 FINANCE_ADMIN" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="角色名称">
+          <el-input v-model="createForm.name" placeholder="例如 财务管理员" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="数据范围">
+          <el-select v-model="createForm.data_scope" style="width: 100%;">
+            <el-option label="全平台" value="ALL" />
+            <el-option label="所属团队" value="TEAM" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="角色说明">
+          <el-input v-model="createForm.description" type="textarea" :rows="2" maxlength="500" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="createRole">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { PERMISSION_MATRIX, ROLE_LABELS } from '@/utils/permission'
+import { roleApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
+import { hasPermission } from '@/utils/permission'
 
-const roles = [
-  { code: 'SUPER_ADMIN', name: ROLE_LABELS.SUPER_ADMIN, scope: '全平台', description: '拥有系统级配置、账号、审核和经营数据全量权限。' },
-  { code: 'TEAM_ADMIN', name: ROLE_LABELS.TEAM_ADMIN, scope: '所属团队', description: '管理团队业务数据、提现审核与本地生活核销，不可查看系统配置。' },
-  { code: 'USER', name: ROLE_LABELS.USER, scope: '用户端 APP', description: '仅参与商城、团队、邀请和资产业务，不开放后台入口。' }
-]
+const userStore = useUserStore()
+const roles = ref([])
+const permissionGroups = ref([])
+const selectedRole = ref(null)
+const checkedPermissions = ref([])
+const loading = ref(false)
+const detailLoading = ref(false)
+const saving = ref(false)
+const creating = ref(false)
+const createVisible = ref(false)
 
-const permissionLabels = {
-  'dashboard:view': '查看首页经营概览',
-  'users:view': '查看用户列表与邀请关系',
-  'users:manage-commerce': '维护用户收货地址、购物车、收藏和足迹',
-  'users:status': '启用或禁用用户账号',
-  'teams:view': '查看团队与成员信息',
-  'teams:edit': '编辑团队基础信息',
-  'packages:view': '查看套餐与资格',
-  'packages:create': '新增套餐',
-  'packages:edit': '编辑或删除套餐',
-  'packages:shelf': '执行套餐上架与下架',
-  'products:view': '查看专区商品与专区规则',
-  'products:create': '新增专区商品',
-  'products:edit': '编辑或删除专区商品',
-  'products:submit-review': '提交商品审核',
-  'products:shelf': '执行商品上架与下架',
-  'orders:view': '查看商城订单、支付和物流状态',
-  'orders:manage': '执行订单支付、完成和关闭操作',
-  'commission:view': '查看佣金配置与返现流水',
-  'withdraws:view': '查看提现申请列表',
-  'withdraws:review': '审核提现申请',
-  'suppliers:view': '查看招商与供应商数据',
-  'assets:view': '查看资产中心',
-  'local-life:view': '查看本地生活经营数据',
-  'local-life:create': '新增本地生活商家、门店、服务和规则',
-  'local-life:edit': '编辑或删除本地生活经营数据',
-  'local-life:verify': '执行本地生活核销',
-  'profile:view': '查看个人中心',
-  'profile:edit': '编辑个人资料',
-  'profile:password': '修改登录密码'
+const form = reactive({ name: '', description: '', data_scope: 'TEAM', status: 'ENABLED' })
+const createForm = reactive({ code: '', name: '', description: '', data_scope: 'TEAM' })
+
+const canManage = computed(() => {
+  const globalScope = userStore.role === 'SUPER_ADMIN' || userStore.userInfo?.admin_role?.data_scope === 'ALL'
+  return globalScope && hasPermission(userStore.role, 'roles:manage', userStore.permissions)
+})
+const allPermissionKeys = computed(() => permissionGroups.value.flatMap((group) => group.permissions.map((item) => item.key)))
+
+function scopeLabel(scope) {
+  return scope === 'ALL' ? '全平台' : '所属团队'
 }
 
-const permissionRows = Object.entries(permissionLabels).map(([permission, label]) => ({
-  permission,
-  label,
-  teamAdmin: (PERMISSION_MATRIX.TEAM_ADMIN || []).includes(permission)
-}))
+function applyRole(role) {
+  selectedRole.value = role
+  Object.assign(form, {
+    name: role.name,
+    description: role.description || '',
+    data_scope: role.data_scope,
+    status: role.status
+  })
+  checkedPermissions.value = [...(role.permissions || [])]
+}
 
-const metrics = computed(() => [
-  { label: '系统角色数', value: roles.length, subtext: '超级管理员、团队管理员、普通用户' },
-  { label: '超级管理员权限', value: 'ALL', subtext: '使用全权限通配处理' },
-  { label: '团队管理员权限数', value: PERMISSION_MATRIX.TEAM_ADMIN.length, subtext: '仅覆盖业务管理必要动作' },
-  { label: '普通用户后台权限', value: 0, subtext: '直接禁止后台访问' }
-])
+async function loadData() {
+  loading.value = true
+  try {
+    const [options, rows] = await Promise.all([roleApi.options(), roleApi.list()])
+    permissionGroups.value = options.groups || []
+    roles.value = rows || []
+    if (selectedRole.value) {
+      const latest = roles.value.find((item) => item.id === selectedRole.value.id)
+      if (latest) applyRole(latest)
+      else selectedRole.value = null
+    } else if (roles.value.length) {
+      applyRole(roles.value[0])
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+async function selectRole(row) {
+  detailLoading.value = true
+  try {
+    applyRole(await roleApi.detail(row.id))
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+function checkAll() {
+  checkedPermissions.value = [...allPermissionKeys.value]
+}
+
+async function saveRole() {
+  if (!selectedRole.value) return
+  saving.value = true
+  try {
+    const role = await roleApi.update(selectedRole.value.id, {
+      ...form,
+      permissions: checkedPermissions.value
+    })
+    applyRole(role)
+    ElMessage.success('角色已保存')
+    await loadData()
+  } finally {
+    saving.value = false
+  }
+}
+
+function openCreate() {
+  Object.assign(createForm, { code: '', name: '', description: '', data_scope: 'TEAM' })
+  createVisible.value = true
+}
+
+async function createRole() {
+  if (!createForm.code.trim() || !createForm.name.trim()) {
+    ElMessage.warning('请填写角色编码和名称')
+    return
+  }
+  creating.value = true
+  try {
+    const role = await roleApi.create({
+      ...createForm,
+      code: createForm.code.trim().toUpperCase(),
+      permissions: []
+    })
+    createVisible.value = false
+    await loadData()
+    await selectRole(role)
+    ElMessage.success('角色已创建，请继续配置权限')
+  } finally {
+    creating.value = false
+  }
+}
+
+async function removeRole() {
+  if (!selectedRole.value) return
+  await ElMessageBox.confirm(`确认删除角色“${selectedRole.value.name}”吗？`, '删除角色', { type: 'warning' })
+  await roleApi.remove(selectedRole.value.id)
+  selectedRole.value = null
+  ElMessage.success('角色已删除')
+  await loadData()
+}
+
+onMounted(loadData)
 </script>
+
+<style scoped>
+.form-grid,
+.permission-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.permission-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.permission-group {
+  padding: 14px;
+  border: 1px solid var(--brand-line);
+  border-radius: 10px;
+}
+
+.group-title {
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.permission-group :deep(.el-checkbox-group) {
+  display: grid;
+  gap: 8px;
+}
+
+.permission-group :deep(.el-checkbox) {
+  margin-right: 0;
+}
+</style>

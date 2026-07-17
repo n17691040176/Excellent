@@ -1,0 +1,208 @@
+/**
+ * Design Tokens - Excellent 电商设计系统 v2.0
+ * Refined Modern 风格 - 精致、现代、有辨识度
+ * 改进要点：更高级的中性色、更细腻的阴影层次、更大胆的功能色
+ */
+
+/* ===== 页面基础样式 ===== */
+page {
+  /* ===== 品牌色 ===== */
+  /* Primary - 翡翠绿，传递信任与活力 */
+  --primary: #059669;
+  --primary-dark: #047857;
+  --primary-light: #10B981;
+  --primary-bg: #ECFDF5;
+  --primary-surface: #D1FAE5;
+
+  /* Secondary - 青蓝色，补充活力 */
+  --secondary: #0EA5E9;
+  --secondary-dark: #0284C7;
+  --secondary-light: #38BDF8;
+  --secondary-bg: #E0F2FE;
+
+  /* Accent - 珊瑚橙，强调促销与行动 */
+  --accent: #F97316;
+  --accent-dark: #EA580C;
+  --accent-light: #FB923C;
+  --accent-bg: #FFF7ED;
+
+  /* ===== 中性色 - 更高级的灰度 ===== */
+  /* 背景层次 */
+  --bg-base: #FAFAFA;
+  --bg: #F5F5F5;
+  --bg-elevated: #FFFFFF;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-dark: #0F172A;
+
+  /* 卡片 - 更纯净的白 */
+  --card: #FFFFFF;
+  --card-hover: #F8FAFC;
+  --card-dark: #1E293B;
+
+  /* 文字 - 更清晰的对比度 */
+  --text-primary: #18181B;
+  --text: #27272A;
+  --text-secondary: #3F3F46;
+  --text-muted: #71717A;
+  --text-disabled: #A1A1AA;
+  --text-dark: #F4F4F5;
+
+  /* 边框 - 更细腻的分隔线 */
+  --border: #E4E4E7;
+  --border-light: #F4F4F5;
+  --border-focus: var(--primary);
+  --border-dark: #3F3F46;
+
+  /* ===== 功能色 - 更大胆醒目 ===== */
+  --success: #10B981;
+  --success-bg: #D1FAE5;
+  --success-text: #065F46;
+
+  --warning: #F59E0B;
+  --warning-bg: #FEF3C7;
+  --warning-text: #92400E;
+
+  --danger: #EF4444;
+  --danger-bg: #FEE2E2;
+  --danger-text: #991B1B;
+
+  --info: #3B82F6;
+  --info-bg: #DBEAFE;
+  --info-text: #1E40AF;
+
+  /* ===== 兼容别名 ===== */
+  --error: var(--danger);
+  --error-bg: var(--danger-bg);
+
+  /* ===== 阴影 - 更精致的层次 ===== */
+  /* 柔和阴影 - 卡片悬浮 */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow: 0 4px 8px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.1), 0 12px 24px rgba(0, 0, 0, 0.06);
+
+  /* 品牌阴影 - 更聚焦的颜色 */
+  --shadow-primary: 0 4px 16px rgba(5, 150, 105, 0.2), 0 2px 8px rgba(5, 150, 105, 0.1);
+  --shadow-primary-lg: 0 8px 24px rgba(5, 150, 105, 0.25), 0 4px 12px rgba(5, 150, 105, 0.15);
+  --shadow-accent: 0 4px 16px rgba(249, 115, 22, 0.2), 0 2px 8px rgba(249, 115, 22, 0.1);
+  --shadow-secondary: 0 4px 16px rgba(14, 165, 233, 0.2), 0 2px 8px rgba(14, 165, 233, 0.1);
+
+  /* 悬浮阴影 - 按钮按下效果 */
+  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  /* ===== 间距 - 微调比例 ===== */
+  --space-0: 0;
+  --space-1: 4rpx;
+  --space-2: 8rpx;
+  --space-3: 12rpx;
+  --space-4: 16rpx;
+  --space-5: 20rpx;
+  --space-6: 24rpx;
+  --space-8: 32rpx;
+  --space-10: 40rpx;
+  --space-12: 48rpx;
+  --space-16: 64rpx;
+  --space-20: 80rpx;
+
+  /* 兼容旧命名 */
+  --space-xs: var(--space-2);
+  --space-sm: var(--space-3);
+  --space-md: var(--space-4);
+  --space-lg: var(--space-6);
+  --space-xl: var(--space-8);
+
+  /* ===== 圆角 - 更圆润现代 ===== */
+  --radius-none: 0;
+  --radius-xs: 6rpx;
+  --radius-sm: 8rpx;
+  --radius: 12rpx;
+  --radius-md: 16rpx;
+  --radius-lg: 20rpx;
+  --radius-xl: 24rpx;
+  --radius-2xl: 32rpx;
+  --radius-3xl: 40rpx;
+  --radius-full: 9999rpx;
+
+  /* 兼容旧命名 */
+  --radius-small: var(--radius-sm);
+
+  /* ===== 字号 - 优化的阅读体验 ===== */
+  --text-xs: 22rpx;
+  --text-sm: 26rpx;
+  --text-base: 30rpx;
+  --text-lg: 34rpx;
+  --text-xl: 38rpx;
+  --text-2xl: 46rpx;
+  --text-3xl: 58rpx;
+  --text-4xl: 72rpx;
+
+  /* 兼容旧命名 */
+  --font-xs: var(--text-xs);
+  --font-sm: var(--text-sm);
+  --font-base: var(--text-base);
+  --font-lg: var(--text-lg);
+  --font-xl: var(--text-xl);
+
+  /* ===== 行高 ===== */
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose: 2;
+
+  /* ===== 字重 ===== */
+  --font-light: 300;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* ===== 触控 ===== */
+  --touch-min: 88rpx;  /* 44px minimum touch target */
+  --touch-gap: 16rpx;  /* 8px minimum gap between touch targets */
+
+  /* ===== 动画 - 更细腻的过渡 ===== */
+  --duration-instant: 50ms;
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 400ms;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* ===== Z-Index ===== */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+  --z-toast: 800;
+
+  /* ===== 基础样式 ===== */
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--font-base);
+  line-height: var(--leading-normal);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== 深色模式 ===== */
+@media (prefers-color-scheme: dark) {
+  page {
+    background: var(--bg-dark);
+    color: var(--text-dark);
+  }
+}

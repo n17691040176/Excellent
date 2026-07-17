@@ -39,7 +39,15 @@ export function toOrderView(item = {}, index = 0) {
     payChannelOptions,
     canPay: Boolean(item.can_pay),
     canConfirm: Boolean(item.can_confirm),
-    badgeClass: status === '已完成' ? 'badge-green' : status === '已支付' ? 'badge-blue' : 'badge-orange'
+    canCancel: Boolean(item.can_cancel),
+    canRefund: Boolean(item.can_refund),
+    badgeClass: status === '已完成'
+      ? 'badge-success'
+      : status === '已发货'
+        ? 'badge-info'
+        : ['已取消', '已退款'].includes(status)
+          ? 'badge-info'
+          : 'badge-warning'
   };
 }
 

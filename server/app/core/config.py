@@ -32,8 +32,58 @@ class Settings(BaseSettings):
     cors_origins: str = 'http://localhost:5173,http://localhost:5174'
     log_level: str = 'INFO'
 
+    tencent_cos_enabled: bool = False
+    tencent_cos_secret_id: str = ''
+    tencent_cos_secret_key: str = ''
+    tencent_cos_region: str = ''
+    tencent_cos_bucket: str = ''
+    tencent_cos_endpoint: str = ''
+    tencent_cos_public_base_url: str = ''
+    tencent_cos_product_prefix: str = 'products'
+    tencent_cos_max_upload_size: int = 5 * 1024 * 1024
+
+    # 阿里云一键登录配置
+    dynpns_enabled: bool = False
+    dynpns_access_key_id: str = ''
+    dynpns_access_key_secret: str = ''
+    dynpns_signature_secret: str = ''
+    dynpns_app_key: str = ''
+
+    # 短信验证码配置（备用）
+    sms_enabled: bool = True
+    sms_aliyun_access_key_id: str = ''
+    sms_aliyun_access_key_secret: str = ''
+    sms_sign_name: str = '卓越科技'
+    sms_template_code: str = ''
+    sms_template_param_name: str = 'code'
+
+    payment_mock_external_payment: bool | None = None
+    payment_default_currency: str | None = None
+    payment_request_timeout_seconds: int | None = None
+    wechat_pay_enabled: bool | None = None
+    wechat_pay_app_id: str | None = None
+    wechat_pay_mchid: str | None = None
+    wechat_pay_api_v3_key: str | None = None
+    wechat_pay_merchant_serial_no: str | None = None
+    wechat_pay_merchant_private_key_path: str | None = None
+    wechat_pay_platform_cert_path: str | None = None
+    wechat_pay_notify_url: str | None = None
+    wechat_pay_app_pay_subject_prefix: str | None = None
+    alipay_enabled: bool | None = None
+    alipay_app_id: str | None = None
+    alipay_private_key_path: str | None = None
+    alipay_public_key_path: str | None = None
+    alipay_notify_url: str | None = None
+    alipay_return_url: str | None = None
+    alipay_gateway_url: str | None = None
+    alipay_payment_method: str | None = None
+    alipay_charset: str | None = None
+    alipay_sign_type: str | None = None
+    alipay_seller_id: str | None = None
+    alipay_app_subject_prefix: str | None = None
+
     model_config = SettingsConfigDict(
-        env_file='.env',
+        env_file=('.env', '.env.alipay.local'),
         env_file_encoding='utf-8',
         case_sensitive=False,
         extra='ignore',

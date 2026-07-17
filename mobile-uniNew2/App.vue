@@ -9,6 +9,8 @@ import {
   syncRuntimeConfigFromBuild
 } from './config/index';
 
+// 导入自定义 tabBar 组件以确保其被编译
+
 let isOfflineNotified = false;
 let h5DebugEventsBound = false;
 
@@ -155,20 +157,178 @@ export default {
 </script>
 
 <style>
+/* Excellent 电商设计系统 v2.0 */
+/* Refined Modern 风格 - 精致、现代、有辨识度 */
+@import './styles/tokens.css';
 @import './styles/common.css';
 
+/* Google Fonts - Rubik + Nunito Sans */
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;500;600;700&family=Rubik:wght@300;400;500;600;700&display=swap');
+
+/* 全局页面样式 */
 page {
-  padding-top: calc(env(safe-area-inset-top) + 24rpx);
-  background:
-    radial-gradient(circle at 0% 0%, rgba(255, 184, 125, 0.18), transparent 24%),
-    radial-gradient(circle at 100% 8%, rgba(255, 140, 94, 0.14), transparent 24%),
-    linear-gradient(180deg, #fff9f3 0%, #fff3e8 42%, #fffaf7 100%);
-  color: #191613;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* 安全区域适配 */
 @supports not (padding-top: env(safe-area-inset-top)) {
   page {
     padding-top: calc(var(--status-bar-height) + 24rpx);
+  }
+}
+
+/* 页面过渡动画 */
+page {
+  transition: background-color var(--duration-normal) var(--ease-out);
+}
+
+/* 统一的卡片悬浮效果 */
+.card-hover {
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.card-hover:active {
+  transform: scale(0.98);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 按钮默认样式 */
+button::after {
+  border: none;
+}
+
+button {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  line-height: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 图片自适应 */
+image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 滚动优化 */
+scroll-view {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 禁用选择 */
+view, text {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 统一的触控反馈 */
+.touch-scale:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+.touch-opacity:active {
+  opacity: 0.8;
+}
+
+/* 品牌色渐变按钮 */
+.btn-gradient-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  box-shadow: var(--shadow-primary);
+}
+
+.btn-gradient-primary:active {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  box-shadow: var(--shadow-sm);
+  transform: scale(0.98);
+}
+
+/* 圆角徽章 */
+.badge-rounded {
+  padding: 6rpx 16rpx;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.badge-primary {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.badge-accent {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* 折扣标签 */
+.discount-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rpx 10rpx;
+  background: linear-gradient(135deg, var(--danger) 0%, #F87171 100%);
+  color: white;
+  font-size: 20rpx;
+  font-weight: var(--font-bold);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2rpx 8rpx rgba(239, 68, 68, 0.25);
+}
+
+/* 价格显示 */
+.price-highlight {
+  display: flex;
+  align-items: baseline;
+  gap: 2rpx;
+}
+
+.price-highlight .symbol {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--primary);
+}
+
+.price-highlight .value {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--primary);
+  font-family: 'DIN Alternate', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.price-highlight .original {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-decoration: line-through;
+  margin-left: var(--space-2);
+}
+
+/* 分割线 */
+.divider-soft {
+  height: 1rpx;
+  background: var(--border-light);
+}
+
+.divider-section {
+  height: 16rpx;
+  background: var(--bg);
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 </style>

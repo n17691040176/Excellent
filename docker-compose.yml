@@ -4,16 +4,18 @@ services:
     container_name: excellent-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root123456
-      MYSQL_DATABASE: excellent_app
-      MYSQL_USER: excellent
-      MYSQL_PASSWORD: excellent123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置 MYSQL_ROOT_PASSWORD 环境变量}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-excellent_app}
+      MYSQL_USER: ${MYSQL_USER:-excellent}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请设置 MYSQL_PASSWORD 环境变量}
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     command:
       - --default-authentication-plugin=mysql_native_password
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_general_ci
+      - --max_connections=500
+      - --wait_timeout=28800
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -26,10 +28,11 @@ services:
     image: redis:7-alpine
     container_name: excellent-redis
     restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 12
@@ -41,19 +44,30 @@ services:
     restart: unless-stopped
     env_file:
       - ./server/.env
+      - ./server/.env.alipay.local
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
-      MYSQL_USER: excellent
-      MYSQL_PASSWORD: excellent123
-      MYSQL_DB: excellent_app
+      MYSQL_USER: ${MYSQL_USER:-excellent}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DB: ${MYSQL_DATABASE:-excellent_app}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      CORS_ORIGINS: http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://156.238.241.213:5173,http://156.238.241.213:5174
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-}@redis:6379/2
+      CORS_ORIGINS: https://175.27.228.166
+      TENCENT_COS_ENABLED: ${TENCENT_COS_ENABLED:-false}
+      TENCENT_COS_SECRET_ID: ${TENCENT_COS_SECRET_ID:-}
+      TENCENT_COS_SECRET_KEY: ${TENCENT_COS_SECRET_KEY:-}
+      TENCENT_COS_REGION: ${TENCENT_COS_REGION:-ap-nanjing}
+      TENCENT_COS_BUCKET: ${TENCENT_COS_BUCKET:-}
+      TENCENT_COS_ENDPOINT: ${TENCENT_COS_ENDPOINT:-}
+      TENCENT_COS_PUBLIC_BASE_URL: ${TENCENT_COS_PUBLIC_BASE_URL:-}
+      TENCENT_COS_PRODUCT_PREFIX: ${TENCENT_COS_PRODUCT_PREFIX:-products}
+      TENCENT_COS_MAX_UPLOAD_SIZE: ${TENCENT_COS_MAX_UPLOAD_SIZE:-5242880}
     depends_on:
       mysql:
         condition: service_healthy
@@ -61,6 +75,7 @@ services:
         condition: service_healthy
     volumes:
       - ./server/uploads:/app/uploads
+      - ${PAYMENT_SECRETS_DIR:-./server/secrets}:/run/secrets:ro
     ports:
       - "8000:8000"
 
@@ -68,26 +83,32 @@ services:
     build:
       context: ./admin-web
       args:
-        VITE_API_BASE_URL: ${PUBLIC_API_BASE_URL:-/}
+        VITE_API_BASE_URL: /
     container_name: excellent-admin-web
     restart: unless-stopped
     depends_on:
       - server
     ports:
-      - "5173:80"
+      - "80:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.admin.rule=Host(`175.27.228.166`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.admin.entrypoints=websecure"
+      - "traefik.http.routers.admin.tls=true"
 
   mobile-uni-new2:
     build:
       context: ./mobile-uniNew2
       args:
-        VITE_API_BASE_URL: ${PUBLIC_API_BASE_URL:-/}
-        VITE_INVITE_WEB_BASE_URL: ${PUBLIC_INVITE_WEB_BASE_URL:-/}
+        VITE_API_BASE_URL: https://zyhskj.shop/api/
+        VITE_INVITE_WEB_BASE_URL: https://zyhskj.shop
+        VITE_APP_ENV: prod
     container_name: excellent-mobile-uni-new2
     restart: unless-stopped
     depends_on:
       - server
     ports:
-      - "5174:80"
+      - "8080:80"
 
 volumes:
   mysql_data:

@@ -17,7 +17,7 @@ class DashboardService:
         commission_query = db.query(func.coalesce(func.sum(CommissionFlow.commission_amount), 0))
         withdraw_query = db.query(func.count(WithdrawRequest.id)).filter(WithdrawRequest.status == 'PENDING')
 
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             team_id = AdminScopeService.require_team_id(current_user)
             team_user_ids = AdminScopeService.team_user_ids_subquery(current_user)
             user_query = user_query.filter(User.team_id == team_id)

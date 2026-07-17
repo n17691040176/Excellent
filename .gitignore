@@ -31,10 +31,25 @@ dist/
 *.log
 logs/
 
-# Environment files
+# Environment files (NEVER commit secrets)
 .env
-.env.*
+.env.local
+.env.*.local
 !.env.example
+!.env.prod
+
+# Security-sensitive files
+*.pem
+*.key
+credentials.json
+service-account.json
+*.p12
+*.pfx
+
+# Uploads (user-generated content)
+server/uploads/
+uploads/
+media/
 
 # Node frontend
 node_modules/

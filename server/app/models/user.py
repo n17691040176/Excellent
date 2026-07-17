@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
 from app.models.enums import BusinessIdentity, GlobalRole, UserStatus
@@ -16,6 +16,8 @@ class User(TimestampMixin, Base):
     nickname: Mapped[str] = mapped_column(String(64), nullable=False)
     avatar: Mapped[str | None] = mapped_column(String(255), nullable=True)
     global_role: Mapped[GlobalRole] = mapped_column(Enum(GlobalRole), default=GlobalRole.USER, nullable=False)
+    admin_role_id: Mapped[int | None] = mapped_column(ForeignKey('admin_roles.id'), nullable=True, index=True)
+    admin_role = relationship('AdminRole', foreign_keys=[admin_role_id])
     business_identity: Mapped[BusinessIdentity] = mapped_column(
         Enum(BusinessIdentity),
         default=BusinessIdentity.NORMAL_MEMBER,
@@ -27,7 +29,17 @@ class User(TimestampMixin, Base):
     grandparent_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     team_id: Mapped[int | None] = mapped_column(ForeignKey('teams.id'), nullable=True)
     real_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_phone_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AdminUserPermission(TimestampMixin, Base):
+    __tablename__ = 'admin_user_permissions'
+    __table_args__ = (UniqueConstraint('user_id', 'permission_key', name='uq_admin_user_permission'),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    permission_key: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
 
 
 class UserLegacyProfile(Base):

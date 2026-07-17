@@ -1,82 +1,119 @@
 <template>
-  <view class="container settings-page">
-    <view class="card hero-card">
-      <view class="hero-tag">账号设置</view>
-      <view class="section-title mt-12">管理资料、安全与偏好配置</view>
-      <view class="muted">切换环境、查看账号偏好，方便调试和联调</view>
+  <view class="settings-page">
+    <!-- Header -->
+    <view class="page-header">
+      <view class="back-btn" @click="goBack">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </view>
+      <text class="header-title">账号设置</text>
+      <view class="header-spacer" />
+    </view>
 
-      <view class="setting-list mt-20">
-        <view class="setting-item interactive" v-for="item in items" :key="item.title" @click="preview(item.title)">
-          <view>
-            <view class="item-title">{{ item.title }}</view>
-            <view class="item-desc">{{ item.desc }}</view>
+    <!-- Account Section -->
+    <view class="section-card">
+      <text class="section-title">账户管理</text>
+      <view class="menu-list">
+        <view
+          v-for="item in accountMenu"
+          :key="item.action"
+          class="menu-item"
+          @click="handleMenu(item)"
+        >
+          <view class="menu-left">
+            <view class="menu-icon" :style="{ background: item.bgColor }">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" v-html="item.svgPath" />
+            </view>
+            <text class="menu-title">{{ item.title }}</text>
           </view>
-          <view class="arrow">查看</view>
+          <svg class="menu-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </view>
       </view>
     </view>
 
-    <view class="card mt-20 env-card">
-      <view class="row-between">
-        <view>
-          <view class="section-title slim-title">环境切换</view>
-          <view class="muted">用于控制移动端打包后访问的 API 地址</view>
+    <!-- Environment Card -->
+    <view class="section-card">
+      <view class="section-header">
+        <text class="section-title">环境配置</text>
+        <view class="env-badge" :class="currentEnvBadge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+          {{ currentEnvTag }}
         </view>
-        <view class="env-current-value">{{ currentEnvLabel }}</view>
       </view>
-
-      <view class="env-grid mt-16">
+      <view class="env-list">
         <view
           v-for="env in envOptions"
           :key="env.value"
-          class="env-item interactive"
+          class="env-item"
           :class="{ active: currentEnv === env.value }"
           @click="applyEnv(env.value)"
         >
-          <view class="env-head">
-            <view class="env-name">{{ env.label }}</view>
-            <view class="env-badge" :class="env.badgeClass">{{ env.tag }}</view>
+          <view class="env-info">
+            <text class="env-name">{{ env.label }}</text>
+            <text class="env-url">{{ env.apiUrl }}</text>
           </view>
-          <view class="env-url">{{ env.apiUrl || '留空，后续补充' }}</view>
-          <view class="env-note">{{ env.note }}</view>
+          <view v-if="currentEnv === env.value" class="env-check">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17L4 12" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </view>
         </view>
-      </view>
-
-      <view class="env-current">
-        <view class="env-current-label">当前环境</view>
-        <view class="env-current-value">{{ currentEnvLabel }}</view>
-      </view>
-
-      <view class="env-debug">
-        <view class="env-debug-title">当前 API 地址</view>
-        <view class="env-debug-code">{{ currentApiBaseUrlDisplay }}</view>
       </view>
     </view>
 
-    <button class="btn btn-ghost mt-24 logout-btn" @click="logout">退出登录</button>
+    <!-- Logout -->
+    <view class="logout-section">
+      <view class="logout-btn" @click="logout">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        退出登录
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { clearAuth } from '@/utils/auth'
+import { computed, ref } from 'vue';
+import { clearAuth } from '@/utils/auth';
 import {
   APP_ENV,
   clearApiBaseUrl,
   clearAppEnv,
   clearInviteWebBaseUrl,
-  getApiBaseUrl,
   getAppEnv,
   setApiBaseUrl,
   setAppEnv,
   setInviteWebBaseUrl
-} from '@/config'
+} from '@/config';
 
-const items = [
-  { title: '个人资料', desc: '头像、昵称和联系方式' },
-  { title: '账号安全', desc: '修改手机号与登录验证' },
-  { title: '隐私设置', desc: '授权范围与数据管理' }
-]
+const accountMenu = [
+  {
+    title: '个人资料',
+    action: 'profile',
+    bgColor: 'rgba(5, 150, 105, 0.1)',
+    svgPath: '<path d="M20 21V19a2 2 0 00-2-2H6a2 2 0 00-2 2v2" stroke="#059669" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7" r="4" stroke="#059669" stroke-width="2"/>'
+  },
+  {
+    title: '账号安全',
+    action: 'security',
+    bgColor: 'rgba(59, 130, 246, 0.1)',
+    svgPath: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+  },
+  {
+    title: '隐私设置',
+    action: 'privacy',
+    bgColor: 'rgba(139, 92, 246, 0.1)',
+    svgPath: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="#8B5CF6" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"/>'
+  }
+];
 
 const envOptions = [
   {
@@ -84,7 +121,6 @@ const envOptions = [
     label: '本地环境',
     tag: 'local',
     apiUrl: 'http://127.0.0.1:8000',
-    note: '适合电脑本机启动后调试',
     badgeClass: 'badge-local'
   },
   {
@@ -92,27 +128,26 @@ const envOptions = [
     label: '开发服务器',
     tag: 'dev',
     apiUrl: 'http://156.238.241.213:8000',
-    note: '适合真机或打包后联调',
     badgeClass: 'badge-dev'
   },
   {
     value: APP_ENV.PROD,
     label: '部署服务器',
     tag: 'prod',
-    apiUrl: '',
-    note: '上线前再填写正式地址',
+    apiUrl: '待配置',
     badgeClass: 'badge-prod'
   }
-]
+];
 
-const currentEnv = ref(getAppEnv())
-const currentApiBaseUrl = computed(() => getApiBaseUrl())
-const currentApiBaseUrlDisplay = computed(() => currentApiBaseUrl.value || '未配置')
-
-const currentEnvLabel = computed(() => {
-  const matched = envOptions.find((item) => item.value === currentEnv.value)
-  return matched ? `${matched.label}（${matched.tag}）` : currentEnv.value
-})
+const currentEnv = ref(getAppEnv());
+const currentEnvTag = computed(() => {
+  const matched = envOptions.find((item) => item.value === currentEnv.value);
+  return matched ? matched.tag : currentEnv.value;
+});
+const currentEnvBadge = computed(() => {
+  const matched = envOptions.find((item) => item.value === currentEnv.value);
+  return matched ? matched.badgeClass : 'badge-local';
+});
 
 const envRuntimeConfig = {
   [APP_ENV.LOCAL]: {
@@ -127,149 +162,297 @@ const envRuntimeConfig = {
     apiUrl: '',
     inviteUrl: ''
   }
+};
+
+function goBack() {
+  uni.navigateBack();
 }
 
-const logout = () => {
-  clearAuth()
-  uni.reLaunch({ url: '/pages/login/index' })
+function handleMenu(item) {
+  uni.showToast({ title: `${item.title}即将开放`, icon: 'none' });
 }
 
-const preview = (title) => {
-  uni.showToast({ title: `${title}即将开放`, icon: 'none' })
-}
-
-const applyEnv = (env) => {
+function applyEnv(env) {
   if (env === currentEnv.value) {
-    uni.showToast({ title: `已是${currentEnvLabel.value}`, icon: 'none' })
-    return
+    uni.showToast({ title: `已是${envOptions.find(e => e.value === env).label}`, icon: 'none' });
+    return;
   }
 
   if (env === APP_ENV.PROD) {
-    clearAppEnv()
-    clearApiBaseUrl()
-    clearInviteWebBaseUrl()
+    clearAppEnv();
+    clearApiBaseUrl();
+    clearInviteWebBaseUrl();
   } else {
-    setAppEnv(env)
-    const runtimeConfig = envRuntimeConfig[env]
-    setApiBaseUrl(runtimeConfig?.apiUrl || '')
-    setInviteWebBaseUrl(runtimeConfig?.inviteUrl || '')
+    setAppEnv(env);
+    const runtimeConfig = envRuntimeConfig[env];
+    setApiBaseUrl(runtimeConfig?.apiUrl || '');
+    setInviteWebBaseUrl(runtimeConfig?.inviteUrl || '');
   }
 
-  currentEnv.value = getAppEnv()
-  uni.showToast({ title: `已切换到${currentEnvLabel.value}`, icon: 'none' })
+  currentEnv.value = getAppEnv();
+  uni.showToast({ title: `已切换到${envOptions.find(e => e.value === env).label}`, icon: 'none' });
   setTimeout(() => {
-    const pages = getCurrentPages()
-    const currentPage = pages[pages.length - 1]
+    const pages = getCurrentPages();
+    const currentPage = pages[pages.length - 1];
     if (!currentPage) {
-      uni.reLaunch({ url: '/pages/profile/index' })
-      return
+      uni.reLaunch({ url: '/pages/profile/index' });
+      return;
     }
+    const route = `/${currentPage.route}`;
+    uni.reLaunch({ url: route });
+  }, 300);
+}
 
-    const route = `/${currentPage.route}`
-    uni.reLaunch({ url: route })
-  }, 300)
+function logout() {
+  uni.showModal({
+    title: '退出登录',
+    content: '确定要退出当前账号吗？',
+    success: ({ confirm }) => {
+      if (confirm) {
+        clearAuth();
+        uni.reLaunch({ url: '/pages/login/index' });
+      }
+    }
+  });
 }
 </script>
 
 <style scoped>
 @import '@/styles/common.css';
-.settings-page { padding-bottom: 36rpx; }
-.hero-card {
-  background:
-    radial-gradient(circle at 95% 8%, rgba(255, 166, 82, 0.16), transparent 36%),
-    linear-gradient(180deg, #fffdf9 0%, #fff6ec 100%);
-  border: 1rpx solid rgba(255, 154, 106, 0.16);
+
+.settings-page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 48rpx;
 }
-.hero-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #ff6a00;
-  font-size: 20rpx;
-  font-weight: 800;
-}
-.setting-list {
-  display: grid;
-  gap: 12rpx;
-}
-.setting-item {
-  padding: 18rpx 0;
-  border-bottom: 1rpx solid #ebf2ef;
+
+/* Header */
+.page-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: var(--card);
+  border-bottom: 1rpx solid var(--border);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-fixed);
 }
-.setting-item:last-child { border-bottom: none; }
-.item-title { font-size: 28rpx; color: #1f4032; }
-.item-desc { margin-top: 6rpx; font-size: 22rpx; color: #7a8d84; }
-.arrow { font-size: 22rpx; color: #ff6a00; font-weight: 700; }
-.env-card { border: 1rpx solid rgba(255, 154, 106, 0.16); }
-.env-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12rpx;
-}
-.env-item {
-  padding: 20rpx;
-  border-radius: 20rpx;
-  border: 1rpx solid #edf0ee;
-  background: #fbfcfb;
-}
-.env-item.active {
-  border-color: #ffbf6e;
-  background: linear-gradient(180deg, #fff7eb, #fff1de);
-  box-shadow: 0 14rpx 24rpx rgba(179, 117, 45, 0.08);
-}
-.env-head {
+
+.back-btn, .header-spacer {
+  width: 64rpx;
+  height: 64rpx;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12rpx;
+  justify-content: center;
+  color: var(--text);
+  transition: all var(--duration-fast) var(--ease-out);
 }
-.env-name { font-size: 28rpx; font-weight: 700; color: #1f4032; }
+
+.back-btn:active {
+  opacity: 0.6;
+}
+
+.header-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--text);
+}
+
+/* Section Card */
+.section-card {
+  margin: 24rpx;
+  margin-top: calc(24rpx + 112rpx);
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.section-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--text);
+  margin-bottom: 24rpx;
+}
+
+.section-header .section-title {
+  margin-bottom: 0;
+}
+
+/* Menu List */
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid var(--border);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.menu-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.menu-item:active {
+  opacity: 0.7;
+}
+
+.menu-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.menu-icon {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+}
+
+.menu-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+.menu-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Env Badge */
 .env-badge {
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  font-size: 18rpx;
-  font-weight: 700;
-  color: #fff;
-}
-.badge-local { background: linear-gradient(180deg, #60a5fa, #2563eb); }
-.badge-dev { background: linear-gradient(180deg, #34d399, #059669); }
-.badge-prod { background: linear-gradient(180deg, #fb7185, #e11d48); }
-.env-url { margin-top: 10rpx; font-size: 22rpx; color: #6f7f78; }
-.env-note { margin-top: 8rpx; font-size: 20rpx; color: #95a39c; }
-.env-current {
-  margin-top: 16rpx;
-  padding: 16rpx 18rpx;
-  border-radius: 18rpx;
-  background: #f6faf8;
   display: flex;
-  justify-content: space-between;
-  gap: 12rpx;
-}
-.env-current-label { font-size: 22rpx; color: #7b8f86; }
-.env-current-value { font-size: 22rpx; font-weight: 700; color: #1f4032; }
-.env-debug {
-  margin-top: 12rpx;
-  padding: 16rpx 18rpx;
-  border-radius: 18rpx;
-  background: #fff9f1;
-  border: 1rpx solid #f3ddbe;
-}
-.env-debug-title { font-size: 22rpx; color: #8a6240; font-weight: 700; }
-.env-debug-code {
-  margin-top: 8rpx;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 16rpx;
+  border-radius: var(--radius-full);
   font-size: 20rpx;
-  line-height: 1.6;
-  color: #5f4a37;
-  word-break: break-all;
+  font-weight: var(--font-bold);
+  text-transform: uppercase;
 }
+
+.badge-local {
+  background: rgba(5, 150, 105, 0.1);
+  color: var(--primary);
+}
+
+.badge-dev {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+}
+
+.badge-prod {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
+}
+
+/* Env List */
+.env-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.env-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  border: 2rpx solid transparent;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.env-item:active {
+  opacity: 0.8;
+}
+
+.env-item.active {
+  border-color: var(--primary);
+  background: rgba(5, 150, 105, 0.05);
+}
+
+.env-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.env-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+.env-url {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.env-check {
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: white;
+  border-radius: 50%;
+}
+
+/* Logout */
+.logout-section {
+  margin: 48rpx 24rpx 0;
+}
+
 .logout-btn {
-  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: 28rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  color: var(--danger);
+  transition: all var(--duration-fast) var(--ease-out);
 }
-.interactive { transition: transform 180ms ease, opacity 180ms ease; }
-.interactive:active { transform: scale(0.99); opacity: 0.92; }
+
+.logout-btn:active {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  .back-btn,
+  .menu-item,
+  .env-item,
+  .logout-btn {
+    transition: none;
+  }
+}
 </style>

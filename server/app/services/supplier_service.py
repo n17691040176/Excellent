@@ -123,7 +123,7 @@ class SupplierService:
     @staticmethod
     def list_for_admin(db: Session, current_user: User) -> list[dict]:
         query = db.query(Supplier)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(Supplier.user_id.in_(AdminScopeService.team_user_ids_subquery(current_user)))
         rows = query.order_by(Supplier.id.desc()).all()
         return [SupplierService._serialize_supplier_for_admin(db, row) for row in rows]
@@ -627,7 +627,7 @@ class SupplierService:
     @staticmethod
     def list_qualifications_for_admin(db: Session, current_user: User) -> list[dict]:
         query = db.query(ProductQualification)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(ProductQualification.applicant_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user)))
         rows = query.order_by(ProductQualification.id.desc()).all()
         return [SupplierService._serialize_qualification_row(db, row) for row in rows]
@@ -635,7 +635,7 @@ class SupplierService:
     @staticmethod
     def list_qualification_ledgers_for_admin(db: Session, current_user: User) -> list[dict]:
         query = db.query(ProductQualification)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(ProductQualification.applicant_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user)))
         rows = query.order_by(ProductQualification.id.desc()).all()
         return [SupplierService._serialize_qualification_ledger_row(db, row) for row in rows]
@@ -651,7 +651,7 @@ class SupplierService:
         qualification = db.get(ProductQualification, qualification_id)
         if not qualification:
             raise NotFoundError('Qualification not found')
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             applicant = db.get(User, qualification.applicant_user_id)
             if not applicant:
                 raise NotFoundError('Applicant not found')

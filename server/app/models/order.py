@@ -23,7 +23,7 @@ class Order(TimestampMixin, Base):
     payable_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     paid_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     pay_status: Mapped[PayStatus] = mapped_column(Enum(PayStatus), default=PayStatus.UNPAID, nullable=False)
-    order_status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.CREATED, nullable=False)
+    order_status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING_PAYMENT, nullable=False)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     legacy_total_price: Mapped[float | None] = mapped_column('total_price', DECIMAL(18, 2), nullable=True)

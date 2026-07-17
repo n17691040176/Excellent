@@ -620,7 +620,7 @@ class EarningRuleService:
     def _optional_positive_int(value: object, message: str) -> int | None:
         if value in {None, ''}:
             return None
-        number = int(value)
+        number = EarningRuleService._to_int(value)
         if number <= 0:
             raise ConflictError(message)
         return number
@@ -629,7 +629,7 @@ class EarningRuleService:
     def _optional_int_range(value: object, min_value: int, max_value: int, message: str) -> int | None:
         if value in {None, ''}:
             return None
-        number = int(value)
+        number = EarningRuleService._to_int(value)
         if number < min_value or number > max_value:
             raise ConflictError(message)
         return number
@@ -645,10 +645,16 @@ class EarningRuleService:
 
     @staticmethod
     def _safe_int(value: object, min_value: int, max_value: int) -> int:
-        number = int(value or 0)
+        number = EarningRuleService._to_int(value or 0)
         if number < min_value or number > max_value:
             raise ConflictError(f'Integer field must be between {min_value} and {max_value}')
         return number
+
+    @staticmethod
+    def _to_int(value: object) -> int:
+        if isinstance(value, int | float | Decimal):
+            return int(value)
+        return int(str(value))
 
     @staticmethod
     def _parse_datetime(value: object) -> datetime | None:

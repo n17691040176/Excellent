@@ -5,6 +5,7 @@ from app.models.commission import CommissionConfig
 from app.models.enums import GlobalRole, UserStatus
 from app.models.user import User
 from app.services.earning_rule_service import EarningRuleService
+from app.services.admin_rbac_service import AdminRbacService
 from app.services.supplier_service import SupplierService
 from app.utils.helpers import generate_code, now
 
@@ -29,3 +30,5 @@ def seed_defaults(db: Session) -> None:
             )
         )
         db.commit()
+
+    AdminRbacService.ensure_system_roles(db)

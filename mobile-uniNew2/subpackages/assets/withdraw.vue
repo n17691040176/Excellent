@@ -1,146 +1,127 @@
 <template>
-  <view class="container balance-withdraw-page">
-    <StateView v-if="pageLoading" title="加载中..." custom-class="mt-24" />
-    <StateView
-      v-else-if="pageFailed"
-      title="余额提现数据加载失败"
-      :show-retry="true"
-      custom-class="mt-24"
-      @retry="reloadPage"
-    />
+  <view class="withdraw-page">
+    <!-- Header -->
+    <view class="page-header">
+      <view class="back-btn" @click="goBack">←</view>
+      <text class="header-title">余额提现</text>
+      <view class="header-spacer" />
+    </view>
 
+    <!-- Loading -->
+    <view v-if="pageLoading && !assetDetail.available_amount" class="loading-state">
+      <view class="skeleton skeleton-card" />
+    </view>
+
+    <!-- Error -->
+    <view v-else-if="pageFailed && !assetDetail.available_amount" class="error-state">
+      <text class="error-icon">⚠</text>
+      <text class="error-text">数据加载失败</text>
+      <view class="retry-btn" @click="reloadPage">点击重试</view>
+    </view>
+
+    <!-- Content -->
     <template v-else>
-      <view class="card summary-card">
-        <view class="summary-tag">余额提现</view>
-        <view class="row-between summary-head mt-12">
-          <view>
-            <view class="section-title slim-title">余额提现</view>
-            <view class="muted mt-8">审核通过后，80% 提现到账，20% 自动转入消费金。</view>
-          </view>
-          <view class="summary-link interactive" @click="goBalanceDetail">余额明细</view>
-        </view>
-
-        <view class="stat-grid mt-20">
-          <view class="stat-item">
-            <view class="stat-label">可提现</view>
-            <view class="stat-value">¥{{ money(assetDetail.available_amount) }}</view>
-          </view>
-          <view class="stat-item">
-            <view class="stat-label">累计提现</view>
-            <view class="stat-value">¥{{ money(assetDetail.withdrawn_amount) }}</view>
+      <!-- Balance Card -->
+      <view class="balance-card">
+        <text class="balance-label">可提现金额</text>
+        <text class="balance-amount">¥{{ money(assetDetail.available_amount) }}</text>
+        <view class="balance-strip">
+          <view class="strip-item">
+            <text class="strip-label">累计提现</text>
+            <text class="strip-value">¥{{ money(assetDetail.withdrawn_amount) }}</text>
           </view>
         </view>
+      </view>
 
-        <view class="withdraw-input-wrap mt-20">
+      <!-- Withdraw Form -->
+      <view class="form-card">
+        <text class="form-title">申请提现</text>
+        <view class="input-wrap">
+          <text class="input-prefix">¥</text>
           <input
             v-model="withdrawAmount"
-            class="withdraw-input"
+            class="amount-input"
             type="digit"
-            placeholder="请输入提现金额"
+            placeholder="0.00"
+            placeholder-class="placeholder"
           />
-          <view class="withdraw-shortcut interactive" @click="fillAllWithdraw">全部提现</view>
+          <view class="input-action" @click="fillAll">全部</view>
         </view>
-
-        <view class="withdraw-preview mt-12">
+        <view class="preview-row">
           <view class="preview-item">
             <text class="preview-label">到账</text>
             <text class="preview-value">¥{{ withdrawPreview.netAmount }}</text>
           </view>
           <view class="preview-item">
             <text class="preview-label">转消费金</text>
-            <text class="preview-value preview-value-warm">¥{{ withdrawPreview.voucherAmount }}</text>
+            <text class="preview-value warm">¥{{ withdrawPreview.voucherAmount }}</text>
           </view>
         </view>
-
-        <button class="btn btn-primary mt-16" :loading="withdrawSubmitting" @click="submitBalanceWithdraw">
-          申请提现
-        </button>
+        <view class="submit-btn" :class="{ disabled: submitting }" @click="submitWithdraw">
+          {{ submitting ? '提交中...' : '申请提现' }}
+        </view>
       </view>
 
-      <view class="card mt-24 rule-card">
-        <view class="row-between section-row">
-          <view>
-            <view class="section-title slim-title">提现说明</view>
-            <view class="muted">提现规则、审核状态和到账方式统一在这里说明</view>
-          </view>
-          <view class="badge badge-blue">规则</view>
-        </view>
-
-        <view class="tips-list">
-          <view v-for="item in withdrawTips" :key="item.title" class="tip-item">
-            <view class="tip-index">{{ item.index }}</view>
-            <view class="tip-content">
-              <view class="tip-title">{{ item.title }}</view>
-              <view class="tip-desc">{{ item.desc }}</view>
+      <!-- Rules -->
+      <view class="rules-card">
+        <text class="section-title">提现说明</text>
+        <view class="rules-list">
+          <view v-for="(rule, index) in rules" :key="index" class="rule-item">
+            <view class="rule-index">{{ String(index + 1).padStart(2, '0') }}</view>
+            <view class="rule-content">
+              <text class="rule-title">{{ rule.title }}</text>
+              <text class="rule-desc">{{ rule.desc }}</text>
             </view>
           </view>
         </view>
       </view>
 
-      <view class="card mt-24 record-card">
-        <view class="row-between section-row">
-          <view>
-            <view class="section-title slim-title">提现记录</view>
-            <view class="muted">展示最近的余额提现申请、到账金额和转消费金金额</view>
-          </view>
-          <view class="badge badge-orange">{{ filteredWithdrawRows.length }} 笔</view>
+      <!-- Records -->
+      <view class="records-card">
+        <view class="records-header">
+          <text class="section-title">提现记录</text>
+          <text class="records-count">{{ filteredRecords.length }} 笔</text>
         </view>
 
-        <FilterChips
-          :items="recordRangeOptions"
-          :model-value="activeRecordRange"
-          @change="changeRecordRange"
-        />
+        <!-- Tabs -->
+        <view class="tabs-wrap">
+          <view
+            v-for="tab in recordTabs"
+            :key="tab.value"
+            class="tab-item"
+            :class="{ active: activeRecordTab === tab.value }"
+            @click="changeRecordTab(tab.value)"
+          >
+            {{ tab.label }}
+          </view>
+        </view>
 
-        <FilterChips
-          class="mt-12"
-          :items="recordTabs"
-          :model-value="activeRecordTab"
-          @change="changeRecordTab"
-        />
+        <!-- Loading -->
+        <view v-if="recordsLoading && !filteredRecords.length" class="state-loading">
+          <view class="loading-spinner" />
+          <text>加载中...</text>
+        </view>
 
-        <StateView
-          v-if="recordsLoading"
-          title="提现记录加载中..."
-          custom-class="asset-empty"
-        />
-        <StateView
-          v-else-if="recordsFailed"
-          title="提现记录加载失败"
-          :show-retry="true"
-          custom-class="asset-empty"
-          @retry="reloadPage"
-        />
-        <StateView
-          v-else-if="!filteredWithdrawRows.length"
-          title="暂时还没有提现记录"
-          description="提交余额提现申请后，这里会展示审核进度、到账金额和转消费金金额。"
-          custom-class="asset-empty"
-        />
+        <!-- Empty -->
+        <view v-else-if="!filteredRecords.length" class="state-empty">
+          <view class="empty-icon">◇</view>
+          <text class="empty-title">暂无提现记录</text>
+        </view>
 
-        <view v-else class="withdraw-record-list mt-16">
-          <view v-for="item in filteredWithdrawRows" :key="item.id" class="withdraw-record-item">
-            <view class="row-between">
-              <view class="withdraw-record-title">提现 ¥{{ money(item.amount) }}</view>
-              <view class="badge" :class="withdrawStatusClass(item.status)">{{ withdrawStatusLabel(item.status) }}</view>
-            </view>
-            <view class="withdraw-record-line withdraw-record-copy">
-              <text>提现单号 {{ item.source_no || `WD-${item.id}` }}</text>
-              <view class="copy-link interactive" @click.stop="copyText(item.source_no || `WD-${item.id}`, '提现单号')">复制</view>
-            </view>
-            <view class="withdraw-record-line">到账 ¥{{ money(item.net_amount) }}，转消费金 ¥{{ money(item.voucher_amount) }}</view>
-            <view v-if="item.remark" class="withdraw-record-line">{{ item.remark }}</view>
-            <view class="withdraw-record-time">{{ formatDetailTime(item.created_at || item.time) }}</view>
-            <view class="withdraw-record-action">
-              <view class="copy-link interactive" @click.stop="toggleRecordExpand(item.id)">
-                {{ isRecordExpanded(item.id) ? '收起详情' : '展开详情' }}
+        <!-- List -->
+        <view v-else class="records-list">
+          <view v-for="item in filteredRecords" :key="item.id" class="record-item">
+            <view class="record-header">
+              <text class="record-title">提现 ¥{{ money(item.amount) }}</text>
+              <view class="record-status" :class="getStatusClass(item.status)">
+                {{ getStatusLabel(item.status) }}
               </view>
             </view>
-            <DetailInfoPanel
-              v-if="isRecordExpanded(item.id)"
-              :items="buildWithdrawDetailItems(item)"
-              :note="withdrawStatusHint(item)"
-            />
+            <view class="record-detail">
+              到账 ¥{{ money(item.net_amount) }} · 转消费金 ¥{{ money(item.voucher_amount) }}
+            </view>
+            <view class="record-time">{{ formatTime(item.created_at) }}</view>
+            <view v-if="item.remark" class="record-remark">{{ item.remark }}</view>
           </view>
         </view>
       </view>
@@ -150,79 +131,41 @@
 
 <script setup>
 import { computed, ref } from 'vue';
-import { onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app';
-
-import DetailInfoPanel from '@/components/DetailInfoPanel.vue';
-import FilterChips from '@/components/FilterChips.vue';
-import StateView from '@/components/StateView.vue';
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import { assetApi, commissionApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
 
 const BALANCE_WITHDRAW_VOUCHER_RATE = 0.2;
-const WITHDRAW_PAGE_CACHE_KEY = 'asset_withdraw_view_state';
-const recordRangeOptions = [
-  { value: 7, label: '最近7天' },
-  { value: 30, label: '最近30天' },
-  { value: 0, label: '全部' }
-];
 
 const pageLoading = ref(false);
 const pageFailed = ref(false);
-const withdrawSubmitting = ref(false);
 const recordsLoading = ref(false);
-const recordsFailed = ref(false);
+const submitting = ref(false);
 const assetDetail = ref({});
 const withdrawRows = ref([]);
 const withdrawAmount = ref('');
-const expandedRecordIds = ref([]);
 const activeRecordTab = ref('all');
-const activeRecordRange = ref(recordRangeOptions[0].value);
-const assetDetailRange = ref(recordRangeOptions[0].value);
-const withdrawTips = [
-  {
-    index: '01',
-    title: '提现比例',
-    desc: '每笔余额提现审核通过后，80% 按提现到账处理，20% 自动转入消费金账户。'
-  },
-  {
-    index: '02',
-    title: '审核状态',
-    desc: '待审核表示已提交申请；审核通过表示审核已完成待打款；已打款表示提现已完成。'
-  },
-  {
-    index: '03',
-    title: '驳回处理',
-    desc: '如果提现被驳回，申请金额会退回余额账户，驳回原因会展示在提现记录里。'
-  },
-  {
-    index: '04',
-    title: '查看记录',
-    desc: '余额明细里可以查看资产变动，提现记录里可以查看申请进度和消费金转入金额。'
-  }
+
+const recordTabs = [
+  { value: 'all', label: '全部' },
+  { value: 'pending', label: '待审核' },
+  { value: 'approved', label: '审核通过' },
+  { value: 'paid', label: '已打款' },
+  { value: 'rejected', label: '已驳回' }
 ];
 
-const balanceWithdrawRows = computed(() => (
+const rules = [
+  { title: '提现比例', desc: '审核通过后，80% 提现到账，20% 自动转入消费金' },
+  { title: '审核状态', desc: '待审核 → 审核通过 → 已打款；驳回则金额退回' },
+  { title: '到账方式', desc: '审核通过后由财务或系统完成打款处理' }
+];
+
+const balanceWithdrawRows = computed(() =>
   withdrawRows.value.filter((item) => item.withdraw_type === 'BALANCE')
-));
-const recordTabs = computed(() => {
-  const rows = balanceWithdrawRows.value;
-  const countByStatus = rows.reduce((map, item) => {
-    const key = normalizeStatus(item.status);
-    map[key] = (map[key] || 0) + 1;
-    return map;
-  }, {});
+);
 
-  return [
-    { value: 'all', label: '全部', count: rows.length },
-    { value: 'pending', label: '待审核', count: countByStatus.pending || 0 },
-    { value: 'approved', label: '审核通过', count: countByStatus.approved || 0 },
-    { value: 'paid', label: '已打款', count: countByStatus.paid || 0 },
-    { value: 'rejected', label: '已驳回', count: countByStatus.rejected || 0 }
-  ];
-});
-const filteredWithdrawRows = computed(() => {
+const filteredRecords = computed(() => {
   if (activeRecordTab.value === 'all') return balanceWithdrawRows.value;
-
   return balanceWithdrawRows.value.filter((item) => normalizeStatus(item.status) === activeRecordTab.value);
 });
 
@@ -240,39 +183,11 @@ function money(value) {
   return Number(value || 0).toFixed(2);
 }
 
-function normalizeRange(value) {
-  const num = Number(value);
-  return recordRangeOptions.some((item) => item.value === num) ? num : recordRangeOptions[0].value;
-}
-
-function normalizeRecordTab(value) {
-  const text = String(value || '').trim().toLowerCase();
-  return ['all', 'pending', 'approved', 'paid', 'rejected'].includes(text) ? text : 'all';
-}
-
-function readPageCache() {
-  const cached = uni.getStorageSync(WITHDRAW_PAGE_CACHE_KEY);
-  return cached && typeof cached === 'object' ? cached : {};
-}
-
-function writePageCache() {
-  uni.setStorageSync(WITHDRAW_PAGE_CACHE_KEY, {
-    range: activeRecordRange.value,
-    status: activeRecordTab.value,
-    asset_range: assetDetailRange.value
-  });
-}
-
-function formatDetailTime(value) {
-  if (!value) return '--';
-  return String(value).replace('T', ' ').slice(0, 16);
-}
-
 function normalizeStatus(status) {
   return String(status || '').trim().toLowerCase();
 }
 
-function withdrawStatusLabel(status) {
+function getStatusLabel(status) {
   return {
     pending: '待审核',
     approved: '审核通过',
@@ -281,99 +196,37 @@ function withdrawStatusLabel(status) {
   }[normalizeStatus(status)] || status;
 }
 
-function withdrawStatusClass(status) {
+function getStatusClass(status) {
   return {
-    pending: 'badge-orange',
-    approved: 'badge-blue',
-    rejected: 'badge-blue',
-    paid: 'badge-green'
-  }[normalizeStatus(status)] || 'badge-blue';
+    pending: 'status-pending',
+    approved: 'status-approved',
+    rejected: 'status-rejected',
+    paid: 'status-paid'
+  }[normalizeStatus(status)] || 'status-pending';
 }
 
-function withdrawStatusHint(item) {
-  const status = normalizeStatus(item.status);
-  if (status === 'pending') return '当前申请等待审核，审核完成后会进入“审核通过”或“已驳回”状态。';
-  if (status === 'approved') return '审核已经通过，当前等待财务或系统完成实际打款处理。';
-  if (status === 'paid') return '该笔提现已经完成打款，到账金额和转消费金金额已确认。';
-  if (status === 'rejected') return item.remark || '该笔提现已驳回，申请金额通常会退回余额账户。';
-  return '可结合申请时间、审核时间和单号继续排查这笔提现记录。';
+function formatTime(value) {
+  if (!value) return '--';
+  return String(value).replace('T', ' ').slice(0, 16);
 }
 
-function buildWithdrawDetailItems(item) {
-  return [
-    { key: 'created', label: '申请时间', value: formatDetailTime(item.created_at || item.time) },
-    { key: 'reviewed', label: '审核时间', value: formatDetailTime(item.reviewed_at) },
-    { key: 'net', label: '到账金额', value: `¥${money(item.net_amount)}` },
-    { key: 'voucher', label: '转消费金', value: `¥${money(item.voucher_amount)}` }
-  ];
+function goBack() {
+  uni.navigateBack();
 }
 
-function fillAllWithdraw() {
+function fillAll() {
   withdrawAmount.value = money(assetDetail.value.available_amount);
 }
 
-function syncPageOptions() {
-  const pages = getCurrentPages();
-  const currentPage = pages[pages.length - 1];
-  if (!currentPage?.options) return;
-  currentPage.options.range = String(activeRecordRange.value);
-  currentPage.options.status = activeRecordTab.value;
-  currentPage.options.asset_range = String(assetDetailRange.value);
-  writePageCache();
-}
-
 function changeRecordTab(tab) {
-  if (activeRecordTab.value === tab) return;
   activeRecordTab.value = tab;
-  syncPageOptions();
-}
-
-function changeRecordRange(value) {
-  if (activeRecordRange.value === value) return;
-  activeRecordRange.value = value;
-  syncPageOptions();
-  reloadPage();
-}
-
-function goBalanceDetail() {
-  const pages = getCurrentPages();
-  const previousPage = pages[pages.length - 2];
-  if (previousPage?.route === 'subpackages/assets/index') {
-    uni.navigateBack();
-    return;
-  }
-  uni.navigateTo({ url: `/subpackages/assets/index?tab=balance&range=${assetDetailRange.value}` });
-}
-
-function copyText(value, label = '内容') {
-  if (!value) return;
-  uni.setClipboardData({
-    data: String(value),
-    success: () => uni.showToast({ title: `已复制${label}`, icon: 'none' })
-  });
-}
-
-function toggleRecordExpand(id) {
-  const key = Number(id);
-  if (!key) return;
-  if (expandedRecordIds.value.includes(key)) {
-    expandedRecordIds.value = expandedRecordIds.value.filter((item) => item !== key);
-    return;
-  }
-  expandedRecordIds.value = [...expandedRecordIds.value, key];
-}
-
-function isRecordExpanded(id) {
-  return expandedRecordIds.value.includes(Number(id));
 }
 
 async function loadPageData() {
   recordsLoading.value = true;
-  recordsFailed.value = false;
-
   const [detailRes, withdrawsRes] = await Promise.allSettled([
     assetApi.detail('balance'),
-    commissionApi.withdraws(Number(activeRecordRange.value) > 0 ? { recent_days: Number(activeRecordRange.value) } : {})
+    commissionApi.withdraws({})
   ]);
 
   if (detailRes.status === 'fulfilled') {
@@ -381,16 +234,12 @@ async function loadPageData() {
   }
   if (withdrawsRes.status === 'fulfilled') {
     withdrawRows.value = pickListPayload(withdrawsRes.value);
-    expandedRecordIds.value = expandedRecordIds.value.filter((id) => withdrawRows.value.some((item) => Number(item.id) === Number(id)));
-  } else {
-    recordsFailed.value = true;
   }
-
-  recordsLoading.value = false;
 
   if (detailRes.status === 'rejected' && withdrawsRes.status === 'rejected') {
     throw new Error('balance_withdraw_load_failed');
   }
+  recordsLoading.value = false;
 }
 
 async function reloadPage() {
@@ -405,7 +254,9 @@ async function reloadPage() {
   }
 }
 
-async function submitBalanceWithdraw() {
+async function submitWithdraw() {
+  if (submitting.value) return;
+
   const amount = Number(withdrawAmount.value || 0);
   const available = Number(assetDetail.value.available_amount || 0);
 
@@ -428,7 +279,7 @@ async function submitBalanceWithdraw() {
   });
   if (!confirmed) return;
 
-  withdrawSubmitting.value = true;
+  submitting.value = true;
   try {
     await commissionApi.createWithdraw({
       withdraw_type: 'BALANCE',
@@ -436,22 +287,16 @@ async function submitBalanceWithdraw() {
     });
     uni.showToast({ title: '提现申请已提交', icon: 'none' });
     withdrawAmount.value = '';
-    await reloadPage();
+    await loadPageData();
+  } catch (error) {
+    uni.showToast({ title: '提交失败，请重试', icon: 'none' });
   } finally {
-    withdrawSubmitting.value = false;
+    submitting.value = false;
   }
 }
 
 onShow(() => {
   reloadPage();
-});
-
-onLoad((options = {}) => {
-  const cached = readPageCache();
-  activeRecordRange.value = normalizeRange(options.range || options.recent_days || cached.range);
-  activeRecordTab.value = normalizeRecordTab(options.status || cached.status);
-  assetDetailRange.value = normalizeRange(options.asset_range || options.range || cached.asset_range);
-  syncPageOptions();
 });
 
 onPullDownRefresh(async () => {
@@ -461,206 +306,456 @@ onPullDownRefresh(async () => {
 </script>
 
 <style scoped>
-@import '@/styles/common.css';
+@import '@/styles/elegant.css';
 
-.balance-withdraw-page {
-  padding-bottom: 36rpx;
+.withdraw-page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 48rpx;
 }
 
-.summary-card {
-  background:
-    radial-gradient(circle at 100% 0%, rgba(255, 193, 120, 0.22), transparent 32%),
-    radial-gradient(circle at 8% 8%, rgba(255, 255, 255, 0.24), transparent 24%),
-    linear-gradient(180deg, #fffaf2 0%, #fff1df 100%);
-  border: 1rpx solid rgba(198, 161, 124, 0.16);
-  position: relative;
-  overflow: hidden;
-}
-.summary-card::after {
-  content: '';
-  position: absolute;
-  right: -26rpx;
-  top: -26rpx;
-  width: 140rpx;
-  height: 140rpx;
-  border-radius: 50%;
-  background: rgba(255, 122, 0, 0.08);
-}
-.summary-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #c96a14;
-  font-size: 20rpx;
-  font-weight: 800;
-}
-.summary-head {
-  align-items: flex-start;
-  gap: 20rpx;
-}
-.summary-link {
-  flex-shrink: 0;
-  padding: 12rpx 20rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.72);
-  color: #c96a14;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-.section-row {
-  margin-bottom: 16rpx;
-}
-.tips-list {
-  display: grid;
-  gap: 16rpx;
-}
-.tip-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 16rpx;
-  padding: 18rpx;
-  border-radius: 20rpx;
-  background: #fffaf4;
-  border: 1rpx solid rgba(198, 161, 124, 0.14);
-}
-.tip-index {
-  flex-shrink: 0;
-  min-width: 56rpx;
-  height: 56rpx;
-  line-height: 56rpx;
-  border-radius: 18rpx;
-  text-align: center;
-  background: rgba(255, 138, 43, 0.12);
-  color: #c96a14;
-  font-size: 22rpx;
-  font-weight: 800;
-}
-.tip-content {
-  min-width: 0;
-}
-.tip-title {
-  font-size: 26rpx;
-  font-weight: 700;
-  color: #4f321a;
-}
-.tip-desc {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  line-height: 1.6;
-  color: #8d745d;
-}
-.slim-title {
-  margin-bottom: 0;
-}
-.stat-grid,
-.withdraw-preview,
-.withdraw-record-list {
-  display: grid;
-  gap: 12rpx;
-}
-.stat-grid,
-.withdraw-preview {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.stat-item,
-.preview-item {
-  padding: 16rpx;
-  border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.72);
-}
-.stat-label,
-.preview-label {
-  display: block;
-  font-size: 20rpx;
-  color: #8b7158;
-}
-.stat-value,
-.preview-value {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 32rpx;
-  font-weight: 800;
-  color: #4f321a;
-}
-.preview-value-warm {
-  color: #c96a14;
-}
-.withdraw-input-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
-.withdraw-input {
-  flex: 1;
-  min-width: 0;
-  height: 76rpx;
-  padding: 0 22rpx;
-  border-radius: 18rpx;
-  background: #fffdf9;
-  border: 1rpx solid rgba(198, 161, 124, 0.18);
-  box-sizing: border-box;
-  font-size: 26rpx;
-  color: #4f321a;
-}
-.withdraw-shortcut {
-  flex-shrink: 0;
-  padding: 0 22rpx;
-  height: 76rpx;
-  line-height: 76rpx;
-  border-radius: 18rpx;
-  background: #f7efe5;
-  color: #c96a14;
-  font-size: 24rpx;
-  font-weight: 700;
-}
-.asset-empty {
-  padding: 16rpx 0 8rpx;
-}
-.withdraw-record-item {
-  padding: 20rpx;
-  border-radius: 24rpx;
-  background: #fffdf9;
-  border: 1rpx solid rgba(198, 161, 124, 0.16);
-}
-.withdraw-record-title {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #4f321a;
-}
-.withdraw-record-line,
-.withdraw-record-time {
-  margin-top: 8rpx;
-  font-size: 21rpx;
-  line-height: 1.5;
-  color: #8d745d;
-}
-.withdraw-record-copy {
+/* Header */
+.page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12rpx;
-  flex-wrap: wrap;
+  padding: 24rpx 32rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: var(--card);
+  border-bottom: 1rpx solid var(--border-light);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
 }
-.copy-link {
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #c96a14;
-  font-size: 20rpx;
-  line-height: 1.4;
-}
-.withdraw-record-action {
-  margin-top: 10rpx;
+
+.back-btn, .header-spacer {
+  width: 64rpx;
+  height: 64rpx;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: var(--text);
 }
-.interactive {
-  transition: transform 180ms ease, opacity 180ms ease;
+
+.header-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text);
 }
-.interactive:active {
-  transform: scale(0.98);
-  opacity: 0.92;
+
+/* Loading */
+.loading-state {
+  padding: 24rpx;
+  margin-top: 120rpx;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-xl);
+}
+
+.skeleton-card {
+  height: 400rpx;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 200rpx;
+  gap: 16rpx;
+}
+
+.error-icon {
+  font-size: 80rpx;
+  color: var(--error);
+}
+
+.error-text {
+  font-size: 28rpx;
+  color: var(--text-muted);
+}
+
+.retry-btn {
+  padding: 16rpx 40rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+  margin-top: 16rpx;
+}
+
+/* Balance Card */
+.balance-card {
+  margin: 120rpx 24rpx 24rpx;
+  padding: 40rpx 32rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-radius: var(--radius-xl);
+  box-shadow: 0 12rpx 32rpx rgba(16, 185, 129, 0.25);
+}
+
+.balance-label {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.balance-amount {
+  font-size: 64rpx;
+  font-weight: 800;
+  color: white;
+  display: block;
+  margin-bottom: 24rpx;
+}
+
+.balance-strip {
+  display: flex;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-lg);
+  padding: 20rpx;
+}
+
+.strip-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.strip-label {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.strip-value {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: white;
+}
+
+/* Form Card */
+.form-card {
+  margin: 0 24rpx 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.form-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text);
+  display: block;
+  margin-bottom: 24rpx;
+}
+
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 0 24rpx;
+  height: 100rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  margin-bottom: 20rpx;
+}
+
+.input-prefix {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.amount-input {
+  flex: 1;
+  font-size: 40rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.placeholder {
+  color: var(--border);
+}
+
+.input-action {
+  padding: 12rpx 24rpx;
+  background: var(--primary);
+  color: white;
+  font-size: 24rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.preview-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.preview-item {
+  flex: 1;
+  padding: 16rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.preview-label {
+  font-size: 20rpx;
+  color: var(--text-muted);
+}
+
+.preview-value {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.preview-value.warm {
+  color: var(--secondary);
+}
+
+.submit-btn {
+  padding: 28rpx;
+  text-align: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 30rpx;
+  font-weight: 700;
+  border-radius: var(--radius-lg);
+}
+
+.submit-btn.disabled {
+  opacity: 0.6;
+}
+
+/* Rules Card */
+.rules-card {
+  margin: 0 24rpx 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 24rpx;
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.rule-item {
+  display: flex;
+  gap: 16rpx;
+  padding: 20rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+}
+
+.rule-index {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 22rpx;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.rule-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.rule-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rule-desc {
+  font-size: 22rpx;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Records Card */
+.records-card {
+  margin: 0 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.records-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.records-count {
+  font-size: 24rpx;
+  color: var(--text-muted);
+}
+
+/* Tabs */
+.tabs-wrap {
+  display: flex;
+  gap: 8rpx;
+  margin-bottom: 24rpx;
+  overflow-x: auto;
+}
+
+.tab-item {
+  padding: 10rpx 18rpx;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+  white-space: nowrap;
+}
+
+.tab-item.active {
+  background: var(--primary);
+  color: white;
+}
+
+/* States */
+.state-loading, .state-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60rpx 0;
+  gap: 12rpx;
+}
+
+.loading-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 3rpx solid var(--border-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.state-loading {
+  font-size: 24rpx;
+  color: var(--text-muted);
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  color: var(--border);
+  margin-bottom: 16rpx;
+}
+
+.empty-title {
+  font-size: 28rpx;
+  color: var(--text-muted);
+}
+
+/* Records List */
+.records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.record-item {
+  padding: 20rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+}
+
+.record-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.record-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.record-status {
+  padding: 6rpx 16rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.status-pending {
+  background: var(--secondary-bg);
+  color: var(--secondary);
+}
+
+.status-approved, .status-rejected {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.status-paid {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.record-detail {
+  font-size: 22rpx;
+  color: var(--text-muted);
+  margin-bottom: 8rpx;
+}
+
+.record-time {
+  font-size: 20rpx;
+  color: var(--text-muted);
+}
+
+.record-remark {
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  color: var(--error);
+  padding: 12rpx;
+  background: var(--bg);
+  border-radius: var(--radius-md);
 }
 </style>

@@ -1,28 +1,30 @@
-﻿<template>
-  <div>
-    <div class="page-heading">
-      <div>
-        <h2>资产中心</h2>
-        <p>围绕余额、积分、兑换券、AI 券和充电宝统一查看账户与资产流水。</p>
-      </div>
-      <el-button type="primary" @click="loadData">刷新资产</el-button>
-    </div>
+<template>
+  <div class="asset-view">
+    <!-- 统一页面头部 -->
+    <PageHeader title="资产中心" :description="scopeHint">
+      <template #actions>
+        <el-button type="primary" @click="loadData">刷新资产</el-button>
+      </template>
+    </PageHeader>
 
+    <!-- 指标卡片行 -->
     <div class="metric-grid">
-      <div v-for="item in metrics" :key="item.label" class="metric-card">
-        <div class="label">{{ item.label }}</div>
-        <div class="value">{{ item.value }}</div>
-        <div class="subtext">{{ item.subtext }}</div>
-      </div>
+      <MetricCard
+        v-for="item in metrics"
+        :key="item.label"
+        :value="item.value"
+        :label="item.label"
+        :subtext="item.subtext"
+        :variant="item.variant"
+      />
     </div>
 
-    <div class="split-grid" style="margin-top: 18px;">
+    <!-- 资产说明与账户卡片 -->
+    <div class="split-grid">
       <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>资产说明</h3>
-            <p>资产体系与四大专区消费和补贴逻辑一一映射。</p>
-          </div>
+        <div class="section-title-lite">
+          <h3>资产说明</h3>
+          <p>资产体系与四大专区消费和补贴逻辑一一映射。</p>
         </div>
         <div class="notice-list">
           <div class="notice-item">
@@ -45,11 +47,9 @@
       </div>
 
       <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>当前账户</h3>
-            <p>以下数据读取当前登录管理员自身资产账户。</p>
-          </div>
+        <div class="section-title-lite">
+          <h3>当前账户</h3>
+          <p>以下数据读取当前登录管理员自身资产账户。</p>
         </div>
         <div class="tiny-stat-grid">
           <div class="tiny-stat" v-for="item in assetCards" :key="item.code">
@@ -61,7 +61,9 @@
       </div>
     </div>
 
-    <div class="panel-card data-card" style="margin-top: 18px;">
+    <!-- 资产流水卡片 -->
+    <div class="panel-card data-card">
+      <!-- 筛选栏 -->
       <div class="toolbar-row">
         <el-select v-model="assetType" placeholder="资产类型" style="width: 180px;">
           <el-option v-for="item in assetOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -69,6 +71,7 @@
         <el-input v-model="keyword" placeholder="搜索业务类型 / 备注" clearable style="max-width: 280px;" />
       </div>
 
+      <!-- 数据表格 -->
       <el-table :data="pagedLedgers" border>
         <el-table-column prop="id" label="流水 ID" width="100" />
         <el-table-column prop="business_type" label="业务类型" min-width="150" />
@@ -98,6 +101,10 @@ import { computed, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 
 import { assetApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
+import { PageHeader, MetricCard } from '@/components/common'
+
+const userStore = useUserStore()
 
 const assetOptions = [
   { label: '余额', value: 'BALANCE' },
@@ -115,12 +122,18 @@ const assetType = ref('BALANCE')
 const page = ref(1)
 const pageSize = ref(10)
 
+const scopeHint = computed(() =>
+  userStore.role === 'TEAM_ADMIN'
+    ? '围绕余额、积分、兑换券、AI 券和充电宝统一查看账户与资产流水。'
+    : '围绕余额、积分、兑换券、AI 券和充电宝统一查看账户与资产流水。'
+)
+
 const metrics = computed(() => [
-  { label: '余额账户', value: Number(summary.value.BALANCE || 0).toFixed(2), subtext: '可提现或用于爆款区' },
-  { label: '积分账户', value: Number(summary.value.POINTS || 0).toFixed(2), subtext: '补贴、转赠与商城消费' },
-  { label: '兑换券账户', value: Number(summary.value.VOUCHER || 0).toFixed(2), subtext: '套餐奖励与签到发放' },
-  { label: 'AI 券账户', value: Number(summary.value.AI_COUPON || 0).toFixed(2), subtext: '自营商城返券与套餐抵扣' },
-  { label: '充电宝资产', value: Number(summary.value.POWER_BANK || summary.value.power_bank_count || 0).toFixed(0), subtext: '当前生效的充电宝台数' }
+  { label: '余额账户', value: Number(summary.value.BALANCE || 0).toFixed(2), subtext: '可提现或用于爆款区', variant: 'primary' },
+  { label: '积分账户', value: Number(summary.value.POINTS || 0).toFixed(2), subtext: '补贴、转赠与商城消费', variant: 'success' },
+  { label: '兑换券账户', value: Number(summary.value.VOUCHER || 0).toFixed(2), subtext: '套餐奖励与签到发放', variant: 'warning' },
+  { label: 'AI 券账户', value: Number(summary.value.AI_COUPON || 0).toFixed(2), subtext: '自营商城返券与套餐抵扣', variant: 'neutral' },
+  { label: '充电宝资产', value: Number(summary.value.POWER_BANK || summary.value.power_bank_count || 0).toFixed(0), subtext: '当前生效的充电宝台数', variant: 'info' }
 ])
 
 const assetCards = computed(() => {
@@ -175,3 +188,90 @@ watch(assetType, async () => {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+@import '@/styles/variables.css';
+
+.asset-view {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.section-title-lite {
+  margin-bottom: var(--space-4);
+}
+
+.section-title-lite h3 {
+  margin: 0;
+  font-size: var(--text-xl);
+  color: var(--text-primary);
+}
+
+.section-title-lite p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+}
+
+.notice-item {
+  padding: var(--space-3) var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.notice-item strong {
+  color: var(--text-primary);
+}
+
+.notice-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tiny-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.tiny-stat {
+  padding: var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.tiny-stat .title {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.tiny-stat .number {
+  margin-top: var(--space-2);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--primary-deep);
+}
+
+.tiny-stat .meta {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .tiny-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

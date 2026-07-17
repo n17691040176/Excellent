@@ -1,35 +1,31 @@
 <template>
   <div class="products-view">
-    <div class="page-heading">
-      <div>
-        <h2>商品管理</h2>
-        <p>对齐移动端商品卡片、详情文案和专区规则，支持 Excel / CSV 一键导入。</p>
-      </div>
-      <div class="toolbar-row">
+    <!-- 页面头部 -->
+    <PageHeader title="商品管理" description="对齐移动端商品卡片、详情文案和专区规则，支持 Excel / CSV 一键导入。">
+      <template #actions>
         <el-button plain @click="loadData">刷新数据</el-button>
         <el-button plain @click="downloadTemplate">下载导入模板</el-button>
         <el-button :loading="importing" @click="triggerImport">Excel 导入</el-button>
-        <el-button v-permission="'products:create'" type="primary" @click="openCreate">新增商品</el-button>
-      </div>
-    </div>
+        <el-button v-permission="'products:create'" type="primary" :disabled="loading" @click="openCreate">新增商品</el-button>
+      </template>
+    </PageHeader>
 
-    <input
-      ref="importInputRef"
-      type="file"
-      accept=".xlsx,.csv"
-      style="display: none;"
-      @change="handleImportChange"
-    />
+    <input ref="importInputRef" type="file" accept=".xlsx,.csv" style="display: none;" @change="handleImportChange" />
 
+    <!-- 指标卡片 -->
     <div class="metric-grid">
-      <div v-for="item in metrics" :key="item.label" class="metric-card">
-        <div class="label">{{ item.label }}</div>
-        <div class="value">{{ item.value }}</div>
-        <div class="subtext">{{ item.subtext }}</div>
-      </div>
+      <MetricCard
+        v-for="item in metrics"
+        :key="item.label"
+        :value="item.value"
+        :label="item.label"
+        :subtext="item.subtext"
+        :variant="item.variant"
+      />
     </div>
 
-    <div class="split-grid" style="margin-top: 18px;">
+    <!-- 专区切换 -->
+    <div class="split-grid">
       <button
         v-for="item in zoneTabs"
         :key="item.code"
@@ -44,23 +40,12 @@
       </button>
     </div>
 
-    <div class="panel-card data-card" style="margin-top: 18px;">
-      <div class="toolbar-row filters-wrap">
-        <el-input
-          v-model="filters.keyword"
-          placeholder="搜索商品名称 / 品牌"
-          clearable
-          style="max-width: 280px;"
-        />
-        <el-select v-model="filters.status" placeholder="状态" clearable style="width: 170px;">
-          <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.owner_type" placeholder="归属类型" clearable style="width: 170px;">
-          <el-option v-for="item in ownerTypeFilterOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-button plain @click="resetFilters">重置筛选</el-button>
-      </div>
+    <!-- 数据卡片 -->
+    <div class="panel-card data-card">
+      <!-- 筛选栏 -->
+      <FilterBar :fields="filterFields" v-model="filters" @search="handleSearch" @reset="handleReset" />
 
+      <!-- 批量操作栏 -->
       <div v-if="selectedRows.length" class="batch-toolbar">
         <div class="batch-toolbar__info">
           已选 {{ selectedRows.length }} 个商品。第一条会拿到最高排序值，用于快速对齐移动端列表顺序。
@@ -68,8 +53,8 @@
         <div class="batch-toolbar__actions">
           <el-input-number v-model="batchForm.order_by_start" :min="0" :step="10" controls-position="right" />
           <el-input-number v-model="batchForm.order_by_step" :min="1" :step="1" controls-position="right" />
-          <el-button plain @click="applyBatchHot(true)">设为热门</el-button>
-          <el-button plain @click="applyBatchHot(false)">取消热门</el-button>
+          <el-button plain @click="applyBatchHot(true)">设为爆款推荐</el-button>
+          <el-button plain @click="applyBatchHot(false)">取消爆款推荐</el-button>
           <el-button type="primary" @click="applyBatchSort">批量排序</el-button>
           <el-button plain @click="applyBatchStatus('SUBMIT_REVIEW')">批量提审</el-button>
           <el-button plain @click="applyBatchStatus('ON_SHELF')">批量上架</el-button>
@@ -78,15 +63,10 @@
         </div>
       </div>
 
-      <el-table
-        ref="tableRef"
-        v-loading="loading"
-        :data="products"
-        border
-        @selection-change="handleSelectionChange"
-      >
+      <!-- 数据表格 -->
+      <el-table ref="tableRef" v-loading="loading" :data="pagedRows" border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" fixed="left" />
-        <el-table-column prop="id" label="ID" width="88" />
+        <el-table-column prop="id" label="ID" width="90" />
         <el-table-column label="商品信息" min-width="260">
           <template #default="{ row }">
             <div class="product-cell">
@@ -100,7 +80,7 @@
                 <div class="cell-meta">{{ zoneLabelMap[row.zone_type] || row.zone_type }} / {{ productTypeLabel(row.product_type) }}</div>
                 <div class="cell-meta">{{ ownerTypeLabel(row.owner_type) }} / {{ row.owner_name || `ID: ${row.owner_id || '--'}` }}</div>
                 <div class="tag-row">
-                  <span class="mini-tag">{{ row.category_name || row.brand || '未分类' }}</span>
+                  <span class="mini-tag">{{ row.category_name || getCategoryName(row.category_id) || '未分类' }}</span>
                   <span v-if="row.tag" class="mini-tag warm">{{ row.tag }}</span>
                   <span class="mini-tag muted">图集 {{ row.gallery_count || 0 }}</span>
                 </div>
@@ -108,134 +88,91 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="移动端预览" min-width="320">
+        <el-table-column label="移动端预览" min-width="300" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="mobile-card">
-              <div class="mobile-card__cover">
-                <el-image
-                  v-if="row.mobile_preview?.image"
-                  :src="row.mobile_preview.image"
-                  fit="cover"
-                  class="mobile-card__image"
-                />
-                <div v-else class="mobile-card__image is-empty">待补图</div>
-              </div>
-              <div class="mobile-card__body">
+            <div class="mobile-preview-cell">
+              <el-image
+                v-if="row.mobile_preview?.image"
+                :src="row.mobile_preview.image"
+                fit="cover"
+                class="preview-thumb"
+              />
+              <div v-else class="preview-thumb is-empty">待补图</div>
+              <div class="preview-info">
                 <div class="mobile-card__tag">{{ row.mobile_preview?.tag || '精选商品' }}</div>
-                <div class="mobile-card__title">{{ row.mobile_preview?.title || row.product_name }}</div>
-                <div class="mobile-card__desc">{{ row.mobile_preview?.description || '建议补充简介，移动端卡片信息会更完整。' }}</div>
-                <div class="mobile-card__price-row">
-                  <span class="mobile-card__price">{{ formatMoney(row.sale_price) }}</span>
-                  <span v-if="row.market_price != null" class="mobile-card__market">{{ formatMoney(row.market_price) }}</span>
-                </div>
-                <div class="tag-row">
-                  <span v-for="item in previewFeatureList(row)" :key="item" class="mini-tag">{{ item }}</span>
+                <div class="preview-title">{{ row.mobile_preview?.title || row.product_name }}</div>
+                <div class="preview-price">
+                  <span class="price-current">¥{{ formatMoney(row.sale_price) }}</span>
+                  <span v-if="row.market_price" class="price-market">¥{{ formatMoney(row.market_price) }}</span>
                 </div>
               </div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="价格 / 库存" width="160">
+        <el-table-column label="价格/库存" width="130">
           <template #default="{ row }">
-            <div>售价 {{ formatMoney(row.sale_price) }}</div>
-            <div class="cell-meta">市场价 {{ formatMoney(row.market_price) }}</div>
-            <div class="cell-meta">库存 {{ row.stock || 0 }} / 销量 {{ row.sold_count || 0 }}</div>
+            <div class="amount-text">¥{{ formatMoney(row.sale_price) }}</div>
+            <div class="cell-meta">库存 {{ row.stock || 0 }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="运营设置" min-width="170">
+        <el-table-column label="运营" width="150">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.is_hot ? 'danger' : 'info'">{{ row.is_hot ? '热门' : '普通' }}</el-tag>
+            <el-switch
+              :model-value="Boolean(Number(row.is_hot))"
+              active-text="爆款"
+              inactive-text="普通"
+              inline-prompt
+              @change="(val) => toggleHot(row, val)"
+            />
             <div class="cell-meta">排序 {{ row.order_by ?? '--' }}</div>
-            <div class="cell-meta">{{ row.requires_shipping ? '需要物流' : '无需物流' }} / {{ row.drop_shipping_enabled ? '支持代发' : '普通履约' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="专区规则" min-width="240">
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <div class="cell-title small">{{ row.zone_rule_summary?.headline || '专区规则' }}</div>
-            <div class="tag-row">
-              <span
-                v-for="item in row.zone_rule_summary?.badges || []"
-                :key="item"
-                class="mini-tag"
-              >
-                {{ item }}
-              </span>
-              <span class="mini-tag muted">{{ row.zone_rule_summary?.configured ? '已配置' : '默认规则' }}</span>
+            <StatusTag :type="statusType(row.status)">{{ statusLabel(row.status) }}</StatusTag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <div class="action-group">
+              <el-button v-permission="'products:edit'" link type="primary" @click="openEdit(row)">编辑</el-button>
+              <el-button v-permission="'products:submit-review'" link :disabled="!canSubmitReview(row)" @click="submitReview(row)">提审</el-button>
+              <el-dropdown v-if="hasRowActions(row)" trigger="click" @command="(cmd) => handleRowAction(cmd, row)">
+                <el-button link>
+                  更多
+                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item v-if="canShelfUp(row)" command="shelfUp">上架</el-dropdown-item>
+                    <el-dropdown-item v-if="canShelfDown(row)" command="shelfDown">下架</el-dropdown-item>
+                    <el-dropdown-item v-if="canAuditProducts && row.status === 'PENDING_REVIEW'" command="approve" divided>审核通过</el-dropdown-item>
+                    <el-dropdown-item v-if="canAuditProducts && row.status === 'PENDING_REVIEW'" command="reject">审核驳回</el-dropdown-item>
+                    <el-dropdown-item v-if="canEditProducts" command="zoneConfig">规则配置</el-dropdown-item>
+                    <el-dropdown-item v-if="canEditProducts" command="delete" divided style="color: var(--danger-600);">
+                      删除
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
-            <div class="cell-meta">{{ row.zone_rule_summary?.description || '--' }}</div>
-            <el-tag size="small" :type="publishGuardType(row.publish_guard)">{{ publishGuardText(row.publish_guard) }}</el-tag>
-            <div class="cell-meta">{{ row.publish_guard?.reason || '--' }}</div>
-            <el-button link type="primary" style="padding-left: 0;" @click="openZoneConfig(row)">规则配置</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" min-width="320" fixed="right">
-          <template #default="{ row }">
-            <el-button v-permission="'products:edit'" link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button
-              v-permission="'products:submit-review'"
-              link
-              type="warning"
-              :disabled="!canSubmitReview(row)"
-              @click="submitReview(row)"
-            >
-              提审
-            </el-button>
-            <el-button
-              v-permission="'products:shelf'"
-              link
-              type="success"
-              :disabled="!canShelfUp(row)"
-              @click="updateShelf(row, 'ON_SHELF')"
-            >
-              上架
-            </el-button>
-            <el-button
-              v-permission="'products:shelf'"
-              link
-              type="info"
-              :disabled="!canShelfDown(row)"
-              @click="updateShelf(row, 'OFF_SHELF')"
-            >
-              下架
-            </el-button>
-            <el-button
-              v-if="userStore.role === 'SUPER_ADMIN'"
-              link
-              type="success"
-              :disabled="row.status !== 'PENDING_REVIEW'"
-              @click="auditProduct(row, 'APPROVED')"
-            >
-              通过
-            </el-button>
-            <el-button
-              v-if="userStore.role === 'SUPER_ADMIN'"
-              link
-              type="danger"
-              :disabled="row.status !== 'PENDING_REVIEW'"
-              @click="auditProduct(row, 'REJECTED')"
-            >
-              驳回
-            </el-button>
-            <el-button
-              v-permission="'products:edit'"
-              link
-              type="danger"
-              :disabled="row.status === 'ON_SHELF'"
-              @click="removeProduct(row)"
-            >
-              删除
-            </el-button>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        class="table-pagination"
+        layout="total, sizes, prev, pager, next"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="filteredRows.length"
+      />
     </div>
 
-    <el-drawer v-model="dialogVisible" :title="dialogTitle" size="1100px">
+    <!-- 商品编辑抽屉 -->
+    <el-drawer v-model="dialogVisible" :title="dialogTitle" size="1100px" direction="rtl">
       <div class="drawer-layout">
         <div class="panel-card data-card">
           <el-form label-position="top" :model="form">
@@ -247,7 +184,7 @@
               style="margin-bottom: 16px;"
             />
             <div class="form-split">
-              <el-form-item label="专区">
+              <el-form-item v-if="editingId" label="专区">
                 <el-select v-model="form.zone_type">
                   <el-option v-for="item in zoneOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
@@ -277,8 +214,10 @@
 
             <div class="form-split">
               <el-form-item label="商品名称"><el-input v-model="form.product_name" /></el-form-item>
-              <el-form-item label="品牌 / 分类文案">
-                <el-input v-model="form.brand" placeholder="会用于移动端分类或标签文案" />
+              <el-form-item label="商品分类" required>
+                <el-select v-model="form.category_id" placeholder="请选择已启用分类">
+                  <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
               </el-form-item>
             </div>
 
@@ -304,15 +243,79 @@
               <el-form-item label="排序">
                 <el-input-number v-model="form.order_by" :min="0" :step="1" controls-position="right" />
               </el-form-item>
-              <el-form-item label="热门商品">
+              <el-form-item label="爆款推荐标记">
                 <el-switch v-model="form.is_hot" />
               </el-form-item>
             </div>
 
-            <el-form-item label="主图地址"><el-input v-model="form.main_image" /></el-form-item>
-            <el-form-item label="封面图地址"><el-input v-model="form.cover" /></el-form-item>
-            <el-form-item label="轮播图">
-              <el-input v-model="form.icons" placeholder="多个 URL 用英文逗号分隔" />
+            <el-form-item label="商品主图">
+              <div class="product-image-field">
+                <el-image v-if="form.main_image" :src="form.main_image" fit="cover" class="product-image-preview" />
+                <div v-else class="product-image-preview is-empty">暂无主图</div>
+                <div class="product-image-controls">
+                  <div class="upload-action-row">
+                    <el-upload
+                      :show-file-list="false"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      :http-request="(options) => uploadSingleProductImage(options, 'main_image')"
+                    >
+                      <el-button type="primary" plain :loading="uploadingImageFields.main_image">上传主图</el-button>
+                    </el-upload>
+                    <el-button v-if="form.main_image" plain @click="form.main_image = ''">清空</el-button>
+                  </div>
+                  <el-input v-model="form.main_image" placeholder="上传后自动回填，也可粘贴 HTTPS 图片地址" />
+                  <div class="upload-hint">支持 JPG、PNG、WebP、GIF，单张不超过 5MB。</div>
+                </div>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="商品封面">
+              <div class="product-image-field">
+                <el-image v-if="form.cover" :src="form.cover" fit="cover" class="product-image-preview" />
+                <div v-else class="product-image-preview is-empty">默认使用主图</div>
+                <div class="product-image-controls">
+                  <div class="upload-action-row">
+                    <el-upload
+                      :show-file-list="false"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      :http-request="(options) => uploadSingleProductImage(options, 'cover')"
+                    >
+                      <el-button type="primary" plain :loading="uploadingImageFields.cover">上传封面</el-button>
+                    </el-upload>
+                    <el-button v-if="form.cover" plain @click="form.cover = ''">使用主图</el-button>
+                  </div>
+                  <el-input v-model="form.cover" placeholder="留空时保存商品会自动使用主图" />
+                </div>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="商品轮播图">
+              <div class="gallery-editor">
+                <div class="upload-action-row">
+                  <el-upload
+                    multiple
+                    :show-file-list="false"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    :http-request="uploadGalleryImage"
+                  >
+                    <el-button type="primary" plain :loading="galleryUploadCount > 0">上传轮播图</el-button>
+                  </el-upload>
+                  <span class="upload-hint">最多 8 张，可连续选择多张图片。</span>
+                </div>
+                <div v-if="galleryImages.length" class="gallery-grid">
+                  <div v-for="(image, index) in galleryImages" :key="`${image}-${index}`" class="gallery-item">
+                    <el-image :src="image" fit="cover" class="gallery-image" />
+                    <div class="gallery-order">{{ index + 1 }}</div>
+                    <div class="gallery-actions">
+                      <el-button link :disabled="index === 0" @click="moveGalleryImage(index, -1)">前移</el-button>
+                      <el-button link :disabled="index === galleryImages.length - 1" @click="moveGalleryImage(index, 1)">后移</el-button>
+                      <el-button link type="danger" @click="removeGalleryImage(index)">删除</el-button>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="gallery-empty">尚未上传轮播图</div>
+                <el-input v-model="form.icons" placeholder="也可粘贴多个 HTTPS 地址，并用英文逗号分隔" />
+              </div>
             </el-form-item>
             <el-form-item label="简介">
               <el-input v-model="form.profile" type="textarea" :rows="3" />
@@ -363,6 +366,15 @@
                   <el-image v-if="formPreview.image" :src="formPreview.image" fit="cover" class="mobile-card__image" />
                   <div v-else class="mobile-card__image is-empty">待补图</div>
                 </div>
+                <div v-if="formPreview.gallery.length" class="mobile-gallery-preview">
+                  <el-image
+                    v-for="(image, index) in formPreview.gallery"
+                    :key="`${image}-${index}`"
+                    :src="image"
+                    fit="cover"
+                    class="mobile-gallery-preview__image"
+                  />
+                </div>
                 <div class="mobile-card__body">
                   <div class="mobile-card__tag">{{ formPreview.tag }}</div>
                   <div class="mobile-card__title">{{ formPreview.title }}</div>
@@ -393,7 +405,7 @@
                 <div class="preview-block__title">运营提醒</div>
                 <ul class="preview-list">
                   <li>当前标签：{{ formPreview.tag }}</li>
-                  <li>当前排序：{{ form.order_by ?? '--' }} / {{ form.is_hot ? '热门商品' : '普通商品' }}</li>
+                  <li>当前排序：{{ form.order_by ?? '--' }} / {{ form.is_hot ? '爆款推荐' : '普通商品' }}</li>
                   <li>{{ form.drop_shipping_enabled ? '已开启一件代发' : '未开启一件代发' }}</li>
                 </ul>
               </div>
@@ -403,6 +415,7 @@
       </div>
     </el-drawer>
 
+    <!-- 专区规则配置抽屉 -->
     <el-drawer v-model="zoneConfigVisible" :title="zoneConfigTitle" size="560px">
       <div class="panel-card data-card" v-loading="zoneConfigLoading">
         <div class="config-head">
@@ -410,13 +423,7 @@
           <h3>{{ zoneConfigProduct.product_name || '--' }}</h3>
           <p class="config-desc">{{ zoneDescription }}</p>
           <div class="tag-row">
-            <span
-              v-for="item in zoneConfigSummary.badges"
-              :key="item"
-              class="mini-tag"
-            >
-              {{ item }}
-            </span>
+            <span v-for="item in zoneConfigSummary.badges" :key="item" class="mini-tag">{{ item }}</span>
             <span class="mini-tag muted">{{ zoneConfigForm.configured ? '已配置' : '默认规则' }}</span>
           </div>
         </div>
@@ -432,14 +439,7 @@
           <template v-if="zoneConfigForm.zone_type === 'REPURCHASE'">
             <div class="form-split">
               <el-form-item label="复购折扣率（%）">
-                <el-input-number
-                  v-model="zoneConfigForm.repurchase_discount_rate"
-                  :min="0"
-                  :max="100"
-                  :step="0.5"
-                  :precision="2"
-                  controls-position="right"
-                />
+                <el-input-number v-model="zoneConfigForm.repurchase_discount_rate" :min="0" :max="100" :step="0.5" :precision="2" controls-position="right" />
               </el-form-item>
               <el-form-item label="积分支付"><el-switch v-model="zoneConfigForm.points_purchase_enabled" /></el-form-item>
             </div>
@@ -453,46 +453,18 @@
             </div>
             <div class="form-split">
               <el-form-item label="兑换券最低抵扣比例（%）">
-                <el-input-number
-                  v-model="zoneConfigForm.voucher_deduct_min_rate"
-                  :min="0"
-                  :max="100"
-                  :step="1"
-                  :precision="2"
-                  controls-position="right"
-                />
+                <el-input-number v-model="zoneConfigForm.voucher_deduct_min_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
               </el-form-item>
               <el-form-item label="兑换券最高抵扣比例（%）">
-                <el-input-number
-                  v-model="zoneConfigForm.voucher_deduct_max_rate"
-                  :min="0"
-                  :max="100"
-                  :step="1"
-                  :precision="2"
-                  controls-position="right"
-                />
+                <el-input-number v-model="zoneConfigForm.voucher_deduct_max_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
               </el-form-item>
             </div>
             <div class="form-split">
               <el-form-item label="购物返 AI 券比例（%）">
-                <el-input-number
-                  v-model="zoneConfigForm.ai_coupon_reward_rate"
-                  :min="0"
-                  :max="100"
-                  :step="1"
-                  :precision="2"
-                  controls-position="right"
-                />
+                <el-input-number v-model="zoneConfigForm.ai_coupon_reward_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
               </el-form-item>
               <el-form-item label="AI 券最大抵扣比例（%）">
-                <el-input-number
-                  v-model="zoneConfigForm.ai_coupon_max_deduct_rate"
-                  :min="0"
-                  :max="100"
-                  :step="1"
-                  :precision="2"
-                  controls-position="right"
-                />
+                <el-input-number v-model="zoneConfigForm.ai_coupon_max_deduct_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
               </el-form-item>
             </div>
           </template>
@@ -553,21 +525,32 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 
-import { productApi, supplierApi } from '@/api/modules'
+import { productApi, supplierApi, categoryApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
+import { hasPermission } from '@/utils/permission'
+import { PageHeader, MetricCard, FilterBar, StatusTag } from '@/components/common'
 
 const userStore = useUserStore()
+const canAuditProducts = computed(() => hasPermission(userStore.role, 'products:audit', userStore.permissions))
+const canEditProducts = computed(() => hasPermission(userStore.role, 'products:edit', userStore.permissions))
+const canShelfProducts = computed(() => hasPermission(userStore.role, 'products:shelf', userStore.permissions))
+const router = useRouter()
 const loading = ref(false)
 const products = ref([])
 const suppliers = ref([])
+const categories = ref([])
 const selectedRows = ref([])
 const tableRef = ref(null)
 const importing = ref(false)
 const importInputRef = ref(null)
 const dialogVisible = ref(false)
 const saving = ref(false)
+const uploadingImageFields = reactive({ main_image: false, cover: false })
+const galleryUploadCount = ref(0)
 const editingId = ref(null)
 const zoneConfigVisible = ref(false)
 const zoneConfigLoading = ref(false)
@@ -577,6 +560,10 @@ const currentEditingProduct = ref(null)
 
 const filters = reactive({ keyword: '', zone_type: '', status: '', owner_type: '' })
 const batchForm = reactive({ order_by_start: 1000, order_by_step: 10 })
+
+// 分页
+const page = ref(1)
+const pageSize = ref(20)
 
 const zoneTabs = [
   { code: 'REPURCHASE', label: '复购区', desc: '套餐复购和持续消费商品。' },
@@ -605,13 +592,21 @@ const statusOptions = [
   { label: '已下架', value: 'OFF_SHELF' }
 ]
 
-function createDefaultForm(zoneType = 'REPURCHASE') {
+// 筛选字段配置
+const filterFields = [
+  { key: 'keyword', type: 'input', placeholder: '搜索商品名称 / 品牌', width: 240 },
+  { key: 'status', type: 'select', label: '状态', options: statusOptions, width: 160 },
+  { key: 'owner_type', type: 'select', label: '归属类型', options: ownerTypeFilterOptions, width: 160 }
+]
+
+function createDefaultForm() {
   return {
     product_name: '',
-    product_type: zoneType === 'LOCAL_LIFE' ? 'SERVICE' : 'PHYSICAL',
-    zone_type: zoneType,
+    product_type: 'PHYSICAL',
+    zone_type: 'SELF_OPERATED',
     owner_type: 'SELF_OPERATED',
     owner_id: null,
+    category_id: null,
     market_price: null,
     sale_price: 0,
     cost_price: null,
@@ -625,7 +620,7 @@ function createDefaultForm(zoneType = 'REPURCHASE') {
     feature: '',
     order_by: null,
     is_hot: false,
-    requires_shipping: zoneType !== 'LOCAL_LIFE',
+    requires_shipping: true,
     drop_shipping_enabled: false
   }
 }
@@ -633,7 +628,7 @@ function createDefaultForm(zoneType = 'REPURCHASE') {
 function createDefaultZoneConfig() {
   return {
     product_id: null,
-    zone_type: 'REPURCHASE',
+    zone_type: 'SELF_OPERATED',
     configured: false,
     package_required: false,
     package_id: null,
@@ -682,13 +677,46 @@ const supplierOwnerOptions = computed(() => {
   return suppliers.value.map((item) => ({ label: `${item.supplier_name} / ${item.contact_name}`, value: item.id }))
 })
 
-const metrics = computed(() => [
-  { label: '当前商品数', value: products.value.length, subtext: '当前筛选结果下的商品总量' },
-  { label: '待审核', value: products.value.filter((item) => item.status === 'PENDING_REVIEW').length, subtext: '需要后台审核的商品' },
-  { label: '已上架', value: products.value.filter((item) => item.status === 'ON_SHELF').length, subtext: '前台可见且可下单的商品' },
-  { label: '历史商品', value: products.value.filter((item) => item.is_legacy_product).length, subtext: '旧系统导入、仅旧用户可见的商品' },
-  { label: '热门商品', value: products.value.filter((item) => Number(item.is_hot)).length, subtext: '移动端优先承接的商品' }
-])
+const categoryOptions = computed(() => {
+  return categories.value
+    .filter((item) => item.status === 'active' || (editingId.value && String(item.id) === String(form.value.category_id)))
+    .map((item) => ({ label: item.name, value: item.id }))
+})
+
+const activeCategories = computed(() => categories.value.filter((item) => item.status === 'active'))
+
+const metrics = computed(() => {
+  const pending = products.value.filter((item) => item.status === 'PENDING_REVIEW').length
+  const onShelf = products.value.filter((item) => item.status === 'ON_SHELF').length
+  const legacy = products.value.filter((item) => item.is_legacy_product).length
+  const hot = products.value.filter((item) => Number(item.is_hot)).length
+  return [
+    { label: '商品总数', value: products.value.length, subtext: '当前筛选结果', variant: 'primary' },
+    { label: '待审核', value: pending, subtext: '需要后台审核', variant: pending > 0 ? 'warning' : 'neutral' },
+    { label: '已上架', value: onShelf, subtext: '前台可见可下单', variant: 'success' },
+    { label: '历史商品', value: legacy, subtext: '旧系统导入', variant: 'neutral' },
+    { label: '爆款推荐', value: hot, subtext: '移动端爆款推荐标记', variant: hot > 0 ? 'danger' : 'neutral' }
+  ]
+})
+
+const filteredRows = computed(() => {
+  const term = filters.keyword?.trim().toLowerCase() || ''
+  return products.value.filter((item) => {
+    const hitKeyword =
+      !term ||
+      (item.product_name || '').toLowerCase().includes(term) ||
+      (item.brand || '').toLowerCase().includes(term)
+    const hitZone = !filters.zone_type || item.zone_type === filters.zone_type
+    const hitStatus = !filters.status || item.status === filters.status
+    const hitOwner = !filters.owner_type || item.owner_type === filters.owner_type
+    return hitKeyword && hitZone && hitStatus && hitOwner
+  })
+})
+
+const pagedRows = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filteredRows.value.slice(start, start + pageSize.value)
+})
 
 const dialogTitle = computed(() => (editingId.value ? '编辑商品' : '新增商品'))
 const zoneConfigTitle = computed(() => {
@@ -728,6 +756,82 @@ function splitMedia(value) {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+const galleryImages = computed(() => splitMedia(form.value.icons))
+
+function validateProductImage(file) {
+  const supportedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  if (!file || !supportedTypes.includes(file.type)) {
+    ElMessage.error('仅支持 JPG、PNG、WebP、GIF 图片')
+    return false
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('单张图片不能超过 5MB')
+    return false
+  }
+  return true
+}
+
+async function uploadSingleProductImage(options, field) {
+  const file = options?.file
+  if (!validateProductImage(file)) {
+    options?.onError?.(new Error('Invalid image'))
+    return
+  }
+  uploadingImageFields[field] = true
+  try {
+    const data = await productApi.uploadImage(file)
+    if (!data?.url) throw new Error('上传成功但未返回图片地址')
+    form.value[field] = data.url
+    ElMessage.success(field === 'main_image' ? '主图上传成功' : '封面上传成功')
+    options?.onSuccess?.(data)
+  } catch (error) {
+    console.error(error)
+    options?.onError?.(error)
+  } finally {
+    uploadingImageFields[field] = false
+  }
+}
+
+async function uploadGalleryImage(options) {
+  const file = options?.file
+  if (!validateProductImage(file)) {
+    options?.onError?.(new Error('Invalid image'))
+    return
+  }
+  if (galleryImages.value.length + galleryUploadCount.value >= 8) {
+    ElMessage.warning('轮播图最多上传 8 张')
+    options?.onError?.(new Error('Gallery limit reached'))
+    return
+  }
+
+  galleryUploadCount.value += 1
+  try {
+    const data = await productApi.uploadImage(file)
+    if (!data?.url) throw new Error('上传成功但未返图片地址')
+    form.value.icons = [...galleryImages.value, data.url].slice(0, 8).join(',')
+    ElMessage.success('轮播图上传成功')
+    options?.onSuccess?.(data)
+  } catch (error) {
+    console.error(error)
+    options?.onError?.(error)
+  } finally {
+    galleryUploadCount.value = Math.max(0, galleryUploadCount.value - 1)
+  }
+}
+
+function removeGalleryImage(index) {
+  form.value.icons = galleryImages.value.filter((_, itemIndex) => itemIndex !== index).join(',')
+}
+
+function moveGalleryImage(index, offset) {
+  const targetIndex = index + offset
+  const items = [...galleryImages.value]
+  if (targetIndex < 0 || targetIndex >= items.length) return
+  const [item] = items.splice(index, 1)
+  items.splice(targetIndex, 0, item)
+  form.value.icons = items.join(',')
 }
 
 function buildFeatureList(source) {
@@ -796,8 +900,8 @@ function buildZoneSummary(config = {}) {
 const formPreview = computed(() => {
   const gallery = splitMedia(form.value.icons)
   const image = firstFilled([form.value.cover, form.value.main_image, gallery[0]])
-  const categoryName = firstFilled([form.value.brand, zoneLabelMap[form.value.zone_type], '精选商品'])
-  const tag = form.value.is_hot ? '热销' : categoryName
+  const categoryName = firstFilled([getCategoryName(form.value.category_id), form.value.brand, zoneLabelMap[form.value.zone_type], '精选商品'])
+  const tag = form.value.is_hot ? '爆款' : categoryName
   const description = truncate(stripHtml(form.value.profile) || stripHtml(form.value.detail) || '建议补充商品简介，移动端卡片会更完整。', 88)
   const features = buildFeatureList({
     feature: form.value.feature,
@@ -833,27 +937,22 @@ function ownerTypeLabel(type) {
   return { SELF_OPERATED: '平台自营', SUPPLIER: '供应商商品', LOCAL_MERCHANT: '本地商家' }[type] || type || '--'
 }
 
+function getCategoryName(categoryId) {
+  if (!categoryId) return ''
+  const cat = categories.value.find((c) => String(c.id) === String(categoryId))
+  return cat?.name || ''
+}
+
 function statusType(status) {
-  return { DRAFT: 'info', PENDING_REVIEW: 'warning', APPROVED: 'success', REJECTED: 'danger', ON_SHELF: 'success', OFF_SHELF: 'info' }[status] || 'info'
+  return { DRAFT: 'default', PENDING_REVIEW: 'warning', APPROVED: 'success', REJECTED: 'danger', ON_SHELF: 'success', OFF_SHELF: 'default' }[status] || 'default'
 }
 
 function statusLabel(status) {
   return { DRAFT: '草稿', PENDING_REVIEW: '待审核', APPROVED: '已通过', REJECTED: '已驳回', ON_SHELF: '已上架', OFF_SHELF: '已下架' }[status] || status || '--'
 }
 
-function publishGuardType(guard) {
-  if (!guard?.required) return 'info'
-  return guard.eligible ? 'success' : 'warning'
-}
-
-function publishGuardText(guard) {
-  if (!guard?.required) return '无需校验'
-  return guard.eligible ? '可发布' : '待补资格'
-}
-
-function previewFeatureList(row) {
-  const items = row.mobile_preview?.features || row.features || []
-  return items.slice(0, 3)
+function hasRowActions(row) {
+  return canShelfUp(row) || canShelfDown(row) || (canAuditProducts.value && row.status === 'PENDING_REVIEW') || (canEditProducts.value && row.status !== 'ON_SHELF')
 }
 
 function canSubmitReview(row) {
@@ -861,11 +960,11 @@ function canSubmitReview(row) {
 }
 
 function canShelfUp(row) {
-  return ['APPROVED', 'OFF_SHELF'].includes(row.status) && (row.publish_guard?.eligible ?? true)
+  return canShelfProducts.value && ['APPROVED', 'OFF_SHELF'].includes(row.status) && (row.publish_guard?.eligible ?? true)
 }
 
 function canShelfDown(row) {
-  return row.status === 'ON_SHELF'
+  return canShelfProducts.value && row.status === 'ON_SHELF'
 }
 
 function zoneCount(zoneCode) {
@@ -876,11 +975,15 @@ function toggleZone(zoneCode) {
   filters.zone_type = filters.zone_type === zoneCode ? '' : zoneCode
 }
 
-function resetFilters() {
+function handleSearch() {
+  page.value = 1
+}
+
+function handleReset() {
   filters.keyword = ''
-  filters.zone_type = ''
   filters.status = ''
   filters.owner_type = ''
+  page.value = 1
 }
 
 function handleSelectionChange(rows) {
@@ -892,13 +995,37 @@ function clearSelection() {
   selectedRows.value = []
 }
 
+function handleRowAction(cmd, row) {
+  switch (cmd) {
+    case 'shelfUp':
+      updateShelf(row, 'ON_SHELF')
+      break
+    case 'shelfDown':
+      updateShelf(row, 'OFF_SHELF')
+      break
+    case 'approve':
+      auditProduct(row, 'APPROVED')
+      break
+    case 'reject':
+      auditProduct(row, 'REJECTED')
+      break
+    case 'zoneConfig':
+      openZoneConfig(row)
+      break
+    case 'delete':
+      removeProduct(row)
+      break
+  }
+}
+
 function normalizeForm(row = {}) {
   return {
     product_name: row.product_name || '',
     product_type: row.product_type || 'PHYSICAL',
-    zone_type: row.zone_type || 'REPURCHASE',
+    zone_type: row.zone_type || 'SELF_OPERATED',
     owner_type: row.owner_type || 'SELF_OPERATED',
     owner_id: row.owner_id ?? null,
+    category_id: row.category_id ?? null,
     market_price: row.market_price == null ? null : Number(row.market_price),
     sale_price: row.sale_price == null ? 0 : Number(row.sale_price),
     cost_price: row.cost_price == null ? null : Number(row.cost_price),
@@ -947,27 +1074,42 @@ function normalizeZoneConfig(data = {}) {
 async function loadData() {
   loading.value = true
   try {
-    const [productRows, supplierRows] = await Promise.all([
+    const [productRows, supplierRows, categoryRows] = await Promise.all([
       productApi.list({
         keyword: filters.keyword || undefined,
         zone_type: filters.zone_type || undefined,
         status: filters.status || undefined,
         owner_type: filters.owner_type || undefined
       }),
-      supplierApi.list()
+      supplierApi.list(),
+      categoryApi.list()
     ])
     products.value = productRows || []
     suppliers.value = supplierRows || []
+    categories.value = categoryRows || []
     selectedRows.value = selectedRows.value.filter((item) => products.value.some((row) => row.id === item.id))
   } finally {
     loading.value = false
   }
 }
 
-function openCreate() {
+async function openCreate() {
+  if (!activeCategories.value.length) {
+    try {
+      await ElMessageBox.confirm('新增商品前必须先创建并启用商品分类。', '请先添加分类', {
+        confirmButtonText: '前往分类管理',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+      await router.push('/categories')
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') throw error
+    }
+    return
+  }
   editingId.value = null
   currentEditingProduct.value = null
-  form.value = createDefaultForm(filters.zone_type || 'REPURCHASE')
+  form.value = createDefaultForm()
   dialogVisible.value = true
 }
 
@@ -982,6 +1124,9 @@ async function saveProduct() {
   if (!form.value.product_name.trim()) {
     return ElMessage.warning('请先填写商品名称')
   }
+  if (!form.value.category_id) {
+    return ElMessage.warning('请选择商品分类')
+  }
   if (form.value.owner_type === 'SUPPLIER' && !form.value.owner_id) {
     return ElMessage.warning('请选择供应商归属')
   }
@@ -990,6 +1135,7 @@ async function saveProduct() {
   try {
     const payload = {
       ...form.value,
+      zone_type: editingId.value ? form.value.zone_type : 'SELF_OPERATED',
       owner_id: form.value.owner_type === 'SUPPLIER' ? form.value.owner_id : null,
       requires_shipping: form.value.zone_type === 'LOCAL_LIFE' ? false : form.value.requires_shipping,
       cover: form.value.cover || form.value.main_image || null
@@ -1014,7 +1160,7 @@ async function applyBatchHot(isHot) {
     return ElMessage.warning('请先选择商品')
   }
   await productApi.batchMerchandise({ product_ids: selectedIds.value, is_hot: isHot })
-  ElMessage.success(isHot ? '已批量设为热门' : '已批量取消热门')
+  ElMessage.success(isHot ? '已批量设为爆款推荐' : '已批量取消爆款推荐')
   clearSelection()
   await loadData()
 }
@@ -1054,7 +1200,7 @@ async function applyBatchStatus(operation) {
 }
 
 async function submitReview(row) {
-  await ElMessageBox.confirm(`确认提交商品“${row.product_name}”进入审核吗？`, '提交审核', { type: 'warning' })
+  await ElMessageBox.confirm(`确认提交商品"${row.product_name}"进入审核吗？`, '提交审核', { type: 'warning' })
   await productApi.submitReview(row.id)
   ElMessage.success('商品已提交审核')
   await loadData()
@@ -1062,7 +1208,7 @@ async function submitReview(row) {
 
 async function auditProduct(row, auditStatus) {
   const label = auditStatus === 'APPROVED' ? '通过' : '驳回'
-  await ElMessageBox.confirm(`确认${label}商品“${row.product_name}”吗？`, '商品审核', { type: 'warning' })
+  await ElMessageBox.confirm(`确认${label}商品"${row.product_name}"吗？`, '商品审核', { type: 'warning' })
   await productApi.audit(row.id, { audit_status: auditStatus })
   ElMessage.success(`已${label}商品审核`)
   await loadData()
@@ -1070,14 +1216,25 @@ async function auditProduct(row, auditStatus) {
 
 async function updateShelf(row, status) {
   const label = status === 'ON_SHELF' ? '上架' : '下架'
-  await ElMessageBox.confirm(`确认${label}商品“${row.product_name}”吗？`, '商品状态', { type: 'warning' })
+  await ElMessageBox.confirm(`确认${label}商品"${row.product_name}"吗？`, '商品状态', { type: 'warning' })
   await productApi.updateStatus(row.id, { status })
   ElMessage.success(`商品已${label}`)
   await loadData()
 }
 
+async function toggleHot(row, isHot) {
+  try {
+    await productApi.update(row.id, { is_hot: isHot })
+    ElMessage.success(isHot ? '已标记为爆款' : '已取消爆款标记')
+    row.is_hot = isHot ? 1 : 0
+  } catch (error) {
+    ElMessage.error('更新失败')
+    await loadData()
+  }
+}
+
 async function removeProduct(row) {
-  await ElMessageBox.confirm(`确认删除商品“${row.product_name}”吗？删除后不可恢复。`, '删除商品', { type: 'warning' })
+  await ElMessageBox.confirm(`确认删除商品"${row.product_name}"吗？删除后不可恢复。`, '删除商品', { type: 'warning' })
   await productApi.remove(row.id)
   ElMessage.success('商品已删除')
   await loadData()
@@ -1195,14 +1352,6 @@ async function downloadTemplate() {
   URL.revokeObjectURL(url)
 }
 
-watch(
-  () => ({ ...filters }),
-  () => {
-    loadData()
-  },
-  { deep: true }
-)
-
 watch(dialogVisible, (value) => {
   if (!value) {
     currentEditingProduct.value = null
@@ -1213,55 +1362,542 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.products-view { display: grid; gap: 18px; }
-.filters-wrap { align-items: center; margin-bottom: 16px; }
-.zone-card { width: 100%; padding: 20px; text-align: left; cursor: pointer; border: 1px solid var(--brand-line); background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(253, 248, 242, 0.92)); }
-.zone-card.is-active { border-color: rgba(198, 132, 79, 0.42); box-shadow: 0 18px 36px rgba(166, 110, 62, 0.16); }
-.zone-card-title { font-size: 18px; font-weight: 700; color: var(--brand-deep); }
-.zone-card-value { margin-top: 10px; font-size: 30px; font-weight: 700; color: var(--brand-accent-deep); }
-.zone-card-meta, .cell-meta, .config-desc { margin-top: 8px; color: rgba(58, 45, 36, 0.62); font-size: 12px; line-height: 1.5; }
-.cell-title { font-weight: 700; color: var(--brand-deep); }
-.product-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cell-title.small { font-size: 13px; }
-.product-cell { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: start; }
-.product-thumb { width: 72px; height: 72px; border-radius: 16px; overflow: hidden; background: rgba(241, 232, 220, 0.7); }
-.product-thumb.is-empty, .mobile-card__image.is-empty { display: grid; place-items: center; color: rgba(58, 45, 36, 0.5); font-size: 12px; }
-.product-copy { min-width: 0; }
-.tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.mini-tag { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: rgba(198, 132, 79, 0.12); color: var(--brand-deep); font-size: 12px; line-height: 1.2; }
-.mini-tag.warm { background: rgba(214, 96, 74, 0.14); color: #b44636; }
-.mini-tag.muted { background: rgba(58, 45, 36, 0.08); color: rgba(58, 45, 36, 0.7); }
-.batch-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding: 14px 16px; border-radius: 16px; background: linear-gradient(135deg, rgba(252, 248, 241, 0.96), rgba(255, 255, 255, 0.96)); border: 1px solid rgba(198, 132, 79, 0.16); }
-.batch-toolbar__info { flex: 1; color: rgba(58, 45, 36, 0.76); line-height: 1.6; }
-.batch-toolbar__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.mobile-card { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 12px; border-radius: 20px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 244, 238, 0.92)); border: 1px solid rgba(198, 132, 79, 0.12); }
-.mobile-card--editor { grid-template-columns: 1fr; padding: 14px; }
-.mobile-card__cover { height: 104px; border-radius: 16px; overflow: hidden; background: rgba(241, 232, 220, 0.7); }
-.mobile-card__cover--editor { height: 168px; }
-.mobile-card__image { width: 100%; height: 100%; }
-.mobile-card__body { min-width: 0; }
-.mobile-card__tag { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: rgba(214, 96, 74, 0.14); color: #b44636; font-size: 12px; font-weight: 600; }
-.mobile-card__title { margin-top: 8px; font-size: 15px; font-weight: 700; color: var(--brand-deep); line-height: 1.5; }
-.mobile-card__desc { margin-top: 8px; color: rgba(58, 45, 36, 0.68); line-height: 1.6; font-size: 12px; }
-.mobile-card__price-row { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
-.mobile-card__price { color: #d45640; font-size: 20px; font-weight: 800; }
-.mobile-card__market { color: rgba(58, 45, 36, 0.42); text-decoration: line-through; font-size: 12px; }
-.drawer-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr); gap: 18px; }
-.preview-panel { position: sticky; top: 0; align-self: start; }
-.preview-panel__head { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-.preview-panel__head h3 { margin: 0; color: var(--brand-deep); }
-.preview-panel__head p { margin: 8px 0 0; color: rgba(58, 45, 36, 0.62); line-height: 1.6; }
-.preview-phone { padding: 14px; border-radius: 28px; background: radial-gradient(circle at top, rgba(255, 255, 255, 0.96), rgba(246, 239, 230, 0.96)); border: 1px solid rgba(198, 132, 79, 0.12); }
-.preview-phone__screen { display: grid; gap: 14px; padding: 16px; border-radius: 24px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 246, 241, 0.98)); }
-.preview-block { padding: 14px; border-radius: 18px; background: rgba(255, 255, 255, 0.88); border: 1px solid rgba(58, 45, 36, 0.08); }
-.preview-block__title { font-weight: 700; color: var(--brand-deep); }
-.preview-list { margin: 10px 0 0; padding-left: 18px; color: rgba(58, 45, 36, 0.76); line-height: 1.7; }
-.form-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.config-head { margin-bottom: 16px; }
-.config-head h3 { margin: 12px 0 8px; color: var(--brand-deep); }
-.config-tips { margin-top: 12px; padding: 14px 16px; background: rgba(198, 132, 79, 0.1); border-radius: 14px; color: rgba(58, 45, 36, 0.78); line-height: 1.7; }
-.purchase-mode-box { margin-top: 14px; padding: 14px; border-radius: 14px; border: 1px solid rgba(198, 132, 79, 0.16); background: rgba(255, 255, 255, 0.7); }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 18px; }
-@media (max-width: 1260px) { .drawer-layout { grid-template-columns: 1fr; } .preview-panel { position: static; } }
-@media (max-width: 960px) { .form-split, .product-cell, .mobile-card { grid-template-columns: 1fr; } .batch-toolbar { flex-direction: column; align-items: stretch; } }
+@import '@/styles/variables.css';
+
+.products-view {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.data-card {
+  padding: var(--space-5);
+}
+
+.zone-card {
+  width: 100%;
+  padding: var(--space-5);
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.zone-card.is-active {
+  border-color: var(--primary-mid);
+  box-shadow: var(--shadow-lg);
+}
+
+.zone-card-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+}
+
+.zone-card-value {
+  margin-top: var(--space-2);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--primary-deep);
+}
+
+.zone-card-meta,
+.cell-meta,
+.config-desc {
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.cell-title {
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.cell-title.small {
+  font-size: var(--text-sm);
+}
+
+.product-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.product-cell {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.product-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-muted);
+}
+
+.product-thumb.is-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.product-copy {
+  min-width: 0;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.mini-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--primary-100);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: 1.2;
+}
+
+.mini-tag.warm {
+  background: var(--danger-50);
+  color: var(--danger-600);
+}
+
+.mini-tag.muted {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--primary-100);
+}
+
+.batch-toolbar__info {
+  flex: 1;
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.batch-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* 移动端预览单元格 */
+.mobile-preview-cell {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.preview-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-muted);
+  flex-shrink: 0;
+}
+
+.preview-thumb.is-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.preview-info {
+  min-width: 0;
+}
+
+.preview-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.price-current {
+  color: var(--danger-500);
+  font-weight: var(--font-bold);
+}
+
+.price-market {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-decoration: line-through;
+}
+
+/* 移动端卡片 */
+.mobile-card__tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--danger-50);
+  color: var(--danger-600);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.mobile-card {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  border: 1px solid var(--primary-100);
+}
+
+.mobile-card--editor {
+  grid-template-columns: 1fr;
+  padding: var(--space-4);
+}
+
+.mobile-card__cover {
+  height: 104px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-muted);
+}
+
+.mobile-card__cover--editor {
+  height: 168px;
+}
+
+.mobile-gallery-preview {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 64px;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+}
+
+.mobile-gallery-preview__image {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.mobile-card__image {
+  width: 100%;
+  height: 100%;
+}
+
+.mobile-card__image.is-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.mobile-card__body {
+  min-width: 0;
+}
+
+.mobile-card__title {
+  margin-top: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: var(--leading-relaxed);
+}
+
+.mobile-card__desc {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+  font-size: var(--text-sm);
+}
+
+.mobile-card__price-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.mobile-card__price {
+  color: var(--danger-500);
+  font-size: var(--text-xl);
+  font-weight: var(--font-black);
+}
+
+.mobile-card__market {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  font-size: var(--text-sm);
+}
+
+.drawer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+  gap: var(--space-4);
+}
+
+.preview-panel {
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.preview-panel__head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.preview-panel__head h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.preview-panel__head p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+}
+
+.preview-phone {
+  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  border: 1px solid var(--primary-100);
+}
+
+.preview-phone__screen {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+}
+
+.preview-block {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid var(--border-light);
+}
+
+.preview-block__title {
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.preview-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  color: var(--text-secondary);
+  line-height: var(--leading-loose);
+}
+
+.form-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.product-image-field {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.product-image-preview {
+  width: 128px;
+  height: 128px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  background: var(--bg-muted);
+}
+
+.product-image-preview.is-empty {
+  display: grid;
+  place-items: center;
+  padding: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.product-image-controls,
+.gallery-editor {
+  display: grid;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.upload-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.upload-hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+  gap: var(--space-3);
+}
+
+.gallery-item {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.gallery-image {
+  width: 100%;
+  height: 112px;
+  border-radius: var(--radius-md);
+}
+
+.gallery-order {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.72);
+  font-size: var(--text-xs);
+}
+
+.gallery-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-1);
+}
+
+.gallery-empty {
+  display: grid;
+  place-items: center;
+  min-height: 92px;
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  background: var(--bg-muted);
+}
+
+.config-head {
+  margin-bottom: var(--space-4);
+}
+
+.config-head h3 {
+  margin: var(--space-3) 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.config-tips {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.purchase-mode-box {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--primary-200);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.table-pagination {
+  margin-top: var(--space-5);
+  justify-content: flex-end;
+}
+
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.amount-text {
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+@media (max-width: 1260px) {
+  .drawer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 960px) {
+  .form-split,
+  .product-image-field,
+  .product-cell,
+  .mobile-card {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 </style>

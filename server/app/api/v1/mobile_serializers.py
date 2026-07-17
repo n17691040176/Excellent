@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.payment_config import enabled_external_payment_channels
 from app.models.address import UserAddress
 from app.models.asset import UserAssetAccount, UserAssetLedger, UserPowerBank
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
@@ -14,7 +15,7 @@ from app.models.enums import AssetDirection, OrderStatus, OrderType, PayStatus, 
 from app.models.local_life import LocalLifeMerchant, LocalLifeOrder, LocalLifeService, MerchantStore
 from app.models.order import Order, OrderAssetDeduction, OrderItem
 from app.models.package import Package
-from app.models.product import Product, ProductZoneConfig
+from app.models.product import Product, ProductCategory, ProductZoneConfig
 from app.models.supplier import Supplier
 from app.models.team import Team
 from app.models.user import User
@@ -137,7 +138,11 @@ def _truncate(value: str, limit: int = 76) -> str:
     return f"{value[: limit - 3].rstrip()}..."
 
 
-def _product_category_name(product: Product) -> str:
+def _product_category_name(db: Session, product: Product) -> str:
+    if product.category_id:
+        category = db.get(ProductCategory, product.category_id)
+        if category:
+            return category.name
     if product.brand:
         return product.brand
     if product.column_type is not None:
@@ -147,14 +152,14 @@ def _product_category_name(product: Product) -> str:
     return '精选商品'
 
 
-def _product_tag(product: Product) -> str:
+def _product_tag(product: Product, category_name: str) -> str:
     if product.is_hot:
-        return '热销'
+        return '爆款'
     if product.group_buy:
         return '拼团'
     if product.is_flash_kill:
         return '秒杀'
-    return _product_category_name(product)
+    return category_name
 
 
 def _product_features(product: Product) -> list[str]:
@@ -270,9 +275,9 @@ def _product_payment_options(product: Product, payment_flags: dict[str, bool]) -
     options: list[dict[str, Any]] = []
     if payment_flags.get('points_purchase_enabled') and payment_flags.get('points_only_enabled'):
         options.append(_payment_option('POINTS', 'POINTS_ONLY'))
-    cash_channels = ['WECHAT', 'ALIPAY']
+    cash_channels = enabled_external_payment_channels()
     if product.zone_type == ZoneType.SELF_OPERATED:
-        cash_channels = ['VOUCHER', 'WECHAT', 'ALIPAY']
+        cash_channels = ['VOUCHER', *cash_channels]
     if payment_flags.get('balance_purchase_enabled'):
         cash_channels.insert(0, 'BALANCE')
     if payment_flags.get('points_purchase_enabled') and payment_flags.get('points_cash_enabled'):
@@ -305,8 +310,8 @@ def serialize_product(db: Session, product: Product) -> dict[str, Any]:
     gallery = _split_media(product.icons)
     image = _normalize_media_url(product.main_image) or _normalize_media_url(product.cover) or (gallery[0] if gallery else None)
     summary = _plain_text(product.profile) or _plain_text(product.detail) or ''
-    category_name = _product_category_name(product)
-    tag = _product_tag(product)
+    category_name = _product_category_name(db, product)
+    tag = _product_tag(product, category_name)
     return {
         'id': product.id,
         'product_id': product.id,
@@ -319,6 +324,7 @@ def serialize_product(db: Session, product: Product) -> dict[str, Any]:
         'owner_type': enum_value(product.owner_type),
         'owner_id': product.owner_id,
         'zone_type': enum_value(product.zone_type),
+        'category_id': product.category_id,
         'market_price': money(market_price) if market_price is not None else None,
         'sale_price': sale_price,
         'price': sale_price,
@@ -482,6 +488,8 @@ def serialize_asset_ledger(ledger: UserAssetLedger) -> dict[str, Any]:
         'POINTS_WITHDRAW_APPLY': '积分提现申请',
         'POINTS_WITHDRAW_REJECT': '积分提现退回',
         'ORDER_DEDUCT': '下单抵扣',
+        'ORDER_CANCEL_REFUND': '订单取消/退款退回',
+        'ORDER_REFUND_REWARD_REVOKE': '订单退款扣回奖励',
         'SELF_OPERATED_REWARD': '自营专区奖励',
         'TEST_SEED': '测试资产初始化',
         'PAYFLOW_SMOKE_SEED': '支付流程测试充值',
@@ -591,17 +599,22 @@ def serialize_withdraw_request(record: WithdrawRequest) -> dict[str, Any]:
         'remark': record.remark,
         'reviewed_by': record.reviewed_by,
         'reviewed_at': iso_datetime(record.reviewed_at),
+        'paid_by': record.paid_by,
+        'paid_at': iso_datetime(record.paid_at),
         'created_at': iso_datetime(record.created_at),
     }
 
 
-def _order_status_text(status: str) -> str:
+def _order_status_text(status: str, pay_status: str | None = None) -> str:
+    if status == 'REFUND':
+        return '已退款' if pay_status == 'REFUNDED' else '已取消'
     return {
-        'CREATED': '待支付',
-        'PAID': '已支付',
-        'CONFIRMED': '已完成',
-        'CLOSED': '已关闭',
-        'REFUNDED': '已退款',
+        'PENDING_PAYMENT': '待支付',
+        'PENDING_SHIP': '待发货',
+        'SHIPPED': '已发货',
+        'COMPLETED': '已完成',
+        'PENDING_REVIEW': '待评价',
+        'REFUND': '已取消',
     }.get(status, status)
 
 
@@ -649,9 +662,10 @@ def _order_pay_channel_options(order: Order, deductions: list[OrderAssetDeductio
         return ['BALANCE']
     if zone_type == ZoneType.REPURCHASE.value:
         return ['BALANCE']
+    external_channels = enabled_external_payment_channels()
     if zone_type == ZoneType.SELF_OPERATED.value:
-        return ['VOUCHER', 'WECHAT', 'ALIPAY']
-    return ['BALANCE', 'WECHAT', 'ALIPAY']
+        return ['VOUCHER', *external_channels]
+    return ['BALANCE', *external_channels]
 
 
 def _order_title(db: Session, order: Order) -> str:
@@ -669,14 +683,34 @@ def _order_title(db: Session, order: Order) -> str:
     return item.product_name if item else f'Order {order.order_no}'
 
 
+def _order_requires_shipping(db: Session, order: Order) -> bool:
+    items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+    if not items:
+        return False
+    product_ids = [item.product_id for item in items]
+    return bool(db.query(Product.id).filter(Product.id.in_(product_ids), Product.requires_shipping.is_(True)).first())
+
+
 def serialize_order(db: Session, order: Order, include_detail: bool = False) -> dict[str, Any]:
     biz_type, channel_text = _order_channel(order)
     status = enum_value(order.order_status)
     pay_status = enum_value(order.pay_status)
+    is_local_life = enum_value(order.order_type) == enum_value(OrderType.LOCAL_LIFE_ORDER)
     total_amount = money(order.total_amount)
     payable_amount = money(order.payable_amount)
-    can_pay = pay_status != enum_value(PayStatus.PAID) and status not in {enum_value(OrderStatus.CLOSED), enum_value(OrderStatus.REFUNDED)}
-    can_confirm = pay_status == enum_value(PayStatus.PAID) and status == enum_value(OrderStatus.PAID)
+    requires_shipping = _order_requires_shipping(db, order)
+    can_pay = not is_local_life and pay_status != enum_value(PayStatus.PAID) and status not in {enum_value(OrderStatus.COMPLETED), enum_value(OrderStatus.REFUND)}
+    can_confirm = not is_local_life and pay_status == enum_value(PayStatus.PAID) and status == enum_value(OrderStatus.SHIPPED)
+    can_cancel = not is_local_life and pay_status == enum_value(PayStatus.UNPAID) and status == enum_value(OrderStatus.PENDING_PAYMENT)
+    can_refund = not is_local_life and pay_status == enum_value(PayStatus.PAID) and status in {
+        enum_value(OrderStatus.PENDING_SHIP),
+        enum_value(OrderStatus.SHIPPED),
+    } or (
+        not is_local_life
+        and pay_status == enum_value(PayStatus.PAID)
+        and status == enum_value(OrderStatus.COMPLETED)
+        and not requires_shipping
+    )
     pay_channel_options = _order_pay_channel_options(order)
     data: dict[str, Any] = {
         'id': order.id,
@@ -698,13 +732,16 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         'pay_status': pay_status,
         'order_status': status,
         'status': status,
-        'status_text': _order_status_text(status),
+        'status_text': _order_status_text(status, pay_status),
         'title': _order_title(db, order),
         'channel': channel_text,
         'channel_text': channel_text,
         'biz_type': biz_type,
         'can_pay': can_pay,
         'can_confirm': can_confirm,
+        'can_cancel': can_cancel,
+        'can_refund': can_refund,
+        'requires_shipping': requires_shipping,
         'pay_channel_options': pay_channel_options,
         'default_pay_channel': pay_channel_options[0] if pay_channel_options else None,
         'created_at': iso_datetime(order.created_at),
@@ -726,7 +763,14 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         data['payment_combo'] = _payment_combo(order, deductions)
         data['pay_channel_options'] = _order_pay_channel_options(order, deductions)
         data['default_pay_channel'] = data['pay_channel_options'][0] if data['pay_channel_options'] else None
-        data['payment_message'] = '支付单已生成，请按所选渠道完成支付。' if payable_amount > 0 else '订单已完成支付。'
+        if status == enum_value(OrderStatus.REFUND):
+            data['payment_message'] = '订单已退款。' if pay_status == enum_value(PayStatus.REFUNDED) else '订单已取消。'
+        else:
+            data['payment_message'] = '支付单已生成，请按所选渠道完成支付。' if payable_amount > 0 else '订单已完成支付。'
+        address = db.get(UserAddress, order.legacy_address_id) if order.legacy_address_id else None
+        data['address_id'] = order.legacy_address_id
+        data['shipping_address'] = serialize_address(address) if address else None
+        data['shipment'] = serialize_shipment(db, order, include_detail=True) if data['requires_shipping'] else None
     else:
         data['payment_combo'] = _payment_combo(order)
     return data
@@ -734,14 +778,22 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
 
 def _order_timeline(order: Order) -> list[dict[str, Any]]:
     steps = [
-        {'title': 'Order created', 'time': iso_datetime(order.created_at), 'active': True},
+        {'title': '订单已创建', 'time': iso_datetime(order.created_at), 'active': True},
     ]
     if order.paid_at:
-        steps.append({'title': 'Order paid', 'time': iso_datetime(order.paid_at), 'active': True})
+        steps.append({'title': '支付成功', 'time': iso_datetime(order.paid_at), 'active': True})
+    status = enum_value(order.order_status)
+    if status == enum_value(OrderStatus.PENDING_SHIP):
+        steps.append({'title': '等待发货', 'time': iso_datetime(order.updated_at), 'active': True})
+    if status == enum_value(OrderStatus.SHIPPED):
+        steps.append({'title': '商家已发货', 'time': iso_datetime(order.updated_at), 'active': True})
     if order.confirmed_at:
-        steps.append({'title': 'Order confirmed', 'time': iso_datetime(order.confirmed_at), 'active': True})
-    if len(steps) == 1:
-        steps.append({'title': enum_value(order.order_status), 'time': iso_datetime(order.updated_at), 'active': False})
+        steps.append({'title': '订单已完成', 'time': iso_datetime(order.confirmed_at), 'active': True})
+    if status == enum_value(OrderStatus.REFUND):
+        title = '订单已退款' if enum_value(order.pay_status) == enum_value(PayStatus.REFUNDED) else '订单已取消'
+        steps.append({'title': title, 'time': iso_datetime(order.updated_at), 'active': True})
+    elif len(steps) == 1:
+        steps.append({'title': '等待支付', 'time': iso_datetime(order.updated_at), 'active': False})
     return steps
 
 
@@ -841,9 +893,10 @@ def _shipment_items(db: Session, order: Order) -> list[OrderItem]:
 
 
 def _shipment_status(order: Order) -> tuple[str, str]:
-    if enum_value(order.order_status) == enum_value(OrderStatus.CONFIRMED):
+    order_status = enum_value(order.order_status)
+    if order_status == enum_value(OrderStatus.COMPLETED):
         return 'delivered', '已签收'
-    if enum_value(order.pay_status) == enum_value(PayStatus.PAID):
+    if order_status == enum_value(OrderStatus.SHIPPED):
         return 'shipping', '运输中'
     return 'pending', '待发货'
 
@@ -913,8 +966,8 @@ def serialize_shipment(db: Session, order: Order, include_detail: bool = False) 
     data = {
         'order_id': order.id,
         'order_no': order.order_no,
-        'tracking_no': f'EX{order.order_no[-10:]}',
-        'carrier_name': carrier_name,
+        'tracking_no': order.legacy_logistics_no,
+        'carrier_name': order.legacy_logistics_name or carrier_name,
         'carrier_phone': carrier_phone,
         'delivery_mode_text': delivery_mode_text,
         'status': status,
@@ -924,7 +977,7 @@ def serialize_shipment(db: Session, order: Order, include_detail: bool = False) 
         'quantity': quantity,
         'item_count': quantity,
         'item_names': [item.product_name for item in items if item.product_name],
-        'amount': money(order.payable_amount),
+        'amount': money(order.total_amount),
         'latest_message': latest_message,
         'updated_at': iso_datetime(order.updated_at),
         'created_at': iso_datetime(order.created_at),
@@ -960,6 +1013,9 @@ def serialize_admin_order(db: Session, order: Order, include_detail: bool = Fals
             'item_names': item_names,
             'products_summary': ' / '.join(item_names[:3]),
             'requires_shipping': requires_shipping,
+            'can_ship': requires_shipping
+            and enum_value(order.pay_status) == enum_value(PayStatus.PAID)
+            and enum_value(order.order_status) == enum_value(OrderStatus.PENDING_SHIP),
             'shipment': shipment,
             'delivery_status': shipment['status'] if shipment else 'not_required',
             'delivery_status_text': shipment['status_text'] if shipment else '无需物流',

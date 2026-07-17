@@ -1,14 +1,14 @@
 ﻿<template>
-  <div>
-    <div class="page-heading">
-      <div>
-        <h2>团队管理</h2>
-        <p>聚焦当前团队详情与成员权限分工，超级管理员可扩展成全量团队视图。</p>
-      </div>
-      <el-button type="primary" @click="loadCurrentTeam">刷新团队</el-button>
-    </div>
+  <div class="team-view">
+    <!-- 统一页面头部 -->
+    <PageHeader title="团队管理" :description="scopeHint">
+      <template #actions>
+        <el-button type="primary" @click="loadCurrentTeam">刷新团队</el-button>
+      </template>
+    </PageHeader>
 
-    <div class="panel-card data-card" style="margin-bottom: 18px;">
+    <!-- 团队信息卡片 -->
+    <div class="panel-card data-card">
       <el-descriptions title="当前团队信息" :column="2" border>
         <el-descriptions-item label="团队 ID">{{ team?.id || '--' }}</el-descriptions-item>
         <el-descriptions-item label="团队名称">{{ team?.name || '--' }}</el-descriptions-item>
@@ -18,12 +18,11 @@
       </el-descriptions>
     </div>
 
+    <!-- 成员列表卡片 -->
     <div class="panel-card data-card">
-      <div class="page-heading" style="margin-bottom: 14px;">
-        <div>
-          <h2 style="font-size:22px;">成员列表</h2>
-          <p>支持查看当前团队成员及角色。</p>
-        </div>
+      <div class="section-title-lite">
+        <h3>成员列表</h3>
+        <p>支持查看当前团队成员及角色。</p>
       </div>
       <el-table :data="members" border>
         <el-table-column prop="user_id" label="用户 ID" width="100" />
@@ -35,12 +34,21 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import { teamApi } from '@/api/modules'
+import { useUserStore } from '@/stores/user'
+import { PageHeader } from '@/components/common'
 
+const userStore = useUserStore()
 const team = ref(null)
 const members = ref([])
+
+const scopeHint = computed(() =>
+  userStore.role === 'TEAM_ADMIN'
+    ? '聚焦当前团队详情与成员权限分工。'
+    : '查看所有团队详情与成员权限分工。'
+)
 
 async function loadCurrentTeam() {
   team.value = await teamApi.current()
@@ -53,3 +61,28 @@ async function loadCurrentTeam() {
 
 onMounted(loadCurrentTeam)
 </script>
+
+<style scoped>
+@import '@/styles/variables.css';
+
+.team-view {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.section-title-lite {
+  margin-bottom: var(--space-4);
+}
+
+.section-title-lite h3 {
+  margin: 0;
+  font-size: var(--text-xl);
+  color: var(--text-primary);
+}
+
+.section-title-lite p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+}
+</style>

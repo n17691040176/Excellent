@@ -1,28 +1,30 @@
 <template>
   <div class="commission-view">
-    <div class="page-heading">
-      <div>
-        <h2>返现管理</h2>
-        <p>{{ scopeHint }}</p>
-      </div>
-      <el-button type="primary" @click="loadData">刷新数据</el-button>
-    </div>
+    <!-- 统一页面头部 -->
+    <PageHeader title="返现管理" :description="scopeHint">
+      <template #actions>
+        <el-button type="primary" @click="loadData">刷新数据</el-button>
+      </template>
+    </PageHeader>
 
+    <!-- 指标卡片行 -->
     <div class="metric-grid">
-      <div v-for="item in metrics" :key="item.label" class="metric-card">
-        <div class="label">{{ item.label }}</div>
-        <div class="value">{{ item.value }}</div>
-        <div class="subtext">{{ item.subtext }}</div>
-      </div>
+      <MetricCard
+        v-for="item in metrics"
+        :key="item.label"
+        :value="item.value"
+        :label="item.label"
+        :subtext="item.subtext"
+        :variant="item.variant"
+      />
     </div>
 
-    <div class="split-grid block-gap">
+    <!-- 返现规则与操作提醒 -->
+    <div class="split-grid">
       <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>返现规则</h3>
-            <p>当前后台采用合规二级返现，结算时点依赖订单确认完成。</p>
-          </div>
+        <div class="section-title-lite">
+          <h3>返现规则</h3>
+          <p>当前后台采用合规二级返现，结算时点依赖订单确认完成。</p>
         </div>
         <div class="tiny-stat-grid">
           <div class="tiny-stat">
@@ -44,11 +46,9 @@
       </div>
 
       <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>操作提醒</h3>
-            <p>提现审核与本地生活核销会直接影响佣金状态变更。</p>
-          </div>
+        <div class="section-title-lite">
+          <h3>操作提醒</h3>
+          <p>提现审核与本地生活核销会直接影响佣金状态变更。</p>
         </div>
         <div class="notice-list">
           <div class="notice-item">
@@ -67,7 +67,8 @@
       </div>
     </div>
 
-    <div class="panel-card data-card block-gap">
+    <!-- 佣金账户与返现流水 -->
+    <div class="panel-card data-card">
       <div class="toolbar-row">
         <el-input
           v-model="keyword"
@@ -118,7 +119,7 @@
             <el-table-column prop="commission_amount" label="返现金额" min-width="120" />
             <el-table-column label="状态" width="110">
               <template #default="scope">
-                <el-tag :type="statusType(scope.row.status)">{{ scope.row.status }}</el-tag>
+                <StatusTag :status="scope.row.status" type="commission" />
               </template>
             </el-table-column>
             <el-table-column label="创建时间" min-width="170">
@@ -146,6 +147,7 @@ import dayjs from 'dayjs'
 
 import { commissionApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
+import { PageHeader, MetricCard, StatusTag } from '@/components/common'
 
 const userStore = useUserStore()
 const config = ref({})
@@ -174,10 +176,10 @@ const metrics = computed(() => {
   const settledCount = commissionFlows.value.filter((item) => item.status === 'SETTLED').length
   const userCount = Number(commissionUserSummary.value.user_count || userTotal.value || 0)
   return [
-    { label: '一级返现比例', value: `${config.value.level1_rate ?? 0}%`, subtext: '一级邀请有效订单返现' },
-    { label: '二级返现比例', value: `${config.value.level2_rate ?? 0}%`, subtext: '二级邀请有效订单返现' },
-    { label: '冻结佣金总额', value: totalFrozen.toFixed(2), subtext: `待订单完成后释放，佣金账户 ${userCount} 个` },
-    { label: '累计返现金额', value: totalCommission.toFixed(2), subtext: `已结算流水 ${settledCount} 笔，可提现 ${totalAvailable.toFixed(2)}` }
+    { label: '一级返现比例', value: `${config.value.level1_rate ?? 0}%`, subtext: '一级邀请有效订单返现', variant: 'primary' },
+    { label: '二级返现比例', value: `${config.value.level2_rate ?? 0}%`, subtext: '二级邀请有效订单返现', variant: 'neutral' },
+    { label: '冻结佣金总额', value: totalFrozen.toFixed(2), subtext: `待订单完成后释放，佣金账户 ${userCount} 个`, variant: 'warning' },
+    { label: '累计返现金额', value: totalCommission.toFixed(2), subtext: `已结算流水 ${settledCount} 笔，可提现 ${totalAvailable.toFixed(2)}`, variant: 'success' }
   ]
 })
 
@@ -199,14 +201,6 @@ function paginate(list, page, size) {
 
 function formatDate(value) {
   return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
-}
-
-function statusType(status) {
-  return {
-    FROZEN: 'warning',
-    SETTLED: 'success',
-    CANCELED: 'info'
-  }[status] || 'info'
 }
 
 function handleSearch() {
@@ -243,98 +237,88 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+@import '@/styles/variables.css';
+
 .commission-view {
   display: grid;
-  gap: 18px;
+  gap: var(--space-4);
 }
 
-.page-heading,
-.metric-card,
-.panel-card,
-.tiny-stat,
-.notice-item {
-  border-radius: 18px;
-  border: 1px solid rgba(255, 122, 0, 0.14);
-  background: linear-gradient(180deg, #fffdfb 0%, #fff6ee 100%);
-  box-shadow: 0 12px 28px rgba(255, 108, 46, 0.08);
+.section-title-lite {
+  margin-bottom: var(--space-4);
 }
 
-.page-heading {
-  padding: 20px 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.page-heading h2,
-.section-title h3 {
+.section-title-lite h3 {
   margin: 0;
-  color: #4a2410;
+  font-size: var(--text-xl);
+  color: var(--text-primary);
 }
 
-.page-heading p,
-.section-title p,
-.notice-item {
-  color: #7b5e4b;
+.section-title-lite p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
 }
 
-.metric-grid,
 .tiny-stat-grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
 }
 
-.metric-card,
 .tiny-stat {
-  padding: 18px;
+  padding: var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  text-align: center;
 }
 
-.metric-card .label,
 .tiny-stat .title {
-  color: #8b6a57;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
-.metric-card .value,
 .tiny-stat .number {
-  color: #ff6a00;
+  margin-top: var(--space-2);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--primary-deep);
 }
 
-.metric-card .subtext,
-.tiny-stat .meta,
-.notice-item {
-  color: #8d6f5a;
-}
-
-.panel-card {
-  padding: 20px;
+.tiny-stat .meta {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
 
 .notice-list {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .notice-item {
-  padding: 14px 16px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.notice-item strong {
+  color: var(--text-primary);
 }
 
 .toolbar-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
-  margin-bottom: 16px;
-}
-
-.block-gap {
-  margin-top: 18px;
+  margin-bottom: var(--space-4);
 }
 
 @media (max-width: 1200px) {
-  .metric-grid,
   .tiny-stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

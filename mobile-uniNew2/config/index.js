@@ -14,16 +14,16 @@ export const APP_ENV = {
 
 const ENV_MAP = {
 	[APP_ENV.LOCAL]: {
-		apiBaseUrl: 'http://127.0.0.1:8000',
+		apiBaseUrl: 'http://127.0.0.1:8000/api/',
 		inviteWebBaseUrl: 'http://127.0.0.1:5174'
 	},
 	[APP_ENV.DEV]: {
-		apiBaseUrl: 'http://156.238.241.213:8000',
-		inviteWebBaseUrl: 'http://156.238.241.213:5174'
+		apiBaseUrl: 'http://175.27.228.166:8000/api/',
+		inviteWebBaseUrl: 'http://175.27.228.166:5174'
 	},
 	[APP_ENV.PROD]: {
-		apiBaseUrl: 'https://156.238.241.213:8000',
-		inviteWebBaseUrl: 'https://156.238.241.213:5174'
+		apiBaseUrl: '/api/',
+		inviteWebBaseUrl: 'https://zyhskj.shop'
 	}
 }
 
@@ -203,6 +203,35 @@ export function clearRuntimeConfig() {
 	uni.removeStorageSync(APP_ENV_KEY)
 	uni.removeStorageSync(API_BASE_URL_KEY)
 	uni.removeStorageSync(INVITE_WEB_BASE_URL_KEY)
+}
+
+// ===========================================
+// 阿里云一键登录 H5 配置
+// ===========================================
+const DYNPNS_CONFIG_KEY = 'dynpns_config'
+
+export const DypnsConfig = {
+	// 阿里云控制台获取的配置
+	APP_KEY: '请填写您的AppKey',
+	SIGNATURE_SECRET: '请填写您的签名密钥',
+
+	// 签名密钥（与后端一致）
+	getSignatureSecret() {
+		try {
+			const config = uni.getStorageSync(DYNPNS_CONFIG_KEY)
+			return config?.signatureSecret || this.SIGNATURE_SECRET
+		} catch {
+			return this.SIGNATURE_SECRET
+		}
+	},
+
+	setConfig(config) {
+		uni.setStorageSync(DYNPNS_CONFIG_KEY, config)
+	},
+
+	clearConfig() {
+		uni.removeStorageSync(DYNPNS_CONFIG_KEY)
+	}
 }
 
 export function syncRuntimeConfigFromBuild() {

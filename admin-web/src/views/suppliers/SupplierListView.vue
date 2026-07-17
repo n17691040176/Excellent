@@ -1,28 +1,30 @@
 <template>
   <div class="supplier-view">
-    <div class="page-heading">
-      <div>
-        <h2>招商中心</h2>
-        <p>{{ scopeHint }}</p>
-      </div>
-      <el-button type="primary" @click="loadData">刷新数据</el-button>
-    </div>
+    <!-- 统一页面头部 -->
+    <PageHeader title="招商中心" :description="scopeHint">
+      <template #actions>
+        <el-button type="primary" @click="loadData">刷新数据</el-button>
+      </template>
+    </PageHeader>
 
+    <!-- 指标卡片行 -->
     <div class="metric-grid">
-      <div v-for="item in metrics" :key="item.label" class="metric-card">
-        <div class="label">{{ item.label }}</div>
-        <div class="value">{{ item.value }}</div>
-        <div class="subtext">{{ item.subtext }}</div>
-      </div>
+      <MetricCard
+        v-for="item in metrics"
+        :key="item.label"
+        :value="item.value"
+        :label="item.label"
+        :subtext="item.subtext"
+        :variant="item.variant"
+      />
     </div>
 
-    <div class="split-grid" style="margin-top: 18px;">
+    <!-- 准入要求与四区商品分布 -->
+    <div class="split-grid">
       <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>准入要求</h3>
-            <p>供应商、区县代理、市代理都必须满足协议、价格红线和一件代发规则。</p>
-          </div>
+        <div class="section-title-lite">
+          <h3>准入要求</h3>
+          <p>供应商、区县代理、市代理都必须满足协议、价格红线和一件代发规则。</p>
         </div>
         <div class="notice-list">
           <div class="notice-item"><strong>供应商入场费</strong>基础入场费 500 元；若主推产品价格高于 500 元，则按实际整数金额收取。</div>
@@ -32,12 +34,9 @@
       </div>
 
       <div class="panel-card data-card">
-        <div class="section-title">
-          <div>
-            <h3>四区商品分布</h3>
-            <p>这里只看供给规模；商品新增、导入、上下架和专区规则都已迁到商品管理页。</p>
-          </div>
-          <el-button type="primary" plain @click="openProductPage">进入商品管理</el-button>
+        <div class="section-title-lite">
+          <h3>四区商品分布</h3>
+          <p>这里只看供给规模；商品新增、导入、上下架和专区规则都已迁到商品管理页。</p>
         </div>
         <div class="tiny-stat-grid">
           <div v-for="item in zoneStats" :key="item.title" class="tiny-stat">
@@ -46,10 +45,12 @@
             <div class="meta">{{ item.meta }}</div>
           </div>
         </div>
+        <el-button type="primary" plain size="small" style="margin-top: var(--space-4);" @click="openProductPage">进入商品管理</el-button>
       </div>
     </div>
 
-    <div class="panel-card data-card" style="margin-top: 18px;">
+    <!-- 供应商与资格管理 -->
+    <div class="panel-card data-card">
       <el-tabs v-model="activeTab">
         <el-tab-pane label="供应商列表" name="suppliers">
           <div class="toolbar-row">
@@ -79,7 +80,7 @@
             </el-table-column>
             <el-table-column label="协议状态" min-width="170">
               <template #default="{ row }">
-                <el-tag size="small" :type="row.active_agreement ? 'success' : 'warning'">{{ row.active_agreement ? '协议有效' : '缺少有效协议' }}</el-tag>
+                <StatusTag :status="row.active_agreement ? 'ACTIVE' : 'PENDING'" :label="row.active_agreement ? '协议有效' : '缺少有效协议'" type="agreement" />
                 <div class="cell-meta">{{ row.agreement_type || '未上传协议' }}</div>
               </template>
             </el-table-column>
@@ -90,7 +91,9 @@
               </template>
             </el-table-column>
             <el-table-column label="状态" width="120">
-              <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
+              <template #default="{ row }">
+                <StatusTag :status="row.status" type="supplier" />
+              </template>
             </el-table-column>
             <el-table-column prop="qualification_desc" label="资质说明" min-width="220" show-overflow-tooltip />
           </el-table>
@@ -139,7 +142,9 @@
               </template>
             </el-table-column>
             <el-table-column label="审核状态" width="120">
-              <template #default="{ row }"><el-tag :type="statusType(row.audit_status)">{{ statusLabel(row.audit_status) }}</el-tag></template>
+              <template #default="{ row }">
+                <StatusTag :status="row.audit_status" type="audit" />
+              </template>
             </el-table-column>
             <el-table-column prop="audit_remark" label="审核备注" min-width="180" show-overflow-tooltip />
             <el-table-column label="申请时间" min-width="170">
@@ -188,7 +193,9 @@
               </template>
             </el-table-column>
             <el-table-column label="商品状态" width="120">
-              <template #default="{ row }"><el-tag :type="statusType(row.product_status)">{{ statusLabel(row.product_status) }}</el-tag></template>
+              <template #default="{ row }">
+                <StatusTag :status="row.product_status" type="product" />
+              </template>
             </el-table-column>
             <el-table-column label="备注" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">{{ row.release_reason || row.audit_remark || '--' }}</template>
@@ -198,17 +205,15 @@
 
         <el-tab-pane label="专区商品" name="zones">
           <div class="panel-card data-card">
-            <div class="section-title">
-              <div>
-                <h3>商品入口已独立</h3>
-                <p>商品列表、移动端字段、Excel 导入和专区规则已迁到“商品管理”页面统一维护。</p>
-              </div>
-              <el-button type="primary" @click="openProductPage">进入商品管理</el-button>
+            <div class="section-title-lite">
+              <h3>商品入口已独立</h3>
+              <p>商品列表、移动端字段、Excel 导入和专区规则已迁到"商品管理"页面统一维护。</p>
             </div>
             <div class="notice-list">
               <div class="notice-item"><strong>当前页面保留</strong>供应商准入、资格申请、资格台账和四区供给概览。</div>
               <div class="notice-item"><strong>建议路径</strong>新增商品、批量导入、提审上架、专区规则配置统一在商品管理页处理。</div>
             </div>
+            <el-button type="primary" style="margin-top: var(--space-4);" @click="openProductPage">进入商品管理</el-button>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -224,6 +229,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { productApi, supplierApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
+import { PageHeader, MetricCard, StatusTag } from '@/components/common'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -256,12 +262,12 @@ const metrics = computed(() => {
   const activeOccupancyCount = qualificationLedgers.value.filter((item) => item.occupancy_active).length
   const totalZoneProducts = Object.values(zoneCounts.value).reduce((sum, count) => sum + count, 0)
   return [
-    { label: '供应商总数', value: suppliers.value.length, subtext: `已启用 ${suppliers.value.filter((item) => item.status === 'ACTIVE').length} 家` },
-    { label: '有效协议供应商', value: activeAgreementCount, subtext: '协议有效后才能占用招商资格' },
-    { label: '待审核资格申请', value: qualifications.value.filter((item) => item.audit_status === 'PENDING').length, subtext: '后台需重点核对来源与商品合规' },
-    { label: '资格占用中', value: activeOccupancyCount, subtext: '含待审与已生效资格台账' },
-    { label: '额度已打满', value: exhaustedCount, subtext: '套餐或代理额度已无剩余' },
-    { label: '四区商品池', value: totalZoneProducts, subtext: '商品维护已迁到商品管理页' }
+    { label: '供应商总数', value: suppliers.value.length, subtext: `已启用 ${suppliers.value.filter((item) => item.status === 'ACTIVE').length} 家`, variant: 'primary' },
+    { label: '有效协议', value: activeAgreementCount, subtext: '协议有效后才能占用招商资格', variant: 'success' },
+    { label: '待审资格', value: qualifications.value.filter((item) => item.audit_status === 'PENDING').length, subtext: '后台需重点核对来源与商品合规', variant: 'warning' },
+    { label: '资格占用中', value: activeOccupancyCount, subtext: '含待审与已生效资格台账', variant: 'neutral' },
+    { label: '额度已满', value: exhaustedCount, subtext: '套餐或代理额度已无剩余', variant: 'info' },
+    { label: '四区商品池', value: totalZoneProducts, subtext: '商品维护已迁到商品管理页', variant: 'info' }
   ]
 })
 
@@ -274,14 +280,6 @@ const pagedSuppliers = computed(() => filteredSuppliers.value.slice((page.value 
 
 function openProductPage() {
   router.push('/products')
-}
-
-function statusType(status) {
-  return { PENDING: 'warning', APPROVED: 'success', ACTIVE: 'success', REJECTED: 'danger', DRAFT: 'info', PENDING_REVIEW: 'warning', ON_SHELF: 'success', OFF_SHELF: 'info' }[status] || 'info'
-}
-
-function statusLabel(status) {
-  return { PENDING: '待审核', APPROVED: '已通过', ACTIVE: '已启用', REJECTED: '已驳回', DRAFT: '草稿', PENDING_REVIEW: '待审核', ON_SHELF: '已上架', OFF_SHELF: '已下架' }[status] || status || '--'
 }
 
 function entryOrderLabel(status) {
@@ -366,15 +364,95 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+@import '@/styles/variables.css';
+
 .supplier-view {
   display: grid;
-  gap: 18px;
+  gap: var(--space-4);
+}
+
+.section-title-lite {
+  margin-bottom: var(--space-4);
+}
+
+.section-title-lite h3 {
+  margin: 0;
+  font-size: var(--text-xl);
+  color: var(--text-primary);
+}
+
+.section-title-lite p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+}
+
+.notice-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.notice-item {
+  padding: var(--space-3) var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.notice-item strong {
+  color: var(--text-primary);
+}
+
+.tiny-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.tiny-stat {
+  padding: var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.tiny-stat .title {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.tiny-stat .number {
+  margin-top: var(--space-2);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--primary-deep);
+}
+
+.tiny-stat .meta {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-4);
 }
 
 .cell-meta {
   margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--el-text-color-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .tiny-stat-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -27,9 +27,9 @@ export default defineConfig(({
 		plugins: [uni()],
 		base: './',
 		define: {
-			__APP_ENV__: JSON.stringify(appEnv),
-			__API_BASE_URL__: JSON.stringify(apiBaseUrl),
-			__INVITE_WEB_BASE_URL__: JSON.stringify(inviteWebBaseUrl)
+			'globalThis.__APP_ENV__': JSON.stringify(appEnv),
+			'globalThis.__API_BASE_URL__': JSON.stringify(apiBaseUrl),
+			'globalThis.__INVITE_WEB_BASE_URL__': JSON.stringify(inviteWebBaseUrl)
 		},
 		server: {
 			host: '0.0.0.0',

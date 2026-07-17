@@ -60,4 +60,6 @@ class WithdrawRequest(Base):
     remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    paid_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

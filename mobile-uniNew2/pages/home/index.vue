@@ -1,475 +1,604 @@
 <template>
   <view class="home-page">
-    <view class="hero-shell">
-      <view class="search-row interactive" @click="go('/pages/packages/list', true, 'search_bar')">
-        <view class="search-icon">搜</view>
-        <view class="search-placeholder">{{ activeSearchPlaceholder }}</view>
-        <view class="search-btn">搜索</view>
-      </view>
-    </view>
-
-    <view class="hero-swiper">
+    <view class="banner-section">
       <swiper
-        class="hero-swiper-inner"
+        class="banner-swiper"
         circular
         autoplay
-        interval="3200"
-        duration="360"
+        interval="5000"
         indicator-dots
-        indicator-color="rgba(255,122,0,0.18)"
-        indicator-active-color="#ff6a00"
+        indicator-color="rgba(255, 255, 255, 0.45)"
+        indicator-active-color="#FFFFFF"
+        :current="currentBanner"
+        @change="onBannerChange"
       >
-        <swiper-item v-for="slide in heroSlides" :key="slide.key">
-          <view class="hero-slide interactive" @click="go(slide.path, slide.isTab, slide.key)">
-            <view class="hero-slide-badge">{{ slide.tag }}</view>
-            <view class="hero-slide-title">{{ slide.title }}</view>
-            <view class="hero-slide-desc">{{ slide.desc }}</view>
-            <view class="hero-slide-foot">
-              <view class="hero-slide-dot" />
-              <view class="hero-slide-foot-text">{{ slide.foot }}</view>
-            </view>
+        <swiper-item v-for="item in banners" :key="item.id">
+          <view class="banner-card" :style="bannerStyle(item)" @click="openDecorationLink(item)">
+            <image v-if="item.image" class="banner-image" :src="item.image" mode="aspectFill" />
           </view>
         </swiper-item>
       </swiper>
     </view>
 
-    <view class="waterfall-section">
-      <view v-if="loading" class="recommend-state">商品加载中...</view>
-      <view v-else-if="failed" class="recommend-state">
-        商品加载失败
-        <button class="btn btn-ghost retry-btn mt-16" @click="loadRecommend">重试</button>
-      </view>
-      <view v-else-if="!recommends.length" class="recommend-state">暂无推荐商品</view>
-
-      <view v-else class="waterfall-grid">
-        <view
-          v-for="item in recommends"
-          :key="item.id"
-          class="waterfall-card interactive"
-          @click="openRecommend(item)"
-        >
-          <view class="waterfall-thumb-wrap">
-            <image v-if="item.image" class="waterfall-cover" :src="item.image" mode="aspectFill" lazy-load />
-            <view v-else class="waterfall-cover waterfall-cover-fallback" />
-            <view class="waterfall-chip">{{ item.badge }}</view>
-            <view v-if="item.tip" class="waterfall-tip">{{ item.tip }}</view>
+    <view class="hot-section">
+      <view class="section-header">
+        <view class="section-left">
+          <text class="hot-title">爆款推荐</text>
+          <view class="hot-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L14.09 8.26L20.18 9.27L15.54 13.14L16.82 19.02L12 16.09L7.18 19.02L8.46 13.14L3.82 9.27L9.91 8.26L12 2Z" fill="currentColor" />
+            </svg>
           </view>
+        </view>
+      </view>
 
-          <view class="waterfall-body">
-            <view class="waterfall-title">{{ item.title }}</view>
-            <view class="waterfall-desc">{{ item.desc }}</view>
-            <view class="waterfall-price-row">
-              <view class="ecom-price">
-                <text class="ecom-price-main">¥{{ item.price }}</text>
-                <text v-if="item.marketPrice" class="ecom-price-origin">¥{{ item.marketPrice }}</text>
+      <view v-if="loading" class="hot-grid">
+        <view v-for="i in 4" :key="i" class="hot-card">
+          <view class="skeleton hot-skeleton-image" />
+          <view class="skeleton hot-skeleton-title" />
+          <view class="skeleton hot-skeleton-price" />
+        </view>
+      </view>
+
+      <swiper
+        v-else-if="hotProducts.length > 4"
+        class="hot-swiper"
+        circular
+        autoplay
+        interval="4000"
+        :display-multiple-items="4"
+        :gap="16"
+      >
+        <swiper-item v-for="item in hotProducts" :key="item.id">
+          <view class="hot-card" @click="openProduct(item)">
+            <view class="hot-img-wrap">
+              <image class="hot-img" :src="item.image" mode="aspectFill" lazy-load />
+            </view>
+            <view class="hot-info">
+              <text class="hot-name">{{ item.title }}</text>
+              <view class="hot-price">
+                <text class="price-symbol">¥</text>
+                <text class="price-value">{{ item.price }}</text>
               </view>
-              <view class="waterfall-buy">立即抢购</view>
+            </view>
+          </view>
+        </swiper-item>
+      </swiper>
+
+      <view v-else class="hot-grid">
+        <view
+          v-for="item in hotProducts"
+          :key="item.id"
+          class="hot-card"
+          @click="openProduct(item)"
+        >
+          <view class="hot-img-wrap">
+            <image class="hot-img" :src="item.image" mode="aspectFill" lazy-load />
+          </view>
+          <view class="hot-info">
+            <text class="hot-name">{{ item.title }}</text>
+            <view class="hot-price">
+              <text class="price-symbol">¥</text>
+              <text class="price-value">{{ item.price }}</text>
             </view>
           </view>
         </view>
       </view>
     </view>
+
+    <view class="featured-section">
+      <view class="section-header">
+        <text class="section-title">推荐好货</text>
+      </view>
+
+      <view v-if="loading" class="product-grid">
+        <view v-for="i in 6" :key="i" class="product-card">
+          <view class="skeleton skeleton-image" />
+          <view class="product-info">
+            <view class="skeleton skeleton-title" />
+            <view class="skeleton skeleton-price" />
+          </view>
+        </view>
+      </view>
+
+      <view v-else-if="products.length > 0" class="product-grid">
+        <view
+          v-for="item in products"
+          :key="item.id"
+          class="product-card"
+          @click="openProduct(item)"
+        >
+          <view class="product-img-wrap">
+            <image class="product-img" :src="item.image" mode="aspectFill" lazy-load />
+          </view>
+          <view class="product-info">
+            <text class="product-name">{{ item.title }}</text>
+            <view class="product-bottom">
+              <view class="price">
+                <text class="price-currency">¥</text>
+                <text class="price-value">{{ item.price }}</text>
+                <text v-if="item.original" class="price-original">¥{{ item.original }}</text>
+              </view>
+              <view class="add-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 5V19M5 12H19" stroke="white" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-else class="empty-state">
+        <text class="empty-text">暂无商品</text>
+      </view>
+    </view>
+
+    <view class="bottom-space" />
   </view>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
-import { onHide, onPullDownRefresh, onShow } from '@dcloudio/uni-app';
-import { packageApi } from '@/api/modules';
+import { ref, onMounted } from 'vue';
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
+import { homeApi, packageApi } from '@/api/modules';
 import { getApiBaseUrl } from '@/config/index';
 import { trackEvent, trackPageView } from '@/utils/track';
 
-const LEGACY_FILE_BASE_URL = 'https://file.hoh516.com/huohonghuo';
+const BASE_URL = 'https://file.h516.com/huohonghuo';
 
-const heroSlides = [
+const currentBanner = ref(0);
+const banners = ref([]);
+const hotProducts = ref([]);
+const products = ref([]);
+const loading = ref(false);
+
+const defaultBanners = [
   {
-    key: 'mall',
-    title: '精选商城',
-    desc: '严选爆款，限时热卖更划算',
-    foot: '热卖补贴专区',
-    tag: '热卖',
-    path: '/pages/packages/list',
-    isTab: true
+    id: 1,
+    gradient: 'linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%)'
   },
   {
-    key: 'quality',
-    title: '品质好物',
-    desc: '高复购商品，适合日用与礼赠',
-    foot: '品质推荐更新',
-    tag: '推荐',
-    path: '/pages/packages/list',
-    isTab: true
+    id: 2,
+    gradient: 'linear-gradient(135deg, #D97706 0%, #F59E0B 50%, #FBBF24 100%)'
   },
   {
-    key: 'service',
-    title: '本地生活',
-    desc: '附近服务直达，预约更快捷',
-    foot: '同城服务上新',
-    tag: '附近',
-    path: '/pages/local-life/index',
-    isTab: true
+    id: 3,
+    gradient: 'linear-gradient(135deg, #3B82F6 0%, #60A5FA 50%, #93C5FD 100%)'
   }
 ];
 
-const searchPlaceholders = ['搜智能手表', '搜共享设备', '搜海鲜礼盒', '搜品质好物'];
+banners.value = [...defaultBanners];
 
-const loading = ref(false);
-const failed = ref(false);
-const searchPlaceholderIndex = ref(0);
-const searchTimer = ref(null);
-const recommends = ref([]);
-
-const activeSearchPlaceholder = computed(() => {
-  return searchPlaceholders[searchPlaceholderIndex.value] || searchPlaceholders[0];
-});
+const onBannerChange = (e) => {
+  currentBanner.value = e.detail.current;
+};
 
 const resolveImage = (value) => {
   if (!value) return '';
   if (/^https?:\/\//i.test(value)) return value;
-  if (value.startsWith('/profile/')) return `${LEGACY_FILE_BASE_URL}${value}`;
+  if (value.startsWith('/profile/')) return `${BASE_URL}${value}`;
   if (value.startsWith('/')) return `${getApiBaseUrl()}${value}`;
   return value;
 };
 
-const normalizeRows = (rows) => {
+const enabledItems = (items = []) => {
+  return (Array.isArray(items) ? items : []).filter((item) => item && item.enabled !== false);
+};
+
+const normalizeProducts = (rows) => {
   return (rows || []).map((item, idx) => {
     const salePrice = Number(item.price ?? item.sale_price ?? 0);
     const marketPrice = Number(item.market_price ?? 0);
-    const badge = item.tag || item.category_name || '精选';
-
     return {
-      id: item.id || item.product_id || `home-${idx}`,
+      id: item.id || item.product_id || idx,
       title: item.name || item.title || '未命名商品',
-      desc: item.description || item.desc || '暂无描述',
       price: salePrice.toFixed(2),
-      marketPrice: marketPrice > salePrice ? marketPrice.toFixed(2) : '',
-      badge,
-      tip: salePrice >= 999 ? '高配' : salePrice <= 99 ? '实惠' : '',
-      image: resolveImage(item.image || item.main_image || item.cover || item.gallery?.[0]),
-      path: `/subpackages/package/detail?id=${item.id || item.product_id || idx}`
+      original: marketPrice > salePrice ? marketPrice.toFixed(2) : '',
+      image: resolveImage(item.image || item.main_image || item.cover || '')
     };
   });
 };
 
-function homeTrack(event, payload = {}) {
-  trackEvent(event, {
-    page: '/pages/home/index',
-    ...payload
-  });
-}
-
-function startSearchPlaceholderTicker() {
-  stopSearchPlaceholderTicker();
-  searchTimer.value = setInterval(() => {
-    searchPlaceholderIndex.value = (searchPlaceholderIndex.value + 1) % searchPlaceholders.length;
-  }, 2600);
-}
-
-function stopSearchPlaceholderTicker() {
-  if (searchTimer.value) {
-    clearInterval(searchTimer.value);
-    searchTimer.value = null;
-  }
-}
-
-const loadRecommend = async () => {
-  loading.value = true;
-  failed.value = false;
-  try {
-    const res = await packageApi.list({ page: 1, page_size: 40 });
-    recommends.value = normalizeRows(Array.isArray(res) ? res : res?.list || res?.items || []);
-    homeTrack('home_data_loaded', { recommend_count: recommends.value.length });
-  } catch (error) {
-    failed.value = true;
-  } finally {
-    loading.value = false;
-  }
+const normalizeHotProducts = (rows) => {
+  const hotRows = (rows || []).filter((item) => item.is_hot === 1 || item.tag === '爆款' || item.is_flash === 1);
+  return normalizeProducts(hotRows.length ? hotRows : (rows || []).slice(0, 4));
 };
 
-const go = (path, isTab = false, entry = 'default') => {
-  homeTrack('home_entry_click', { path, isTab, entry });
-  if (isTab) {
+const normalizeBannerItems = (payload) => {
+  const blocks = Array.isArray(payload?.custom_blocks) ? payload.custom_blocks : [];
+  const swiper = blocks.find((block) => block?.enabled !== false && block.type === 'image_swiper');
+  const rows = enabledItems(swiper?.items).filter((item) => item.image_url);
+  if (!rows.length) return [...defaultBanners];
+  return rows.map((item, index) => ({
+    id: item.id || `${swiper.id || 'swiper'}-${index}`,
+    image: resolveImage(item.image_url || ''),
+    path: item.path || '',
+    open_type: item.open_type || 'navigate',
+    gradient: defaultBanners[index % defaultBanners.length].gradient
+  }));
+};
+
+const bannerStyle = (item) => {
+  return { background: item.gradient || defaultBanners[0].gradient };
+};
+
+const openDecorationLink = (item = {}) => {
+  const path = item.path || '';
+  if (!path) return;
+  trackEvent('home_decoration_link', { path });
+  if (item.open_type === 'switchTab') {
     uni.switchTab({ url: path });
     return;
   }
   uni.navigateTo({ url: path });
 };
 
-function openRecommend(item) {
-  homeTrack('home_waterfall_item_click', {
-    item_id: item.id,
-    item_title: item.title,
-    item_price: item.price
-  });
-  uni.navigateTo({ url: item.path });
-}
+const loadDecoration = async () => {
+  try {
+    const res = await homeApi.decoration();
+    const payload = res?.payload || res;
+    banners.value = normalizeBannerItems(payload);
+  } catch (error) {
+    banners.value = [...defaultBanners];
+  }
+};
+
+const loadProducts = async () => {
+  loading.value = true;
+  try {
+    const res = await packageApi.list({ page: 1, page_size: 40 });
+    const allProducts = Array.isArray(res) ? res : res?.list || res?.items || [];
+    hotProducts.value = normalizeHotProducts(allProducts);
+    products.value = normalizeProducts(allProducts);
+  } catch (error) {
+    console.error('加载商品失败', error);
+    hotProducts.value = [];
+    products.value = [];
+  } finally {
+    loading.value = false;
+  }
+};
+
+const loadPageData = async () => {
+  await Promise.all([loadDecoration(), loadProducts()]);
+  uni.stopPullDownRefresh?.();
+};
+
+const openProduct = (item) => {
+  trackEvent('home_product', { id: item.id });
+  uni.navigateTo({ url: `/subpackages/package/detail?id=${item.id}` });
+};
 
 onShow(() => {
   trackPageView('home');
-  startSearchPlaceholderTicker();
-  loadRecommend();
+  loadPageData();
 });
 
-onHide(() => {
-  stopSearchPlaceholderTicker();
+onMounted(() => {
+  trackPageView('home');
+  loadPageData();
 });
-
-// 页面正常随滚动，不再对首页顶部区域做吸顶处理。
 
 onPullDownRefresh(async () => {
-  await loadRecommend();
-  uni.stopPullDownRefresh();
+  await loadPageData();
 });
 </script>
 
 <style scoped>
-@import '@/styles/common.css';
-
 .home-page {
-  padding: 18rpx 18rpx 28rpx;
-  box-sizing: border-box;
+  --home-gutter: var(--space-4);
+  min-height: 100vh;
+  background: var(--bg);
+  padding-top: calc(env(safe-area-inset-top) + var(--space-4));
+  padding-bottom: calc(env(safe-area-inset-bottom) + 140rpx);
 }
 
-.hero-shell {
-  padding: 16rpx 18rpx;
-  border-radius: 30rpx;
-  background: linear-gradient(135deg, #ffb15f 0%, #ff8a2a 42%, #ff6a00 100%);
-  box-shadow: 0 18rpx 34rpx rgba(205, 96, 31, 0.22);
+.banner-section,
+.hot-section,
+.featured-section {
+  padding-left: var(--home-gutter);
+  padding-right: var(--home-gutter);
 }
 
-.search-row {
+.banner-swiper {
+  height: 320rpx;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+.banner-card {
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.section-header {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  min-height: 76rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 8rpx 10rpx 8rpx 16rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 10rpx 20rpx rgba(179, 72, 17, 0.14);
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
 }
 
-.search-icon {
-  width: 44rpx;
-  height: 44rpx;
-  border-radius: 50%;
+.section-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.section-title,
+.hot-title {
+  display: block;
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--text);
+}
+
+.hot-title {
+  color: var(--primary);
+}
+
+.hot-icon {
+  color: var(--accent);
+  animation: star-pulse 2s ease-in-out infinite;
+}
+
+@keyframes star-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.9); }
+}
+
+.hot-section {
+  padding-top: var(--space-6);
+}
+
+.hot-swiper {
+  height: 280rpx;
+  margin: 0;
+}
+
+.hot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.hot-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+.hot-card:active {
+  transform: scale(0.96);
+}
+
+.hot-img-wrap,
+.hot-skeleton-image {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--bg) 0%, var(--border-light) 100%);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.hot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hot-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.hot-name {
+  font-size: var(--text-xs);
+  color: var(--text);
+  font-weight: var(--font-medium);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hot-price {
+  display: flex;
+  align-items: baseline;
+  gap: 2rpx;
+}
+
+.hot-price .price-symbol {
+  font-size: var(--text-xs);
+  color: var(--primary);
+  font-weight: var(--font-semibold);
+}
+
+.hot-price .price-value {
+  font-size: var(--text-base);
+  color: var(--primary);
+  font-weight: var(--font-bold);
+  font-family: 'DIN Alternate', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.featured-section {
+  padding-top: var(--space-8);
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.product-card {
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.product-card:active {
+  transform: scale(0.98);
+  box-shadow: var(--shadow-xs);
+}
+
+.product-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, var(--bg) 0%, var(--border-light) 100%);
+}
+
+.product-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-info {
+  padding: var(--space-4);
+}
+
+.product-name {
+  display: block;
+  min-height: 2.4em;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text);
+  line-height: var(--leading-snug);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.product-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2rpx;
+  min-width: 0;
+}
+
+.price-currency {
+  font-size: var(--text-sm);
+  color: var(--primary);
+  font-weight: var(--font-semibold);
+}
+
+.price-value {
+  font-size: var(--text-lg);
+  color: var(--primary);
+  font-weight: var(--font-bold);
+  font-family: 'DIN Alternate', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.price-original {
+  margin-left: var(--space-2);
+  font-size: 22rpx;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.add-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 22rpx;
-  font-weight: 700;
-  background: linear-gradient(135deg, #ff8a2a, #ff5f3d);
-}
-
-.search-placeholder {
-  flex: 1;
-  color: #8b6550;
-  font-size: 24rpx;
-}
-
-.search-btn {
+  width: 56rpx;
   height: 56rpx;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999rpx;
-  padding: 0 22rpx;
-  color: #fff;
-  background: linear-gradient(135deg, #ff7a00, #ff4f3a);
-  font-size: 22rpx;
-  font-weight: 700;
-  box-shadow: 0 8rpx 16rpx rgba(255, 89, 44, 0.22);
+  flex: 0 0 56rpx;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-primary);
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
-.hero-swiper {
-  margin-top: 14rpx;
-  overflow: hidden;
-  border-radius: 30rpx;
-  background: linear-gradient(180deg, #fffaf4 0%, #fff2e8 100%);
-  border: 1rpx solid rgba(255, 122, 0, 0.14);
+.add-btn:active {
+  transform: scale(0.9);
+  box-shadow: var(--shadow-sm);
 }
 
-.hero-swiper-inner {
-  height: 256rpx;
-}
-
-.hero-slide {
-  height: 100%;
-  padding: 24rpx 22rpx;
-  background:
-    radial-gradient(circle at 92% 18%, rgba(255, 255, 255, 0.2), transparent 26%),
-    linear-gradient(135deg, #fff7ef 0%, #ffe8d2 46%, #ffd2aa 100%);
-  box-sizing: border-box;
-}
-
-.hero-slide-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 38rpx;
-  padding: 0 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.42);
-  color: #ff6a00;
-  font-size: 20rpx;
-  font-weight: 700;
-}
-
-.hero-slide-title {
-  margin-top: 12rpx;
-  font-size: 40rpx;
-  line-height: 1.18;
-  font-weight: 900;
-  color: #4a2410;
-}
-
-.hero-slide-desc {
-  margin-top: 10rpx;
-  font-size: 24rpx;
-  line-height: 1.45;
-  color: #7f5a44;
-  max-width: 420rpx;
-}
-
-.hero-slide-foot {
-  margin-top: 20rpx;
-  display: inline-flex;
-  align-items: center;
-  gap: 10rpx;
-  padding: 10rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.55);
-}
-
-.hero-slide-dot {
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 50%;
-  background: #ff6a00;
-}
-
-.hero-slide-foot-text {
-  font-size: 20rpx;
-  color: #8b5d3a;
-  font-weight: 700;
-}
-
-.waterfall-section {
-  margin-top: 22rpx;
-}
-
-.recommend-state {
-  margin-top: 14rpx;
-  text-align: center;
-  color: #6f655b;
-}
-
-.retry-btn {
-  width: 180rpx;
-}
-
-.waterfall-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
-}
-
-.waterfall-card {
-  overflow: hidden;
-  border-radius: 28rpx;
-  background: #fff;
-  border: 1rpx solid rgba(255, 122, 0, 0.14);
-  box-shadow: 0 14rpx 28rpx rgba(255, 96, 34, 0.08);
-}
-
-.waterfall-thumb-wrap {
-  position: relative;
-}
-
-.waterfall-cover {
-  width: 100%;
-  height: 244rpx;
-  display: block;
-  background: #fff0df;
-}
-
-.waterfall-cover-fallback {
-  background: linear-gradient(135deg, #ffcf9c, #ff9f5e 46%, #ff7a00);
-}
-
-.waterfall-chip {
-  position: absolute;
-  left: 14rpx;
-  top: 14rpx;
-  display: inline-flex;
-  align-items: center;
-  height: 34rpx;
-  padding: 0 12rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.9);
-  color: #ff6a00;
-  font-size: 18rpx;
-  font-weight: 700;
-}
-
-.waterfall-tip {
-  position: absolute;
-  right: 14rpx;
-  top: 14rpx;
-  display: inline-flex;
-  align-items: center;
-  height: 34rpx;
-  padding: 0 12rpx;
-  border-radius: 999rpx;
-  color: #fff;
-  background: linear-gradient(135deg, #ff7a00, #ff4f3a);
-  font-size: 18rpx;
-  font-weight: 700;
-}
-
-.waterfall-body {
-  padding: 14rpx 14rpx 16rpx;
-}
-
-.waterfall-title {
-  min-height: 70rpx;
-  font-size: 28rpx;
-  line-height: 1.35;
-  font-weight: 800;
-  color: #4a2410;
-}
-
-.waterfall-desc {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #8a6a57;
-  line-height: 1.45;
-  min-height: 62rpx;
-}
-
-.waterfall-price-row {
-  margin-top: 12rpx;
+.empty-state {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12rpx;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16) 0;
 }
 
-.waterfall-buy {
-  flex-shrink: 0;
-  padding: 10rpx 16rpx;
-  border-radius: 999rpx;
-  background: linear-gradient(135deg, #ff7a00, #ff5f3d);
-  color: #fff;
-  font-size: 20rpx;
-  font-weight: 700;
+.empty-text {
+  font-size: var(--text-base);
+  color: var(--text-muted);
 }
 
-.interactive {
-  transition: transform 180ms ease, opacity 180ms ease;
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg) 0%,
+    var(--border-light) 50%,
+    var(--bg) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
 }
 
-.interactive:active {
-  transform: scale(0.98);
-  opacity: 0.92;
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-image {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.skeleton-title,
+.hot-skeleton-title {
+  height: 32rpx;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-3);
+}
+
+.skeleton-price,
+.hot-skeleton-price {
+  width: 120rpx;
+  height: 36rpx;
+  border-radius: var(--radius-sm);
+}
+
+.bottom-space {
+  height: var(--space-8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hot-icon,
+  .add-btn,
+  .product-card {
+    transition: none;
+    animation: none;
+  }
 }
 </style>

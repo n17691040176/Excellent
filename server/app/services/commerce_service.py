@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
 from app.models.enums import AssetType, OrderType, PayStatus, ZoneType
 from app.models.order import Order, OrderItem
@@ -263,16 +263,22 @@ class CommerceService:
         order = OrderService.create_order(db, current_user, payload)
         payment = None
         if resolved_pay_channel in {'WECHAT', 'ALIPAY'}:
-            result = OrderService.pay_order(
-                db,
-                current_user,
-                order.id,
-                resolved_pay_channel,
-                points_amount=0,
-                auto_complete=auto_complete,
-            )
-            order = result['order']
-            payment = result['payment']
+            try:
+                result = OrderService.pay_order(
+                    db,
+                    current_user,
+                    order.id,
+                    resolved_pay_channel,
+                    points_amount=0,
+                    auto_complete=auto_complete,
+                )
+                order = result['order']
+                payment = result['payment']
+            except AppError as exc:
+                payment = {
+                    'status': 'FAILED',
+                    'message': exc.message,
+                }
 
         for item in cart_items:
             db.delete(item)

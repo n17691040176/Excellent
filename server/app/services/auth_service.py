@@ -14,6 +14,7 @@ from app.models.commission import UserCommission
 from app.models.enums import GlobalRole, UserStatus
 from app.models.user import InviteRecord, User
 from app.services.asset_service import init_user_assets
+from app.services.sms_service import SmsService
 from app.utils.helpers import generate_code, now
 
 
@@ -27,6 +28,14 @@ class AuthService:
     @staticmethod
     def _issue_token(user: User) -> str:
         return create_access_token(str(user.id), {'role': user.global_role.value})
+
+    @staticmethod
+    def issue_token(user: User) -> str:
+        return AuthService._issue_token(user)
+
+    @staticmethod
+    def finalize_login(db: Session, user: User) -> tuple[str, User]:
+        return AuthService._finalize_login(db, user)
 
     @staticmethod
     def _finalize_login(db: Session, user: User) -> tuple[str, User]:
@@ -86,6 +95,15 @@ class AuthService:
         return user
 
     @staticmethod
+    def create_passwordless_user(
+        db: Session,
+        phone: str,
+        nickname: str,
+        invite_code: str | None = None,
+    ) -> User:
+        return AuthService._create_user(db, phone, generate_code(length=12), nickname, invite_code)
+
+    @staticmethod
     def _login_code_key(phone: str) -> str:
         return f'{AuthService.LOGIN_CODE_KEY_PREFIX}:{phone}'
 
@@ -115,25 +133,66 @@ class AuthService:
             raise UnauthorizedError('Phone or password invalid')
         if admin_only and user.global_role not in {GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN}:
             raise UnauthorizedError('Admin account required')
+        if admin_only and user.global_role == GlobalRole.TEAM_ADMIN:
+            role = user.admin_role
+            if user.admin_role_id and (not role or role.status != 'ENABLED'):
+                raise UnauthorizedError('Admin role disabled')
         return AuthService._finalize_login(db, user)
 
     @staticmethod
     def send_login_code(phone: str) -> dict:
-        redis = get_redis_client()
-        cooldown_key = AuthService._login_code_cooldown_key(phone)
-        ttl = cast(int, redis.ttl(cooldown_key))
-        if ttl and ttl > 0:
-            raise ConflictError(f'Code already sent, retry in {ttl}s')
+        """
+        发送登录验证码
 
+        1. 检查发送频率限制（使用Redis）
+        2. 生成6位验证码
+        3. 通过阿里云短信服务发送
+        4. 开发环境下返回验证码方便测试
+        """
+        redis = get_redis_client()
+
+        # 1. 检查发送频率
+        cooldown_key = AuthService._login_code_cooldown_key(phone)
+        if redis:
+            ttl = cast(int, redis.ttl(cooldown_key))
+            if ttl and ttl > 0:
+                raise ConflictError(f'Code already sent, retry in {ttl}s')
+
+        # 2. 生成验证码（用于Redis校验）
         code = AuthService._generate_login_code()
-        redis.setex(AuthService._login_code_key(phone), AuthService.LOGIN_CODE_TTL_SECONDS, code)
-        redis.setex(cooldown_key, AuthService.LOGIN_CODE_RESEND_INTERVAL_SECONDS, '1')
+
+        # 3. 存储验证码到Redis（用于后续验证）
+        if redis:
+            redis.setex(AuthService._login_code_key(phone), AuthService.LOGIN_CODE_TTL_SECONDS, code)
+            redis.setex(cooldown_key, AuthService.LOGIN_CODE_RESEND_INTERVAL_SECONDS, '1')
+
+        # 4. 发送短信（仅在启用短信服务时）
+        sms_sent = False
+        if settings.sms_enabled and settings.sms_aliyun_access_key_id:
+            try:
+                SmsService.send_login_code(phone, code)
+                sms_sent = True
+            except Exception as e:
+                if redis:
+                    redis.delete(AuthService._login_code_key(phone))
+                    redis.delete(cooldown_key)
+                import logging
+                logging.warning(f'SMS send failed for {phone}: {str(e)}')
+                if settings.app_env.lower() == 'production':
+                    raise ConflictError(f'短信发送失败: {str(e)}') from e
+        else:
+            # 短信服务未配置时，仅记录日志
+            import logging
+            logging.warning(f'SMS not configured, code for {phone}: {code}')
+            if settings.app_env.lower() == 'production':
+                raise ConflictError('短信服务未配置')
 
         response: dict[str, int | str] = {
             'expires_in': AuthService.LOGIN_CODE_TTL_SECONDS,
             'retry_in': AuthService.LOGIN_CODE_RESEND_INTERVAL_SECONDS,
         }
-        if settings.app_env.lower() == 'development':
+        # 开发环境 或 短信未成功发送时，返回验证码方便测试
+        if settings.app_env.lower() == 'development' or not sms_sent:
             response['debug_code'] = code
         return response
 

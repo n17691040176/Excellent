@@ -14,10 +14,12 @@ admin_router = APIRouter(prefix='/admin/orders')
 
 
 APP_ORDER_STATUS_MAP = {
-    'pending_payment': OrderStatus.CREATED,
-    'pending_service': OrderStatus.PAID,
-    'shipping': OrderStatus.PAID,
-    'completed': OrderStatus.CONFIRMED,
+    'pending_payment': OrderStatus.PENDING_PAYMENT,
+    'pending_ship': OrderStatus.PENDING_SHIP,
+    'shipped': OrderStatus.SHIPPED,
+    'completed': OrderStatus.COMPLETED,
+    'canceled': OrderStatus.REFUND,
+    'refund': OrderStatus.REFUND,
 }
 
 
@@ -72,10 +74,14 @@ def confirm_order(order_id: int, db: Session = Depends(get_db), current_user: Us
 
 @app_router.post('/{order_id}/cancel')
 def cancel_order(order_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    order = OrderService.get_order(db, current_user.id, order_id)
-    order.order_status = OrderStatus.CLOSED
-    db.commit()
-    return {'code': 0, 'message': 'success', 'data': {'success': True}}
+    order = OrderService.cancel_order(db, current_user.id, order_id)
+    return {'code': 0, 'message': 'success', 'data': serialize_order(db, order, include_detail=True)}
+
+
+@app_router.post('/{order_id}/refund')
+def refund_order(order_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    order = OrderService.refund_order(db, current_user.id, order_id)
+    return {'code': 0, 'message': 'success', 'data': serialize_order(db, order, include_detail=True)}
 
 
 @app_router.post('/{order_id}/pay-demo')
@@ -161,6 +167,18 @@ def mark_paid(
     return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}
 
 
+@admin_router.post('/{order_id}/ship')
+def mark_shipped(
+    order_id: int,
+    tracking_no: str | None = Query(default=None, description='物流单号'),
+    tracking_company: str | None = Query(default=None, description='物流公司'),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    order = OrderService.ship_order_for_admin(db, order_id, current_user, tracking_no, tracking_company)
+    return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}
+
+
 @admin_router.post('/{order_id}/confirm')
 def admin_confirm_order(
     order_id: int,
@@ -178,4 +196,14 @@ def admin_close_order(
     current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     order = OrderService.close_order_for_admin(db, order_id, current_user)
+    return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}
+
+
+@admin_router.post('/{order_id}/refund')
+def admin_refund_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    order = OrderService.refund_order_for_admin(db, order_id, current_user)
     return {'code': 0, 'message': 'success', 'data': serialize_admin_order(db, order, include_detail=True)}

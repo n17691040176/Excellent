@@ -1,104 +1,126 @@
 <template>
-  <view class="container feature-page">
-    <view class="card hero-card">
-      <view class="hero-tag">快递服务</view>
-      <view class="section-title mt-12">统一查看运输进度、单号和签收状态</view>
-      <view class="muted">已支付且需要发货的订单，会在这里展示运输进度</view>
+  <view class="shipping-page">
+    <!-- Header -->
+    <view class="page-header">
+      <view class="header-content">
+        <view class="back-btn" @click="goBack">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </view>
+        <view class="logo-mark">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+            <rect x="1" y="3" width="15" height="13" rx="2" stroke="white" stroke-width="2"/>
+            <path d="M16 8H20L23 11V21C23 21.5523 22.5523 22 22 22H2C1.44772 22 1 21.5523 1 21V11L4 8H8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </view>
+        <text class="page-title">快递服务</text>
+        <view class="header-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" fill="currentColor"/>
+          </svg>
+          实时
+        </view>
+      </view>
     </view>
 
-    <StateView v-if="loading" title="快递加载中..." custom-class="mt-24" />
-    <StateView v-else-if="failed" title="快递加载失败" :show-retry="true" custom-class="mt-24" @retry="loadData" />
-    <StateView
-      v-else-if="!items.length"
-      title="暂无快递包裹"
-      description="已支付且需要发货的订单，会在这里展示运输进度。"
-      custom-class="mt-24"
-    />
-
-    <template v-else>
-      <view class="card summary-card mt-24">
-        <view class="row-between">
-          <view>
-            <view class="section-title summary-title">快递服务</view>
-            <view class="summary-subtitle">统一查看运输进度、单号和签收状态</view>
-          </view>
-          <view class="badge badge-blue">实时同步</view>
+    <!-- Summary Card -->
+    <view class="summary-card">
+      <view class="summary-header">
+        <view class="summary-info">
+          <text class="summary-title">快递服务</text>
+          <text class="summary-subtitle">统一查看运输进度</text>
         </view>
-
-        <view class="summary-grid mt-20">
-          <view class="summary-item">
-            <view class="summary-num">{{ items.length }}</view>
-            <view class="summary-label">全部包裹</view>
-          </view>
-          <view class="summary-item">
-            <view class="summary-num">{{ shippingCount }}</view>
-            <view class="summary-label">运输中</view>
-          </view>
-          <view class="summary-item">
-            <view class="summary-num">{{ deliveredCount }}</view>
-            <view class="summary-label">已签收</view>
-          </view>
+        <view class="summary-badge">实时</view>
+      </view>
+      <view class="stats-grid">
+        <view class="stat-item">
+          <text class="stat-value">{{ items.length }}</text>
+          <text class="stat-label">全部包裹</text>
+        </view>
+        <view class="stat-divider" />
+        <view class="stat-item">
+          <text class="stat-value">{{ shippingCount }}</text>
+          <text class="stat-label">运输中</text>
+        </view>
+        <view class="stat-divider" />
+        <view class="stat-item">
+          <text class="stat-value">{{ deliveredCount }}</text>
+          <text class="stat-label">已签收</text>
         </view>
       </view>
+    </view>
 
-      <view class="status-wrap mt-20">
-        <view
-          v-for="tab in tabs"
-          :key="tab.value"
-          class="status-chip interactive"
-          :class="{ active: activeTab === tab.value }"
-          @click="activeTab = tab.value"
-        >
-          {{ tab.label }}
-        </view>
+    <!-- Status Tabs -->
+    <view class="tabs-wrap">
+      <view
+        v-for="tab in tabs"
+        :key="tab.value"
+        class="tab-item"
+        :class="{ active: activeTab === tab.value }"
+        @click="activeTab = tab.value"
+      >
+        {{ tab.label }}
       </view>
+    </view>
 
-      <StateView
-        v-if="!filteredItems.length"
-        title="当前筛选下暂无包裹"
-        description="可以切换筛选条件，查看其他运输状态。"
-        custom-class="mt-20"
-      />
+    <!-- Loading -->
+    <view v-if="loading && !items.length" class="loading-state">
+      <view v-for="i in 3" :key="i" class="skeleton-item">
+        <view class="skeleton skeleton-content" />
+      </view>
+    </view>
 
-      <view v-else class="card-list mt-20">
-        <view v-for="item in filteredItems" :key="item.order_id" class="card ship-card interactive" @click="goDetail(item.order_id)">
-          <view class="row-between">
-            <view class="ship-company">{{ item.carrier_name }}</view>
-            <view class="badge" :class="item.status === 'delivered' ? 'badge-green' : 'badge-blue'">{{ item.status_text }}</view>
-          </view>
+    <!-- Error -->
+    <view v-else-if="failed && !items.length" class="error-state">
+      <text class="error-icon">⚠</text>
+      <text class="error-text">快递加载失败</text>
+      <view class="retry-btn" @click="loadData">点击重试</view>
+    </view>
 
-          <view class="ship-title">{{ item.title }}</view>
-          <view class="ship-hint">{{ item.status_hint }}</view>
+    <!-- Empty -->
+    <view v-else-if="!filteredItems.length" class="empty-state">
+      <text class="empty-icon">◇</text>
+      <text class="empty-title">暂无快递包裹</text>
+      <text class="empty-desc">已支付且需要发货的订单</text>
+    </view>
 
-          <view class="progress-track">
-            <view class="progress-fill" :style="{ width: `${item.progress_percent || 0}%` }"></view>
-          </view>
-
-          <view class="ship-message">{{ item.latest_message }}</view>
-
-          <view class="meta-grid">
-            <view class="ship-meta">单号 {{ item.tracking_no }}</view>
-            <view class="ship-meta">{{ item.delivery_mode_text }}</view>
-            <view class="ship-meta">更新时间 {{ formatTime(item.updated_at) }}</view>
-          </view>
-
-          <view class="ship-actions">
-            <button class="btn btn-ghost mini-btn" @click.stop="copyTracking(item.tracking_no)">复制单号</button>
-            <button v-if="item.carrier_phone" class="btn btn-ghost mini-btn" @click.stop="callPhone(item.carrier_phone)">联系商家</button>
-            <button class="btn btn-primary mini-btn" @click.stop="goDetail(item.order_id)">查看详情</button>
+    <!-- Shipments List -->
+    <view v-else class="shipments-list">
+      <view v-for="item in filteredItems" :key="item.order_id" class="ship-card" @click="goDetail(item.order_id)">
+        <view class="ship-header">
+          <text class="ship-company">{{ item.carrier_name }}</text>
+          <view class="ship-status" :class="item.status">
+            {{ item.status_text }}
           </view>
         </view>
+        <text class="ship-title">{{ item.title }}</text>
+        <text class="ship-hint">{{ item.status_hint }}</text>
+        <view class="progress-track">
+          <view class="progress-fill" :style="{ width: `${item.progress_percent || 0}%` }"></view>
+        </view>
+        <text class="ship-message">{{ item.latest_message }}</text>
+        <view class="ship-meta">
+          <text>单号 {{ item.tracking_no }}</text>
+          <text>{{ item.delivery_mode_text }}</text>
+          <text>更新 {{ formatTime(item.updated_at) }}</text>
+        </view>
+        <view class="ship-actions">
+          <view class="action-btn" @click.stop="copyTracking(item.tracking_no)">复制</view>
+          <view v-if="item.carrier_phone" class="action-btn" @click.stop="callPhone(item.carrier_phone)">联系</view>
+          <view class="action-btn primary">查看详情</view>
+        </view>
       </view>
-    </template>
+    </view>
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import StateView from '@/components/StateView.vue';
 import { commerceApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
+import { trackPageView } from '@/utils/track';
 
 const tabs = [
   { label: '全部', value: 'all' },
@@ -150,153 +172,379 @@ function callPhone(phone) {
   uni.makePhoneCall({ phoneNumber: String(phone) });
 }
 
+function goBack() {
+  uni.navigateBack();
+}
+
 function goDetail(orderId) {
   uni.navigateTo({ url: `/subpackages/profile/shipping-detail?order_id=${orderId}` });
 }
 
-onShow(loadData);
+onShow(() => {
+  trackPageView('shipping');
+  loadData();
+});
 </script>
 
 <style scoped>
-@import '@/styles/common.css';
+@import '@/styles/elegant.css';
 
-.feature-page { padding-bottom: 36rpx; }
-.hero-card {
-  background:
-    radial-gradient(circle at 96% 8%, rgba(94, 151, 255, 0.14), transparent 42%),
-    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
-  border: 1rpx solid rgba(255, 154, 106, 0.16);
+.shipping-page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 48rpx;
 }
-.hero-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #ff6a00;
-  font-size: 20rpx;
-  font-weight: 800;
+
+/* Header */
+.page-header {
+  padding: 24rpx 32rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: var(--card);
+  border-bottom: 1rpx solid var(--border);
 }
-.summary-card {
-  background:
-    radial-gradient(circle at 96% 8%, rgba(94, 151, 255, 0.14), transparent 42%),
-    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
-}
-.summary-title {
-  margin-bottom: 0;
-}
-.summary-subtitle {
-  margin-top: 10rpx;
-  font-size: 22rpx;
-  color: #8b7158;
-}
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12rpx;
-}
-.summary-item {
-  padding: 16rpx;
-  border-radius: 18rpx;
-  background: #fcf6ef;
-  border: 1rpx solid rgba(198, 161, 124, 0.14);
-}
-.summary-num {
-  font-size: 34rpx;
-  font-weight: 800;
-  color: #4f321a;
-}
-.summary-label {
-  margin-top: 6rpx;
-  font-size: 22rpx;
-  color: #8b7158;
-}
-.status-wrap {
+
+.header-content {
   display: flex;
-  gap: 12rpx;
-  overflow-x: auto;
+  align-items: center;
+  gap: 16rpx;
 }
-.status-chip {
-  flex-shrink: 0;
-  padding: 12rpx 22rpx;
-  border-radius: 999rpx;
-  background: #f6f1ea;
-  color: #7f6954;
-  font-size: 24rpx;
-  border: 1rpx solid rgba(194, 156, 117, 0.18);
+
+.logo-mark {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.status-chip.active {
-  background: linear-gradient(135deg, #ff7a00, #ff5f3d);
-  color: #ffffff;
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  color: var(--text);
+  transition: opacity var(--duration-fast);
+}
+
+.back-btn:active {
+  opacity: 0.6;
+}
+
+.page-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
+  flex: 1;
+}
+
+.header-badge {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 16rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 20rpx;
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-full);
+}
+
+/* Summary Card */
+.summary-card {
+  margin: 24rpx;
+  padding: 32rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-radius: var(--radius-xl);
+  box-shadow: 0 12rpx 32rpx rgba(16, 185, 129, 0.25);
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.summary-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: white;
+  display: block;
+}
+
+.summary-subtitle {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.8);
+  display: block;
+  margin-top: 4rpx;
+}
+
+.summary-badge {
+  padding: 8rpx 16rpx;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 20rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.stats-grid {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-lg);
+  padding: 20rpx;
+}
+
+.stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.stat-value {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: white;
+}
+
+.stat-label {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.stat-divider {
+  width: 1rpx;
+  height: 48rpx;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Tabs */
+.tabs-wrap {
+  display: flex;
+  gap: 16rpx;
+  padding: 0 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.tab-item {
+  padding: 12rpx 24rpx;
+  background: var(--card);
+  color: var(--text-muted);
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 24rpx;
+  border: 1rpx solid var(--border-light);
+}
+
+.tab-item.active {
+  background: var(--primary);
+  color: white;
   border-color: transparent;
 }
-.card-list {
+
+/* Loading */
+.loading-state {
+  padding: 0 24rpx;
   display: flex;
   flex-direction: column;
   gap: 16rpx;
 }
+
+.skeleton-item {
+  padding: 24rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-content {
+  height: 240rpx;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 32rpx;
+}
+
+.error-icon {
+  font-size: 80rpx;
+  color: var(--error);
+  margin-bottom: 24rpx;
+}
+
+.error-text {
+  font-size: 28rpx;
+  color: var(--text-muted);
+  margin-bottom: 32rpx;
+}
+
+.retry-btn {
+  padding: 16rpx 40rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+}
+
+/* Empty */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 32rpx;
+}
+
+.empty-icon {
+  font-size: 120rpx;
+  color: var(--border);
+  margin-bottom: 32rpx;
+}
+
+.empty-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8rpx;
+}
+
+.empty-desc {
+  font-size: 26rpx;
+  color: var(--text-muted);
+}
+
+/* Shipments List */
+.shipments-list {
+  padding: 0 24rpx;
+}
+
 .ship-card {
-  border-radius: 24rpx;
-  border: 1rpx solid rgba(255, 154, 106, 0.16);
+  padding: 28rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  margin-bottom: 16rpx;
+  box-shadow: var(--shadow-sm);
 }
+
+.ship-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
 .ship-company {
-  font-size: 24rpx;
-  color: #8b7158;
+  font-size: 22rpx;
+  color: var(--text-muted);
 }
+
+.ship-status {
+  padding: 6rpx 16rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.ship-status.shipping {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.ship-status.delivered {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
 .ship-title {
-  margin-top: 14rpx;
   font-size: 30rpx;
   font-weight: 700;
-  color: #4f321a;
-  line-height: 1.35;
+  color: var(--text);
+  display: block;
+  margin-bottom: 8rpx;
 }
+
 .ship-hint {
-  margin-top: 10rpx;
   font-size: 22rpx;
-  color: #7d6753;
-  line-height: 1.5;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 16rpx;
 }
+
 .progress-track {
-  margin-top: 16rpx;
   height: 10rpx;
   border-radius: 999rpx;
   overflow: hidden;
-  background: #f1e4d6;
+  background: var(--border-light);
+  margin-bottom: 16rpx;
 }
+
 .progress-fill {
   height: 100%;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #ff7a00, #ff5f3d);
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
 }
+
 .ship-message {
-  margin-top: 14rpx;
-  font-size: 23rpx;
-  line-height: 1.5;
-  color: #7d6753;
+  font-size: 22rpx;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 16rpx;
 }
-.meta-grid {
+
+.ship-meta {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
-  margin-top: 14rpx;
+  gap: 6rpx;
+  margin-bottom: 16rpx;
 }
-.ship-meta {
-  font-size: 21rpx;
-  color: #9f8a77;
+
+.ship-meta text {
+  font-size: 20rpx;
+  color: var(--text-muted);
 }
+
 .ship-actions {
-  margin-top: 18rpx;
   display: flex;
   gap: 12rpx;
 }
-.mini-btn {
+
+.action-btn {
   flex: 1;
-  min-width: 0;
-  height: 60rpx;
-  line-height: 60rpx;
-  padding: 0;
-  font-size: 23rpx;
+  padding: 16rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  text-align: center;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1rpx solid var(--border-light);
 }
-.interactive { transition: transform 180ms ease, opacity 180ms ease; }
-.interactive:active { transform: scale(0.98); opacity: 0.92; }
+
+.action-btn.primary {
+  background: var(--primary);
+  color: white;
+  border-color: transparent;
+}
 </style>

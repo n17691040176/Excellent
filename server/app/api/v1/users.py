@@ -137,7 +137,7 @@ def update_user_status(
     user_id: int,
     payload: UpdateUserStatusRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     user = UserService.update_user_status(db, user_id, UserStatus(payload.status))
     return {'code': 0, 'message': 'success', 'data': user}

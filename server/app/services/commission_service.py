@@ -40,7 +40,7 @@ class CommissionService:
         keyword: str | None = None,
     ):
         query = db.query(UserCommission).join(User, User.id == UserCommission.user_id)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(User.team_id == AdminScopeService.require_team_id(current_user))
         keyword_value = keyword.strip() if keyword else ''
         if keyword_value:
@@ -124,6 +124,30 @@ class CommissionService:
             flow.status = CommissionStatus.SETTLED
             flow.settled_at = now()
         db.commit()
+
+    @staticmethod
+    def cancel_for_order(db: Session, order_id: int) -> None:
+        flows = db.query(CommissionFlow).filter(
+            CommissionFlow.order_id == order_id,
+            CommissionFlow.status.in_([CommissionStatus.FROZEN, CommissionStatus.SETTLED]),
+        ).all()
+        for flow in flows:
+            summary = db.query(UserCommission).filter(UserCommission.user_id == flow.beneficiary_user_id).first()
+            if not summary:
+                flow.status = CommissionStatus.CANCELED
+                continue
+            amount = quantize_amount(flow.commission_amount)
+            if flow.status == CommissionStatus.FROZEN:
+                summary.frozen_amount = max(quantize_amount(summary.frozen_amount) - amount, Decimal('0.00'))
+            else:
+                available = quantize_amount(summary.available_amount)
+                if available < amount:
+                    raise ConflictError('Settled commission balance is insufficient for refund')
+                summary.available_amount = available - amount
+            summary.total_amount = max(quantize_amount(summary.total_amount) - amount, Decimal('0.00'))
+            summary.updated_at = now()
+            flow.status = CommissionStatus.CANCELED
+        db.flush()
 
     @staticmethod
     def create_withdraw(db: Session, user_id: int, withdraw_type: WithdrawType, amount: float, remark: str | None = None) -> WithdrawRequest:
@@ -221,14 +245,14 @@ class CommissionService:
     @staticmethod
     def list_flows_for_admin(db: Session, current_user: User) -> list[CommissionFlow]:
         query = db.query(CommissionFlow)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(CommissionFlow.team_id == AdminScopeService.require_team_id(current_user))
         return query.order_by(CommissionFlow.id.desc()).all()
 
     @staticmethod
     def list_withdraws_for_admin(db: Session, current_user: User) -> list[WithdrawRequest]:
         query = db.query(WithdrawRequest)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             team_id = AdminScopeService.require_team_id(current_user)
             query = query.outerjoin(User, WithdrawRequest.user_id == User.id).filter(
                 or_(
@@ -240,7 +264,7 @@ class CommissionService:
 
     @staticmethod
     def _ensure_withdraw_visible(db: Session, record: WithdrawRequest, current_user: User) -> None:
-        if AdminScopeService.is_super_admin(current_user):
+        if AdminScopeService.has_global_scope(current_user):
             return
         scoped_team_id = AdminScopeService.require_team_id(current_user)
         record_team_id = record.team_id
@@ -402,7 +426,7 @@ class CommissionService:
         return db.query(Order.id).filter(
             Order.user_id == user.id,
             Order.pay_status == PayStatus.PAID,
-            Order.order_status.notin_([OrderStatus.CLOSED, OrderStatus.REFUNDED]),
+            Order.order_status.notin_([OrderStatus.REFUND]),
         ).first() is not None
 
     @staticmethod
@@ -534,6 +558,21 @@ class CommissionService:
         record.reviewed_at = now()
         if remark:
             record.remark = remark
+        db.commit()
+        db.refresh(record)
+        return record
+
+    @staticmethod
+    def pay_withdraw(db: Session, withdraw_id: int, current_user: User) -> WithdrawRequest:
+        record = db.get(WithdrawRequest, withdraw_id)
+        if not record:
+            raise NotFoundError('Withdraw request not found')
+        if record.status != WithdrawStatus.APPROVED:
+            raise ConflictError('Only approved withdraw requests can be paid')
+        CommissionService._ensure_withdraw_visible(db, record, current_user)
+        record.status = WithdrawStatus.PAID
+        record.paid_by = current_user.id
+        record.paid_at = now()
         db.commit()
         db.refresh(record)
         return record

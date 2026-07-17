@@ -29,18 +29,18 @@
   font-size: 88px;
   font-weight: 800;
   line-height: 1;
-  color: var(--brand-teal);
+  color: var(--accent);
 }
 
 h1 {
   margin: 22px 0 12px;
-  color: var(--brand-deep);
+  color: var(--text-primary);
 }
 
 p {
   margin: 0;
   line-height: 1.8;
-  color: rgba(15, 47, 47, 0.64);
+  color: var(--text-secondary);
 }
 
 .exception-actions {

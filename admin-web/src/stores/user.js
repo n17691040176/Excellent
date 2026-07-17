@@ -11,6 +11,7 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     role: (state) => state.userInfo?.global_role || '',
+    permissions: (state) => state.userInfo?.permissions || null,
     isAdmin: (state) => ['SUPER_ADMIN', 'TEAM_ADMIN'].includes(state.userInfo?.global_role)
   },
   actions: {

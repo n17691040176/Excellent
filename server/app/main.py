@@ -12,8 +12,10 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.logger import configure_logging
+from app.core.payment_config import validate_payment_config
 from app.core.redis import get_redis_client
 from app.db.init_db import init_db
+from app.db.migrations import apply_schema_migrations
 from app.db.seed import seed_defaults
 from app.db.session import SessionLocal
 from app.services.page_decoration_service import PageDecorationService
@@ -22,8 +24,10 @@ from app.services.page_decoration_service import PageDecorationService
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
+    validate_payment_config(settings.app_env)
     PageDecorationService.upload_root()
     init_db()
+    apply_schema_migrations()
     db = SessionLocal()
     try:
         seed_defaults(db)

@@ -12,10 +12,6 @@ export const PERMISSION_MATRIX = {
     'users:manage-commerce',
     'teams:view',
     'teams:edit',
-    'packages:view',
-    'packages:create',
-    'packages:edit',
-    'packages:shelf',
     'products:view',
     'products:create',
     'products:edit',
@@ -26,6 +22,10 @@ export const PERMISSION_MATRIX = {
     'commission:view',
     'withdraws:view',
     'withdraws:review',
+    'shipments:view',
+    'shipments:manage',
+    'region:view',
+    'invites:view',
     'suppliers:view',
     'assets:view',
     'decoration:view',
@@ -46,8 +46,11 @@ export function hasRole(userRole, allowRoles = []) {
   return allowRoles.includes(userRole)
 }
 
-export function hasPermission(userRole, permission) {
+export function hasPermission(userRole, permission, userPermissions = null) {
   if (!permission) return true
+  if (Array.isArray(userPermissions)) {
+    return userPermissions.includes('*') || userPermissions.includes(permission)
+  }
   const granted = PERMISSION_MATRIX[userRole] || []
   return granted.includes('*') || granted.includes(permission)
 }

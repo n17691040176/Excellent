@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 from typing import cast
 
@@ -7,15 +8,19 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
+from app.core.payment_config import enabled_external_payment_channels, payment_config
 from app.models.address import UserAddress
-from app.models.enums import AssetType, OrderStatus, OrderType, PayStatus, ProductStatus, ZoneType
+from app.models.asset import UserAssetLedger
+from app.models.enums import AssetType, OrderStatus, OrderType, PaymentStatus, PayStatus, ProductStatus, ZoneType
 from app.models.order import Order, OrderAssetDeduction, OrderItem
+from app.models.payment import PaymentTransaction
 from app.models.product import Product, ProductZoneConfig
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 from app.services.catalog_service import ProductService
 from app.services.commission_service import CommissionService
+from app.services.region_dividend_service import RegionDividendService
 from app.utils.helpers import generate_order_no, now, quantize_amount
 
 INTERNAL_PAY_CHANNELS = {'BALANCE', 'VOUCHER', 'POINTS'}
@@ -34,12 +39,14 @@ PAY_CHANNEL_ASSET_MAP = {
     'VOUCHER': AssetType.VOUCHER,
 }
 
+UNPAID_ORDER_EXPIRE_MINUTES = 30
+
 
 class OrderService:
     @staticmethod
     def _base_admin_query(db: Session, current_user: User):
         query = db.query(Order).join(User, User.id == Order.user_id)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             team_id = AdminScopeService.require_team_id(current_user)
             query = query.filter(Order.team_id == team_id)
         return query
@@ -57,6 +64,7 @@ class OrderService:
         page: int = 1,
         page_size: int = 20,
     ) -> dict:
+        OrderService.expire_pending_orders(db)
         query = OrderService._base_admin_query(db, current_user)
 
         if keyword:
@@ -96,6 +104,7 @@ class OrderService:
 
     @staticmethod
     def get_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
+        OrderService.expire_pending_orders(db)
         order = db.get(Order, order_id)
         if not order:
             raise NotFoundError('Order not found')
@@ -103,17 +112,184 @@ class OrderService:
         return order
 
     @staticmethod
+    def order_requires_shipping(db: Session, order_id: int) -> bool:
+        product_ids = [
+            product_id
+            for (product_id,) in db.query(OrderItem.product_id).filter(OrderItem.order_id == order_id).all()
+        ]
+        if not product_ids:
+            return False
+        return bool(
+            db.query(Product.id).filter(
+                Product.id.in_(product_ids),
+                Product.requires_shipping.is_(True),
+            ).first()
+        )
+
+    @staticmethod
+    def _restore_order_inventory(db: Session, order: Order) -> None:
+        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+        for item in items:
+            product = db.get(Product, item.product_id)
+            if not product:
+                continue
+            quantity = max(int(item.quantity or 0), 0)
+            product.stock = int(product.stock or 0) + quantity
+            product.sold_count = max(int(product.sold_count or 0) - quantity, 0)
+
+    @staticmethod
+    def _refund_order_deductions(db: Session, order: Order) -> None:
+        deductions = db.query(OrderAssetDeduction).filter(OrderAssetDeduction.order_id == order.id).all()
+        for deduction in deductions:
+            AssetService.refund_consumed_amount(
+                db,
+                order.user_id,
+                AssetType(str(deduction.asset_type).upper()),
+                deduction.deduct_amount,
+                'ORDER_CANCEL_REFUND',
+                source_id=order.id,
+                source_no=order.order_no,
+                remark='Order canceled or refunded',
+            )
+
+    @staticmethod
+    def _revoke_order_rewards(db: Session, order: Order) -> None:
+        reward_business_types = {
+            'SELF_OPERATED_REWARD',
+            'PACKAGE_REWARD',
+            'POINTS_SUBSIDY',
+            'PACKAGE_REFERRAL_REWARD',
+        }
+        rewards = db.query(UserAssetLedger).filter(
+            UserAssetLedger.business_type.in_(reward_business_types),
+            UserAssetLedger.source_id == order.id,
+        ).all()
+        for reward in rewards:
+            AssetService.revoke_added_amount(
+                db,
+                reward.user_id,
+                reward.asset_type,
+                reward.change_amount,
+                'ORDER_REFUND_REWARD_REVOKE',
+                source_id=order.id,
+                source_no=order.order_no,
+                remark='Reward revoked after order refund',
+            )
+
+    @staticmethod
+    def _close_refunded_payment_transactions(db: Session, order: Order) -> None:
+        transactions = db.query(PaymentTransaction).filter(
+            PaymentTransaction.order_id == order.id,
+            PaymentTransaction.status == PaymentStatus.PAID,
+        ).all()
+        for transaction in transactions:
+            notify_payload = transaction.notify_payload or {}
+            if not bool(notify_payload.get('mocked')):
+                raise ConflictError('External payment refund must be completed through the payment provider')
+            transaction.status = PaymentStatus.CLOSED
+            transaction.failed_reason = 'Mock payment refunded'
+
+    @staticmethod
+    def _close_pending_payment_transactions(db: Session, order: Order) -> None:
+        transactions = db.query(PaymentTransaction).filter(
+            PaymentTransaction.order_id == order.id,
+            PaymentTransaction.status == PaymentStatus.PENDING,
+        ).all()
+        for transaction in transactions:
+            transaction.status = PaymentStatus.CLOSED
+            transaction.failed_reason = 'Order canceled or expired'
+
+    @staticmethod
+    def _cancel_order_instance(
+        db: Session,
+        order: Order,
+        *,
+        refunded: bool,
+        commit: bool = True,
+    ) -> Order:
+        if order.order_status == OrderStatus.REFUND:
+            return order
+        if order.order_type == OrderType.LOCAL_LIFE_ORDER:
+            raise ConflictError('Local-life orders use the verification workflow')
+        requires_shipping = OrderService.order_requires_shipping(db, order.id)
+        if order.order_status == OrderStatus.COMPLETED and (not refunded or requires_shipping):
+            raise ConflictError('Completed shipping order cannot be canceled or directly refunded')
+        if refunded:
+            if order.pay_status != PayStatus.PAID:
+                raise ConflictError('Only paid orders can be refunded')
+            allowed_statuses = {OrderStatus.PENDING_SHIP, OrderStatus.SHIPPED}
+            if not requires_shipping:
+                allowed_statuses.add(OrderStatus.COMPLETED)
+            if order.order_status not in allowed_statuses:
+                raise ConflictError('Current order status cannot be refunded')
+            OrderService._close_refunded_payment_transactions(db, order)
+            CommissionService.cancel_for_order(db, order.id)
+            OrderService._revoke_order_rewards(db, order)
+        else:
+            if order.pay_status != PayStatus.UNPAID or order.order_status != OrderStatus.PENDING_PAYMENT:
+                raise ConflictError('Only unpaid pending orders can be canceled')
+
+        OrderService._close_pending_payment_transactions(db, order)
+        OrderService._refund_order_deductions(db, order)
+        OrderService._restore_order_inventory(db, order)
+        order.order_status = OrderStatus.REFUND
+        order.pay_status = PayStatus.REFUNDED if refunded else PayStatus.UNPAID
+        order.payable_amount = Decimal('0.00')
+        if not refunded:
+            order.paid_amount = Decimal('0.00')
+        order.confirmed_at = None
+
+        if commit:
+            db.commit()
+            db.refresh(order)
+        else:
+            db.flush()
+        return order
+
+    @staticmethod
+    def expire_pending_orders(db: Session, user_id: int | None = None) -> int:
+        threshold = now() - timedelta(minutes=UNPAID_ORDER_EXPIRE_MINUTES)
+        query = db.query(Order).filter(
+            Order.order_status == OrderStatus.PENDING_PAYMENT,
+            Order.pay_status == PayStatus.UNPAID,
+            Order.order_type != OrderType.LOCAL_LIFE_ORDER,
+            Order.created_at < threshold,
+        )
+        if user_id is not None:
+            query = query.filter(Order.user_id == user_id)
+        rows = query.all()
+        for order in rows:
+            OrderService._cancel_order_instance(db, order, refunded=False, commit=False)
+        if rows:
+            db.commit()
+        return len(rows)
+
+    @staticmethod
     def _confirm_order_instance(db: Session, order: Order) -> Order:
         if order.pay_status != PayStatus.PAID:
             raise ConflictError('Only paid orders can be confirmed')
-        if order.order_status == OrderStatus.CONFIRMED:
+        if order.order_status == OrderStatus.COMPLETED:
             return order
-        if order.order_status == OrderStatus.CLOSED:
-            raise ConflictError('Closed order cannot be confirmed')
-        order.order_status = OrderStatus.CONFIRMED
+        if order.order_status == OrderStatus.REFUND:
+            raise ConflictError('Refunded order cannot be confirmed')
+        if order.order_status != OrderStatus.SHIPPED:
+            raise ConflictError('Only shipped orders can be confirmed')
+        order.order_status = OrderStatus.COMPLETED
         order.confirmed_at = now()
         db.commit()
+
+        # 结算分销佣金
         CommissionService.settle_for_order(db, order.id)
+
+        # 处理区域订单分红（订单完成后立刻分红）
+        if order.legacy_address_id:
+            address = db.get(UserAddress, order.legacy_address_id)
+            if address:
+                RegionDividendService.process_order_dividend(
+                    db, order,
+                    {'province': address.province, 'city': address.city, 'district': address.district}
+                )
+
         db.refresh(order)
         return order
 
@@ -125,23 +301,40 @@ class OrderService:
     @staticmethod
     def close_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
         order = OrderService.get_order_for_admin(db, order_id, current_user)
-        if order.order_status == OrderStatus.CONFIRMED:
-            raise ConflictError('Confirmed order cannot be closed')
-        if order.pay_status == PayStatus.PAID:
-            raise ConflictError('Paid order cannot be closed directly')
-        if order.order_status == OrderStatus.CLOSED:
-            return order
-        order.order_status = OrderStatus.CLOSED
-        db.commit()
-        db.refresh(order)
-        return order
+        return OrderService._cancel_order_instance(db, order, refunded=False)
+
+    @staticmethod
+    def refund_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
+        order = OrderService.get_order_for_admin(db, order_id, current_user)
+        return OrderService._cancel_order_instance(db, order, refunded=True)
 
     @staticmethod
     def mark_paid_for_admin(db: Session, order_id: int, current_user: User) -> Order:
         order = OrderService.get_order_for_admin(db, order_id, current_user)
-        if order.order_status == OrderStatus.CLOSED:
-            raise ConflictError('Closed order cannot be marked paid')
+        if order.order_status == OrderStatus.REFUND:
+            raise ConflictError('Refunded order cannot be marked paid')
         return OrderService._mark_paid(db, order)
+
+    @staticmethod
+    def ship_order_for_admin(
+        db: Session,
+        order_id: int,
+        current_user: User,
+        tracking_no: str | None = None,
+        tracking_company: str | None = None
+    ) -> Order:
+        order = OrderService.get_order_for_admin(db, order_id, current_user)
+        if order.order_status not in (OrderStatus.PENDING_SHIP,):
+            raise ConflictError('Only pending-ship orders can be shipped')
+        if not str(tracking_no or '').strip():
+            raise ConflictError('Tracking number is required')
+        order.order_status = OrderStatus.SHIPPED
+        order.legacy_logistics_no = str(tracking_no).strip()
+        if tracking_company:
+            order.legacy_logistics_name = str(tracking_company).strip() or None
+        db.commit()
+        db.refresh(order)
+        return order
 
     @staticmethod
     def _zone_config_defaults(zone_type: ZoneType) -> dict:
@@ -267,7 +460,7 @@ class OrderService:
         ).filter(
             Order.user_id == current_user.id,
             OrderItem.product_id == product_id,
-            Order.order_status != OrderStatus.CLOSED,
+            Order.order_status != OrderStatus.REFUND,
         ).scalar() or 0
         if int(purchased) + quantity > per_user_limit:
             raise ConflictError('Hot sale product purchase limit exceeded')
@@ -382,7 +575,9 @@ class OrderService:
         target_id = address_id
         if target_id is None:
             address = OrderService._get_default_address(db, user_id)
-            return address.id if address else None
+            if not address:
+                raise ConflictError('Shipping address required')
+            return address.id
         address = db.query(UserAddress).filter(
             UserAddress.id == target_id,
             UserAddress.user_id == user_id,
@@ -463,6 +658,10 @@ class OrderService:
         resolved_address_id = OrderService._validate_address(db, current_user.id, address_id, requires_shipping)
 
         OrderService._validate_payment_rules(zone_type, total_amount, configs, deductions_by_type, pay_channel)
+        for asset_type, amount in deductions_by_type.items():
+            account = AssetService.get_account(db, current_user.id, asset_type)
+            if quantize_amount(account.available_amount) < quantize_amount(amount):
+                raise ConflictError(f'{asset_type.value} insufficient')
 
         points_amount = deductions_by_type.get(AssetType.POINTS, Decimal('0.00'))
         channel_asset_type = PAY_CHANNEL_ASSET_MAP.get(pay_channel)
@@ -509,6 +708,7 @@ class OrderService:
 
     @staticmethod
     def create_order(db: Session, current_user: User, payload: dict) -> Order:
+        OrderService.expire_pending_orders(db)
         items_payload = payload['items']
         if not items_payload:
             raise ConflictError('Order items required')
@@ -522,7 +722,7 @@ class OrderService:
         zone_types: set[ZoneType] = set()
 
         for item in items_payload:
-            product = db.get(Product, item['product_id'])
+            product = db.query(Product).filter(Product.id == item['product_id']).with_for_update().first()
             if not product:
                 raise NotFoundError('Product not found')
             if not ProductService.is_visible_to_user(db, current_user, product):
@@ -598,7 +798,8 @@ class OrderService:
             payable_amount=cash_due,
             paid_amount=max(total_amount - cash_due, Decimal('0.00')),
             pay_status=PayStatus.UNPAID,
-            order_status=OrderStatus.CREATED,
+            order_status=OrderStatus.PENDING_PAYMENT,
+            legacy_address_id=payment_plan['address_id'],
         )
         db.add(order)
         db.flush()
@@ -648,10 +849,12 @@ class OrderService:
 
     @staticmethod
     def list_orders(db: Session, user_id: int) -> list[Order]:
+        OrderService.expire_pending_orders(db, user_id=user_id)
         return db.query(Order).filter(Order.user_id == user_id).order_by(Order.id.desc()).all()
 
     @staticmethod
     def get_order(db: Session, user_id: int, order_id: int) -> Order:
+        OrderService.expire_pending_orders(db, user_id=user_id)
         order = db.query(Order).filter(Order.id == order_id, Order.user_id == user_id).first()
         if not order:
             raise NotFoundError('Order not found')
@@ -674,6 +877,8 @@ class OrderService:
     def _mark_paid(db: Session, order: Order, external_paid_amount: Decimal | None = None) -> Order:
         if order.pay_status == PayStatus.PAID:
             return order
+        if order.order_status == OrderStatus.REFUND:
+            raise ConflictError('Canceled or refunded order cannot be paid')
         if external_paid_amount is not None:
             order.paid_amount = quantize_amount(Decimal(str(order.discount_amount)) + external_paid_amount)
             order.payable_amount = Decimal('0.00')
@@ -682,8 +887,11 @@ class OrderService:
             order.payable_amount = Decimal('0.00')
 
         order.pay_status = PayStatus.PAID
-        order.order_status = OrderStatus.PAID
+        requires_shipping = OrderService.order_requires_shipping(db, order.id)
+        order.order_status = OrderStatus.PENDING_SHIP if requires_shipping else OrderStatus.COMPLETED
         order.paid_at = now()
+        if not requires_shipping:
+            order.confirmed_at = order.paid_at
 
         buyer = db.get(User, order.user_id)
         if buyer:
@@ -699,6 +907,9 @@ class OrderService:
 
         db.commit()
         db.refresh(order)
+        if not requires_shipping:
+            CommissionService.settle_for_order(db, order.id)
+            db.refresh(order)
         return order
 
     @staticmethod
@@ -710,6 +921,8 @@ class OrderService:
 
     @staticmethod
     def pay_order_for_user(db: Session, user_id: int, order_id: int) -> Order:
+        if not payment_config.mock_external_payment:
+            raise ConflictError('Demo payment is disabled')
         order = OrderService.get_order(db, user_id, order_id)
         return OrderService._mark_paid(db, order)
 
@@ -717,6 +930,16 @@ class OrderService:
     def confirm_order(db: Session, user_id: int, order_id: int) -> Order:
         order = OrderService.get_order(db, user_id, order_id)
         return OrderService._confirm_order_instance(db, order)
+
+    @staticmethod
+    def cancel_order(db: Session, user_id: int, order_id: int) -> Order:
+        order = OrderService.get_order(db, user_id, order_id)
+        return OrderService._cancel_order_instance(db, order, refunded=False)
+
+    @staticmethod
+    def refund_order(db: Session, user_id: int, order_id: int) -> Order:
+        order = OrderService.get_order(db, user_id, order_id)
+        return OrderService._cancel_order_instance(db, order, refunded=True)
 
     @staticmethod
     def preview_order_payment(
@@ -782,8 +1005,13 @@ class OrderService:
                 {'value': 'POINTS', 'label': '纯积分'},
                 {'value': 'BALANCE', 'label': '余额'},
                 {'value': 'VOUCHER', 'label': '消费金'},
-                {'value': 'WECHAT', 'label': '微信支付'},
-                {'value': 'ALIPAY', 'label': '支付宝支付'},
+                *[
+                    {
+                        'value': channel,
+                        'label': '微信支付' if channel == 'WECHAT' else '支付宝支付',
+                    }
+                    for channel in enabled_external_payment_channels()
+                ],
             ],
         }
 
@@ -797,8 +1025,8 @@ class OrderService:
         auto_complete: bool = True,
     ) -> dict:
         order = OrderService.get_order(db, current_user.id, order_id)
-        if order.order_status == OrderStatus.CLOSED:
-            raise ConflictError('Closed order cannot be paid')
+        if order.order_status == OrderStatus.REFUND:
+            raise ConflictError('Refunded order cannot be paid')
         if order.pay_status == PayStatus.PAID:
             return {'order': order, 'payment': {'status': 'PAID', 'message': 'Order already paid'}}
 

@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.address import UserAddress
+from app.models.order import Order
 
 
 class AddressService:
@@ -11,6 +12,8 @@ class AddressService:
 
     @staticmethod
     def create_address(db: Session, user_id: int, payload: dict) -> UserAddress:
+        if not db.query(UserAddress.id).filter(UserAddress.user_id == user_id).first():
+            payload['is_default'] = True
         if payload.get('is_default'):
             db.query(UserAddress).filter(UserAddress.user_id == user_id).update({UserAddress.is_default: False})
         address = UserAddress(user_id=user_id, **payload)
@@ -38,6 +41,8 @@ class AddressService:
         address = db.query(UserAddress).filter(UserAddress.id == address_id, UserAddress.user_id == user_id).first()
         if not address:
             raise NotFoundError('Address not found')
+        if db.query(Order.id).filter(Order.legacy_address_id == address.id).first():
+            raise ConflictError('Address used by an order cannot be deleted')
         db.delete(address)
         db.commit()
 

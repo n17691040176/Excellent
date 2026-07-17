@@ -601,14 +601,14 @@ class PageDecorationService:
 
     @staticmethod
     def get_mobile_uni_home_for_admin(db: Session, current_user: User) -> dict:
-        team_id = None if AdminScopeService.is_super_admin(current_user) else AdminScopeService.require_team_id(current_user)
+        team_id = None if AdminScopeService.has_global_scope(current_user) else AdminScopeService.require_team_id(current_user)
         record = PageDecorationService._query_record(db, team_id)
         payload = PageDecorationService.normalize_mobile_uni_home_payload(record.payload if record else None)
         return PageDecorationService._record_to_dict(record, payload, team_id)
 
     @staticmethod
     def save_mobile_uni_home_for_admin(db: Session, current_user: User, payload: dict) -> dict:
-        team_id = None if AdminScopeService.is_super_admin(current_user) else AdminScopeService.require_team_id(current_user)
+        team_id = None if AdminScopeService.has_global_scope(current_user) else AdminScopeService.require_team_id(current_user)
         record = PageDecorationService._query_record(db, team_id)
         normalized = PageDecorationService.normalize_mobile_uni_home_payload(payload)
         if not record:

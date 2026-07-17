@@ -7,6 +7,12 @@
       }
     },
     {
+      "path": "pages/orders/list",
+      "style": {
+        "navigationBarTitleText": "我的订单"
+      }
+    },
+    {
       "path": "pages/home/index",
       "style": {
         "navigationBarTitleText": "首页"
@@ -19,15 +25,9 @@
       }
     },
     {
-      "path": "pages/local-life/index",
+      "path": "pages/cart/index",
       "style": {
-        "navigationBarTitleText": "本地生活"
-      }
-    },
-    {
-      "path": "pages/orders/list",
-      "style": {
-        "navigationBarTitleText": "订单"
+        "navigationBarTitleText": "购物车"
       }
     },
     {
@@ -52,6 +52,12 @@
     {
       "root": "subpackages/order",
       "pages": [
+        {
+          "path": "confirm",
+          "style": {
+            "navigationBarTitleText": "确认订单"
+          }
+        },
         {
           "path": "detail",
           "style": {
@@ -161,6 +167,18 @@
           }
         },
         {
+          "path": "addresses",
+          "style": {
+            "navigationBarTitleText": "收货地址"
+          }
+        },
+        {
+          "path": "address-edit",
+          "style": {
+            "navigationBarTitleText": "编辑地址"
+          }
+        },
+        {
           "path": "shipping",
           "style": {
             "navigationBarTitleText": "快递服务"
@@ -183,43 +201,35 @@
   ],
   "tabBar": {
     "custom": true,
-    "color": "#a08f7d",
-    "selectedColor": "#ff7a00",
+    "color": "#9CA3AF",
+    "selectedColor": "#10B981",
     "backgroundColor": "#ffffff",
     "borderStyle": "black",
     "list": [
       {
         "pagePath": "pages/home/index",
-        "text": "首页",
-        "iconPath": "static/tabbar/home.svg",
-        "selectedIconPath": "static/tabbar/home-active.svg"
+        "text": "首页"
       },
       {
         "pagePath": "pages/packages/list",
-        "text": "分类",
-        "iconPath": "static/tabbar/packages.svg",
-        "selectedIconPath": "static/tabbar/packages-active.svg"
+        "text": "分类"
       },
       {
-        "pagePath": "pages/local-life/index",
-        "text": "生活",
-        "iconPath": "static/tabbar/life.svg",
-        "selectedIconPath": "static/tabbar/life-active.svg"
+        "pagePath": "pages/cart/index",
+        "text": "购物车"
       },
       {
         "pagePath": "pages/profile/index",
-        "text": "我的",
-        "iconPath": "static/tabbar/profile.svg",
-        "selectedIconPath": "static/tabbar/profile-active.svg"
+        "text": "我的"
       }
     ]
   },
   "globalStyle": {
     "navigationStyle": "custom",
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "Excellent",
-    "navigationBarBackgroundColor": "#fff6eb",
-    "backgroundColor": "#fff6eb"
+    "navigationBarTitleText": "林间商城",
+    "navigationBarBackgroundColor": "#ECFDF5",
+    "backgroundColor": "#ECFDF5"
   },
   "uniIdRouter": {}
 }

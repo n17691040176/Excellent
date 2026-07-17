@@ -1,42 +1,61 @@
 <template>
-  <view class="container life-orders-page">
-    <view class="card hero-card">
-      <view class="hero-tag">本地生活订单</view>
-      <view class="section-title mt-12">预约、上门、完成等状态统一查看</view>
-      <view class="muted">统一跟踪每一笔生活服务订单的进度</view>
+  <view class="life-orders-page">
+    <!-- Header -->
+    <view class="page-header">
+      <view class="back-btn" @click="goBack">←</view>
+      <text class="header-title">生活订单</text>
+      <view class="header-spacer" />
     </view>
 
-    <StateView v-if="loading && !list.length" title="加载中..." custom-class="mt-24" />
-    <StateView v-else-if="failed && !list.length" title="订单加载失败" :show-retry="true" custom-class="mt-24" @retry="reload" />
+    <!-- Loading -->
+    <view v-if="loading && !list.length" class="loading-state">
+      <view v-for="i in 3" :key="i" class="skeleton-item">
+        <view class="skeleton skeleton-content" />
+      </view>
+    </view>
 
-    <template v-else>
-      <view class="mt-24" v-for="item in list" :key="item.no">
-        <view class="card order-item">
-          <view class="row-between">
-            <view class="no">{{ item.no }}</view>
-            <view class="badge" :class="item.badge">{{ item.status }}</view>
+    <!-- Error -->
+    <view v-else-if="failed && !list.length" class="error-state">
+      <text class="error-icon">⚠</text>
+      <text class="error-text">订单加载失败</text>
+      <view class="retry-btn" @click="reload">点击重试</view>
+    </view>
+
+    <!-- Empty -->
+    <view v-else-if="!list.length" class="empty-state">
+      <text class="empty-icon">◇</text>
+      <text class="empty-title">暂无生活订单</text>
+      <text class="empty-desc">先去服务大厅看看热门服务</text>
+      <view class="empty-btn" @click="goLife">去逛逛</view>
+    </view>
+
+    <!-- Orders List -->
+    <view v-else class="orders-list">
+      <view v-for="item in list" :key="item.no" class="order-card">
+        <view class="order-header">
+          <text class="order-no">{{ item.no }}</text>
+          <view class="order-status" :class="item.badge">
+            {{ item.status }}
           </view>
-          <view class="name">{{ item.name }}</view>
-          <view class="muted mt-16">预约时间：{{ item.time }}</view>
         </view>
+        <text class="order-name">{{ item.name }}</text>
+        <text class="order-time">预约时间：{{ item.time }}</text>
       </view>
 
-      <view v-if="!list.length" class="card state-card mt-24">
-        <view class="state-title">暂无生活订单</view>
-        <view class="muted">先去服务大厅看看热门服务。</view>
+      <view v-if="hasMore" class="load-more" @click="fetchList">
+        {{ loading ? '加载中...' : '加载更多' }}
       </view>
-
-      <view v-if="list.length" class="load-more muted">{{ loadMoreText }}</view>
-    </template>
+      <view v-else class="load-more done">— 没有更多了 —</view>
+    </view>
   </view>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app';
-import StateView from '@/components/StateView.vue';
 import { localLifeApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
+import { trackPageView } from '@/utils/track';
 
 const loading = ref(false);
 const failed = ref(false);
@@ -52,7 +71,7 @@ const toLifeOrderView = (item = {}, index = 0) => {
     name: item.service_name || item.title || '未命名服务订单',
     time: item.appointment_time || item.time || item.created_at || '--',
     status,
-    badge: status === '已完成' ? 'badge-green' : status === '运输中' ? 'badge-blue' : 'badge-orange'
+    badge: status === '已完成' ? 'done' : status === '已取消' ? 'cancel' : 'pending'
   };
 };
 
@@ -79,12 +98,16 @@ const fetchList = async ({ reset = false } = {}) => {
 
 const reload = () => fetchList({ reset: true });
 
-const loadMoreText = computed(() => {
-  if (loading.value) return '加载更多中...';
-  return hasMore.value ? '上拉加载更多' : '没有更多了';
-});
+function goBack() {
+  uni.navigateBack();
+}
+
+function goLife() {
+  uni.navigateTo({ url: '/subpackages/life/index' });
+}
 
 onShow(() => {
+  trackPageView('life_orders');
   reload();
 });
 
@@ -99,29 +122,206 @@ onReachBottom(() => {
 </script>
 
 <style scoped>
-@import '@/styles/common.css';
-.life-orders-page { padding-bottom: 36rpx; }
-.hero-card {
-  background:
-    radial-gradient(circle at 96% 8%, rgba(255, 166, 82, 0.16), transparent 38%),
-    linear-gradient(180deg, #fffdf9 0%, #fff7ef 100%);
-  border: 1rpx solid rgba(255, 154, 106, 0.16);
+@import '@/styles/elegant.css';
+
+.life-orders-page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 48rpx;
 }
-.hero-tag {
-  display: inline-flex;
+
+/* Header */
+.page-header {
+  display: flex;
   align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #ff6a00;
-  font-size: 20rpx;
-  font-weight: 800;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: var(--card);
+  border-bottom: 1rpx solid var(--border-light);
 }
-.order-item { margin-bottom: 16rpx; border: 1rpx solid rgba(255, 154, 106, 0.16); }
-.no { font-size: 23rpx; color: #667a71; }
-.name { margin-top: 12rpx; font-size: 30rpx; font-weight: 700; color: #173a2a; }
-.state-card { text-align: center; }
-.state-title { font-size: 30rpx; font-weight: 700; color: #173a2a; margin-bottom: 8rpx; }
-.retry-btn { width: 180rpx; margin-left: auto; margin-right: auto; }
-.load-more { text-align: center; padding: 12rpx 0 18rpx; }
+
+.back-btn, .header-spacer {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: var(--text);
+}
+
+.header-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Loading */
+.loading-state {
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.skeleton-item {
+  padding: 24rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-content {
+  height: 120rpx;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 32rpx;
+}
+
+.error-icon {
+  font-size: 80rpx;
+  color: var(--error);
+  margin-bottom: 24rpx;
+}
+
+.error-text {
+  font-size: 28rpx;
+  color: var(--text-muted);
+  margin-bottom: 32rpx;
+}
+
+.retry-btn {
+  padding: 16rpx 40rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+}
+
+/* Empty */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 32rpx;
+}
+
+.empty-icon {
+  font-size: 120rpx;
+  color: var(--border);
+  margin-bottom: 32rpx;
+}
+
+.empty-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8rpx;
+}
+
+.empty-desc {
+  font-size: 26rpx;
+  color: var(--text-muted);
+  margin-bottom: 48rpx;
+}
+
+.empty-btn {
+  padding: 16rpx 48rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+}
+
+/* Orders List */
+.orders-list {
+  padding: 24rpx;
+}
+
+.order-card {
+  padding: 24rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  margin-bottom: 16rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.order-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.order-no {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+.order-status {
+  padding: 6rpx 16rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.order-status.done {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.order-status.pending {
+  background: var(--secondary-bg);
+  color: var(--secondary);
+}
+
+.order-status.cancel {
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.order-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text);
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.order-time {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+.load-more {
+  text-align: center;
+  padding: 24rpx;
+  font-size: 24rpx;
+  color: var(--text-muted);
+}
+
+.load-more.done {
+  color: var(--border);
+}
 </style>

@@ -11,6 +11,9 @@ const service = axios.create({
 
 service.interceptors.request.use((config) => {
   const token = getToken()
+  if (window.location.pathname.startsWith('/admin/') && config.url?.startsWith('/api/')) {
+    config.url = `/admin${config.url}`
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }

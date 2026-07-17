@@ -53,10 +53,28 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     device_revenue_enabled: bool = False
 
 
+class ProductCategoryCreateRequest(AppBaseModel):
+    name: str
+    slug: str
+    sort_order: int = 0
+    status: str = 'active'
+
+
+class ProductCategoryUpdateRequest(AppBaseModel):
+    name: str | None = None
+    sort_order: int | None = None
+    status: str | None = None
+
+
+class ProductCategoryStatusRequest(AppBaseModel):
+    status: str
+
+
 class AdminProductPayload(AppBaseModel):
     product_name: str
     product_type: ProductType
-    zone_type: ZoneType
+    zone_type: ZoneType = ZoneType.SELF_OPERATED
+    category_id: int
     owner_type: ProductOwnerType = ProductOwnerType.SELF_OPERATED
     owner_id: int | None = None
     market_price: float | None = None

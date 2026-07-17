@@ -10,6 +10,18 @@ export const authApi = {
   loginByCode(data) {
     return request.post('/api/v1/auth/login-by-code', data);
   },
+  // 一键登录（阿里云SDK方案）
+  oneClickLogin(data) {
+    return request.post('/api/v1/auth/one-click-login', data);
+  },
+  // 一键登录新用户注册
+  oneClickRegister(data) {
+    return request.post('/api/v1/auth/one-click-register', data);
+  },
+  // App传递手机号免注册登录
+  appLogin(data) {
+    return request.post('/api/v1/auth/app-login', data);
+  },
   me() {
     return request.get('/api/v1/auth/me', { hideLoading: true });
   }
@@ -21,6 +33,9 @@ export const homeApi = {
   },
   hotSale() {
     return request.get('/api/v1/app/zones/hot-sale/products', { hideLoading: true });
+  },
+  decoration() {
+    return request.get('/api/v1/app/decorations/mobile-home', { hideLoading: true });
   }
 };
 
@@ -94,11 +109,35 @@ export const orderApi = {
   confirm(id) {
     return request.post(`/api/v1/app/orders/${id}/confirm`, {});
   },
+  cancel(id) {
+    return request.post(`/api/v1/app/orders/${id}/cancel`, {});
+  },
+  refund(id) {
+    return request.post(`/api/v1/app/orders/${id}/refund`, {});
+  },
   payDemo(id) {
     return request.post(`/api/v1/app/orders/${id}/pay-demo`, {});
   },
   pay(id, data) {
     return request.post(`/api/v1/app/orders/${id}/pay`, data);
+  }
+};
+
+export const addressApi = {
+  list() {
+    return request.get('/api/v1/app/addresses', { hideLoading: true });
+  },
+  create(data) {
+    return request.post('/api/v1/app/addresses', data);
+  },
+  update(id, data) {
+    return request.put(`/api/v1/app/addresses/${id}`, data);
+  },
+  remove(id) {
+    return request.delete(`/api/v1/app/addresses/${id}`);
+  },
+  setDefault(id) {
+    return request.patch(`/api/v1/app/addresses/${id}/default`, {});
   }
 };
 
@@ -165,5 +204,11 @@ export const localLifeApi = {
       params,
       hideLoading: true
     });
+  }
+};
+
+export const categoryApi = {
+  list() {
+    return request.get('/api/v1/app/categories', { hideLoading: true });
   }
 };

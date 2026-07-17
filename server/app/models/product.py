@@ -23,7 +23,17 @@ class Product(TimestampMixin, Base):
     product_type: Mapped[ProductType] = mapped_column(Enum(ProductType), nullable=False)
     owner_type: Mapped[ProductOwnerType] = mapped_column(Enum(ProductOwnerType), nullable=False)
     owner_id: Mapped[int | None] = mapped_column(nullable=True)
-    zone_type: Mapped[ZoneType] = mapped_column(Enum(ZoneType), nullable=False)
+    zone_type: Mapped[ZoneType] = mapped_column(
+        Enum(ZoneType),
+        default=ZoneType.SELF_OPERATED,
+        server_default=ZoneType.SELF_OPERATED.value,
+        nullable=False,
+    )
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey('product_categories.id', ondelete='RESTRICT'),
+        nullable=True,
+        index=True,
+    )
     market_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
     sale_price: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     cost_price: Mapped[float | None] = mapped_column(DECIMAL(18, 2), nullable=True)
@@ -70,6 +80,16 @@ class Product(TimestampMixin, Base):
     discount_rate: Mapped[float | None] = mapped_column(DECIMAL(18, 4), nullable=True)
     feature: Mapped[str | None] = mapped_column(Text, nullable=True)
     direct_rate: Mapped[float | None] = mapped_column(DECIMAL(18, 4), nullable=True)
+
+
+class ProductCategory(TimestampMixin, Base):
+    __tablename__ = 'product_categories'
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default='active', nullable=False)
 
 
 class ProductSku(Base):

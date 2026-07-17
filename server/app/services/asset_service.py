@@ -227,6 +227,86 @@ class AssetService:
         return account
 
     @staticmethod
+    def refund_consumed_amount(
+        db: Session,
+        user_id: int,
+        asset_type: AssetType,
+        amount: Decimal | float,
+        business_type: str,
+        source_id: int | None = None,
+        source_no: str | None = None,
+        remark: str | None = None,
+    ) -> UserAssetAccount:
+        account = AssetService.get_account(db, user_id, asset_type)
+        change = quantize_amount(amount)
+        if change <= 0:
+            return account
+        consumed_before = quantize_amount(account.consumed_amount)
+        if consumed_before < change:
+            raise ConflictError(f'{asset_type.value} consumed amount insufficient')
+        before = quantize_amount(account.available_amount)
+        after = before + change
+        account.available_amount = after
+        account.consumed_amount = consumed_before - change
+        account.updated_at = now()
+        db.add(
+            UserAssetLedger(
+                user_id=user_id,
+                asset_type=asset_type,
+                direction=AssetDirection.INCOME,
+                change_amount=change,
+                before_amount=before,
+                after_amount=after,
+                business_type=business_type,
+                source_id=source_id,
+                source_no=source_no,
+                remark=remark,
+                created_at=now(),
+            )
+        )
+        return account
+
+    @staticmethod
+    def revoke_added_amount(
+        db: Session,
+        user_id: int,
+        asset_type: AssetType,
+        amount: Decimal | float,
+        business_type: str,
+        source_id: int | None = None,
+        source_no: str | None = None,
+        remark: str | None = None,
+    ) -> UserAssetAccount:
+        account = AssetService.get_account(db, user_id, asset_type)
+        change = quantize_amount(amount)
+        if change <= 0:
+            return account
+        before = quantize_amount(account.available_amount)
+        total_before = quantize_amount(account.total_amount)
+        if before < change or total_before < change:
+            raise ConflictError(f'{asset_type.value} reward balance insufficient for refund')
+        after = before - change
+        account.available_amount = after
+        account.total_amount = total_before - change
+        account.updated_at = now()
+        db.add(
+            UserAssetLedger(
+                user_id=user_id,
+                asset_type=asset_type,
+                direction=AssetDirection.EXPENSE,
+                change_amount=change,
+                before_amount=before,
+                after_amount=after,
+                business_type=business_type,
+                source_id=source_id,
+                source_no=source_no,
+                remark=remark,
+                created_at=now(),
+            )
+        )
+        return account
+
+    @staticmethod
     def freeze_amount(
         db: Session,
         user_id: int,

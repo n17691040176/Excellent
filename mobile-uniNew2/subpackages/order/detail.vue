@@ -1,76 +1,139 @@
 <template>
-  <view class="container detail-page">
-    <view v-if="loading" class="card state-card">加载中...</view>
-    <view v-else-if="failed" class="card state-card">
-      <view>订单详情加载失败</view>
-      <button class="btn btn-ghost retry-btn mt-16" @click="loadDetail">重试</button>
+  <view class="detail-page">
+    <!-- Header -->
+    <view class="page-header">
+      <view class="back-btn" @click="goBack">←</view>
+      <text class="header-title">订单详情</text>
+      <view class="header-spacer" />
     </view>
-    <template v-else>
-      <view class="card head-card">
-        <view class="head-tag">订单中心</view>
-        <view class="row-between mt-12">
-          <view class="section-title no-margin">订单详情</view>
-          <view class="badge" :class="badgeClass">{{ detail.status }}</view>
-        </view>
-        <view class="muted mt-8">订单号：{{ detail.no }}</view>
-        <view class="price-row mt-16">
-          <view>
-            <view class="price-label">订单总额</view>
-            <view class="price">¥{{ detail.amount }}</view>
-          </view>
-          <view class="pay-status-pill">{{ detail.payStatus }}</view>
-        </view>
 
-        <view class="service-strip mt-16">
-          <view class="service-pill">{{ detail.channel }}</view>
-          <view class="service-pill">{{ detail.paymentCombo }}</view>
+    <!-- Loading -->
+    <view v-if="loading" class="loading-state">
+      <view class="skeleton skeleton-header" />
+      <view class="skeleton skeleton-line" />
+      <view class="skeleton skeleton-line short" />
+    </view>
+
+    <!-- Error -->
+    <view v-else-if="failed" class="error-state">
+      <text class="error-icon">⚠</text>
+      <text class="error-text">订单详情加载失败</text>
+      <view class="retry-btn" @click="loadDetail">点击重试</view>
+    </view>
+
+    <template v-else>
+      <!-- Status Header -->
+      <view class="status-header">
+        <view class="status-icon">{{ statusIcon }}</view>
+        <view class="status-info">
+          <text class="status-text">{{ detail.status }}</text>
+          <text class="status-hint">{{ statusHint }}</text>
         </view>
       </view>
 
-      <view class="card mt-20 info-card">
-        <view class="section-title">支付信息</view>
-        <view class="info-row">
-          <text>支付组合</text>
-          <text>{{ detail.paymentCombo }}</text>
+      <view v-if="detail.requiresShipping" class="info-card">
+        <text class="section-title">收货与物流</text>
+        <template v-if="detail.shippingAddress">
+          <view class="info-row">
+            <text class="info-label">收货人</text>
+            <text class="info-value">{{ detail.shippingAddress.receiver_name }} {{ detail.shippingAddress.receiver_phone }}</text>
+          </view>
+          <view class="info-row">
+            <text class="info-label">收货地址</text>
+            <text class="info-value">{{ detail.shippingAddress.full_address }}</text>
+          </view>
+        </template>
+        <view v-if="detail.shipment?.tracking_no" class="info-row">
+          <text class="info-label">物流信息</text>
+          <text class="info-value">{{ detail.shipment.carrier_name || '物流公司' }} {{ detail.shipment.tracking_no }}</text>
+        </view>
+        <text v-else-if="detail.status === '待发货'" class="payment-note">商家备货中，发货后将显示真实物流单号。</text>
+      </view>
+
+      <!-- Order Info Card -->
+      <view class="info-card">
+        <view class="card-header">
+          <text class="card-tag">订单中心</text>
         </view>
         <view class="info-row">
-          <text>商品总额</text>
-          <text>¥{{ detail.totalAmount }}</text>
+          <text class="info-label">订单编号</text>
+          <text class="info-value">{{ detail.no }}</text>
         </view>
         <view class="info-row">
-          <text>资产抵扣</text>
-          <text>-¥{{ detail.discountAmount }}</text>
+          <text class="info-label">支付组合</text>
+          <text class="info-value">{{ detail.paymentCombo }}</text>
+        </view>
+        <view class="info-row highlight">
+          <text class="info-label">订单总额</text>
+          <text class="info-value price">¥{{ detail.amount }}</text>
+        </view>
+      </view>
+
+      <!-- Payment Info Card -->
+      <view class="info-card">
+        <text class="section-title">支付信息</text>
+        <view class="info-row">
+          <text class="info-label">商品总额</text>
+          <text class="info-value">¥{{ detail.totalAmount }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">资产抵扣</text>
+          <text class="info-value">-¥{{ detail.discountAmount }}</text>
         </view>
         <view class="info-row strong">
-          <text>待支付金额</text>
-          <text>¥{{ detail.cashDue }}</text>
+          <text class="info-label">待支付金额</text>
+          <text class="info-value price">¥{{ detail.cashDue }}</text>
         </view>
         <view v-if="detail.paymentMessage" class="payment-note">{{ detail.paymentMessage }}</view>
       </view>
 
-      <view class="card mt-20" v-if="detail.items.length">
-        <view class="section-title">订单商品</view>
-        <view v-for="item in detail.items" :key="item.id" class="goods-row">
-          <view class="goods-title">{{ item.product_name }}</view>
-          <view class="goods-meta">数量 {{ item.quantity }} / 单价 ¥{{ item.unit_price }}</view>
-          <view class="goods-meta">小计 ¥{{ item.total_amount }}</view>
-        </view>
-      </view>
-
-      <view class="card mt-20" v-if="detail.steps.length">
-        <view class="section-title">进度轨迹</view>
-        <view class="timeline" v-for="item in detail.steps" :key="`${item.title}-${item.time}`">
-          <view class="dot" :class="{ active: item.active }" />
-          <view>
-            <view class="t-title">{{ item.title }}</view>
-            <view class="t-time">{{ item.time }}</view>
+      <!-- Items Card -->
+      <view v-if="detail.items.length" class="items-card">
+        <text class="section-title">订单商品</text>
+        <view v-for="item in detail.items" :key="item.id" class="order-item">
+          <view class="item-image">
+            <view class="image-placeholder" />
+          </view>
+          <view class="item-info">
+            <text class="item-title">{{ item.product_name }}</text>
+            <text class="item-meta">数量 {{ item.quantity }} / 单价 ¥{{ item.unit_price }}</text>
+            <text class="item-subtotal">小计 ¥{{ item.total_amount }}</text>
           </view>
         </view>
       </view>
 
-      <view class="action-wrap mt-24">
-        <button v-if="detail.canPay" class="btn btn-primary action-btn" @click="payOrder">{{ paying ? '支付中...' : '继续支付' }}</button>
-        <button v-if="detail.canConfirm" class="btn btn-ghost action-btn" @click="confirmOrder">确认完成</button>
+      <!-- Timeline Card -->
+      <view v-if="detail.steps.length" class="timeline-card">
+        <text class="section-title">进度轨迹</text>
+        <view class="timeline">
+          <view
+            v-for="(item, idx) in detail.steps"
+            :key="`${item.title}-${item.time}`"
+            class="timeline-item"
+          >
+            <view class="timeline-dot" :class="{ active: item.active, last: idx === detail.steps.length - 1 }" />
+            <view class="timeline-content">
+              <text class="timeline-title">{{ item.title }}</text>
+              <text class="timeline-time">{{ item.time }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- Actions -->
+      <view class="action-section">
+        <button v-if="detail.canPay" class="action-btn primary" @click="payOrder">
+          {{ paying ? '支付中...' : '继续支付' }}
+        </button>
+        <button v-if="detail.canConfirm" class="action-btn secondary" @click="confirmOrder">
+          确认收货
+        </button>
+        <button v-if="detail.canCancel" class="action-btn secondary" @click="cancelOrder">
+          取消订单
+        </button>
+        <button v-if="detail.canRefund" class="action-btn secondary" @click="refundOrder">
+          申请退款
+        </button>
       </view>
     </template>
   </view>
@@ -87,6 +150,7 @@ const loading = ref(false);
 const failed = ref(false);
 const paying = ref(false);
 const id = ref('');
+
 const detail = ref({
   status: '处理中',
   no: '--',
@@ -102,15 +166,28 @@ const detail = ref({
   items: [],
   canPay: false,
   canConfirm: false,
+  canCancel: false,
+  canRefund: false,
+  requiresShipping: false,
+  shippingAddress: null,
+  shipment: null,
   payChannel: '',
   payChannelOptions: []
 });
 
-const badgeClass = computed(() => {
-  if (detail.value.status === '已完成') return 'badge-green';
-  if (detail.value.status === '已支付') return 'badge-blue';
-  return 'badge-orange';
+const statusIcon = computed(() => {
+  if (detail.value.payStatus === '已支付') return '◆';
+  return '◇';
 });
+
+const statusHint = computed(() => ({
+  '待支付': '请尽快完成支付',
+  '待发货': '订单已支付，商家正在备货',
+  '已发货': '商品已发出，请留意物流信息',
+  '已完成': '订单已完成',
+  '已取消': '订单已取消',
+  '已退款': '订单已退款'
+}[detail.value.status] || '订单状态已更新'));
 
 function normalizeSteps(timeline) {
   if (Array.isArray(timeline) && timeline.length) {
@@ -149,6 +226,7 @@ function normalize(res) {
   const payChannelOptions = Array.isArray(res?.pay_channel_options)
     ? res.pay_channel_options
     : (Array.isArray(order?.pay_channel_options) ? order.pay_channel_options : []);
+
   return {
     status: orderStatus,
     no: order?.order_no || order?.no || '--',
@@ -156,16 +234,21 @@ function normalize(res) {
     totalAmount: totalAmount.toFixed(2),
     discountAmount: discountAmount.toFixed(2),
     cashDue: payableAmount.toFixed(2),
-    payStatus: payStatus === 'PAID' ? '已支付' : '未支付',
+    payStatus: payStatus === 'PAID' ? '已支付' : payStatus === 'REFUNDED' ? '已退款' : '未支付',
     paymentCombo: res?.payment_combo || order?.payment_combo || findPaymentCombo(deductions, payableAmount, payStatus),
-    paymentMessage: res?.payment_message || (payableAmount > 0 ? '微信支付、支付宝支付接口已预留，当前使用模拟完成支付。' : '订单已完成支付。'),
+    paymentMessage: res?.payment_message || (payableAmount > 0 ? '支付单已生成，请完成支付，订单状态以服务器异步通知为准。' : '订单已完成支付。'),
     channel: order?.channel_text || order?.channel || '商城订单',
     steps: normalizeSteps(order?.timeline || order?.steps || res?.timeline || res?.steps),
     items,
     payChannel: res?.default_pay_channel || order?.default_pay_channel || payChannelOptions[0] || '',
     payChannelOptions,
     canPay: Boolean(order?.can_pay ?? res?.can_pay ?? payStatus !== 'PAID'),
-    canConfirm: Boolean(order?.can_confirm ?? res?.can_confirm ?? (payStatus === 'PAID' && orderStatus !== '已完成' && order?.order_type !== 'LOCAL_LIFE_ORDER'))
+    canConfirm: Boolean(order?.can_confirm ?? res?.can_confirm ?? false),
+    canCancel: Boolean(order?.can_cancel ?? res?.can_cancel ?? false),
+    canRefund: Boolean(order?.can_refund ?? res?.can_refund ?? false),
+    requiresShipping: Boolean(order?.requires_shipping ?? res?.requires_shipping),
+    shippingAddress: res?.shipping_address || order?.shipping_address || null,
+    shipment: res?.shipment || order?.shipment || null
   };
 }
 
@@ -182,6 +265,8 @@ const loadDetail = async () => {
     loading.value = false;
   }
 };
+
+const goBack = () => uni.navigateBack();
 
 async function payOrder() {
   paying.value = true;
@@ -226,6 +311,32 @@ async function confirmOrder() {
   await loadDetail();
 }
 
+function cancelOrder() {
+  uni.showModal({
+    title: '取消订单',
+    content: '取消后将恢复库存并退回已抵扣资产，是否继续？',
+    success: async ({ confirm }) => {
+      if (!confirm) return;
+      await orderApi.cancel(id.value);
+      uni.showToast({ title: '订单已取消', icon: 'success' });
+      await loadDetail();
+    }
+  });
+}
+
+function refundOrder() {
+  uni.showModal({
+    title: '订单退款',
+    content: '确认申请退款吗？退款后将恢复库存并退回资产。',
+    success: async ({ confirm }) => {
+      if (!confirm) return;
+      await orderApi.refund(id.value);
+      uni.showToast({ title: '订单已退款', icon: 'success' });
+      await loadDetail();
+    }
+  });
+}
+
 onLoad((query) => {
   id.value = query?.id || '';
   trackPageView('order_detail_view', { id: id.value });
@@ -234,92 +345,400 @@ onLoad((query) => {
 </script>
 
 <style scoped>
-@import '@/styles/common.css';
+@import '@/styles/elegant.css';
 
-.detail-page { padding-bottom: 36rpx; }
-.head-card {
-  background:
-    radial-gradient(circle at 96% 8%, rgba(255, 166, 82, 0.18), transparent 38%),
-    linear-gradient(180deg, #fffdf9 0%, #fff6ec 100%);
-  border: 1rpx solid rgba(255, 154, 106, 0.16);
-  position: relative;
-  overflow: hidden;
+.detail-page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 48rpx;
 }
-.head-card::after {
-  content: '';
-  position: absolute;
-  right: -30rpx;
-  top: -30rpx;
-  width: 140rpx;
-  height: 140rpx;
-  border-radius: 50%;
-  background: rgba(255, 122, 0, 0.08);
-}
-.head-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #ff6a00;
-  font-size: 20rpx;
-  font-weight: 800;
-}
-.no-margin { margin-bottom: 0; }
-.price-row {
+
+/* Header */
+.page-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
+  padding: 24rpx 32rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: var(--card);
+  border-bottom: 1rpx solid var(--border-light);
 }
-.price-label { font-size: 22rpx; color: #8b7158; }
-.price { font-size: 42rpx; color: #ff6a00; font-weight: 900; }
-.pay-status-pill {
-  padding: 10rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 122, 0, 0.12);
-  color: #ff6a00;
-  font-size: 20rpx;
+
+.back-btn, .header-spacer {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: var(--text);
+}
+
+.header-title {
+  font-size: 32rpx;
   font-weight: 700;
+  color: var(--text);
 }
-.service-strip { display: flex; flex-wrap: wrap; gap: 10rpx; }
-.service-pill { padding: 6rpx 12rpx; border-radius: 999rpx; background: #fbf3ea; color: #9f6736; font-size: 20rpx; }
-.info-card { border: 1rpx solid rgba(255, 154, 106, 0.16); }
+
+/* Status Header */
+.status-header {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 40rpx 32rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+}
+
+.status-icon {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48rpx;
+  color: white;
+}
+
+.status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.status-text {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: white;
+}
+
+.status-hint {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Info Cards */
+.info-card {
+  margin: 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.card-header {
+  margin-bottom: 24rpx;
+}
+
+.card-tag {
+  display: inline-flex;
+  padding: 8rpx 20rpx;
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 24rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 24rpx;
+}
+
 .info-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
-  margin-top: 16rpx;
-  font-size: 24rpx;
-  color: #6b4a2f;
+  align-items: center;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid var(--border-light);
 }
-.info-row.strong { color: #ff6a00; font-weight: 800; }
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 26rpx;
+  color: var(--text-muted);
+}
+
+.info-value {
+  font-size: 26rpx;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.info-value.price {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.info-row.highlight {
+  background: var(--bg);
+  margin: 16rpx -16rpx;
+  padding: 20rpx 16rpx;
+  border-radius: var(--radius-md);
+  border: none;
+}
+
+.info-row.strong {
+  background: var(--primary-bg);
+  margin: 16rpx -16rpx;
+  padding: 20rpx 16rpx;
+  border-radius: var(--radius-md);
+  border: none;
+}
+
 .payment-note {
-  margin-top: 18rpx;
-  padding: 18rpx;
-  border-radius: 18rpx;
-  background: #fff6eb;
-  color: #8b7158;
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: var(--bg);
+  border-radius: var(--radius-md);
   font-size: 22rpx;
-  line-height: 1.5;
+  color: var(--text-muted);
+  line-height: 1.6;
 }
-.goods-row {
-  margin-top: 16rpx;
-  padding: 18rpx;
-  border-radius: 18rpx;
-  background: linear-gradient(180deg, #fffaf7, #fff2e8);
-  border: 1rpx solid rgba(255, 154, 106, 0.12);
+
+/* Items Card */
+.items-card {
+  margin: 0 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  margin-bottom: 24rpx;
 }
-.goods-title { font-size: 26rpx; color: #4f321a; font-weight: 800; }
-.goods-meta { margin-top: 8rpx; color: #8b7158; font-size: 22rpx; }
-.timeline { display: flex; gap: 12rpx; margin-top: 16rpx; }
-.dot { width: 16rpx; height: 16rpx; border-radius: 50%; background: #e6cfb6; margin-top: 10rpx; }
-.dot.active { background: #ff6a00; }
-.t-title { font-size: 26rpx; color: #4f321a; }
-.t-time { margin-top: 4rpx; color: #8b7158; font-size: 22rpx; }
-.action-wrap { display: flex; gap: 16rpx; }
-.action-btn { flex: 1; }
-.state-card { text-align: center; }
-.retry-btn { width: 180rpx; }
+
+.order-item {
+  display: flex;
+  gap: 20rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--border-light);
+}
+
+.order-item:last-child {
+  border-bottom: none;
+}
+
+.item-image {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.image-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--primary-bg), var(--primary));
+}
+
+.item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.item-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.item-meta {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+.item-subtotal {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+/* Timeline Card */
+.timeline-card {
+  margin: 0 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  margin-bottom: 24rpx;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 20rpx;
+  position: relative;
+}
+
+.timeline-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+  margin-top: 6rpx;
+  z-index: 1;
+}
+
+.timeline-dot.active {
+  background: var(--primary);
+  box-shadow: 0 0 0 6rpx var(--primary-bg);
+}
+
+.timeline-dot.last {
+  background: var(--border-light);
+}
+
+.timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 9rpx;
+  top: 26rpx;
+  width: 2rpx;
+  height: calc(100% + 20rpx);
+  background: var(--border-light);
+}
+
+.timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  padding-bottom: 32rpx;
+}
+
+.timeline-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.timeline-item:not(:has(+ .timeline-item)) .timeline-title,
+.timeline-dot:not(.active) + .timeline-content .timeline-title {
+  color: var(--text-muted);
+}
+
+.timeline-time {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+/* Loading State */
+.loading-state {
+  padding: 24rpx;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-header {
+  height: 160rpx;
+  border-radius: var(--radius-xl);
+}
+
+.skeleton-line {
+  height: 100rpx;
+  margin-top: 24rpx;
+  border-radius: var(--radius-xl);
+}
+
+.skeleton-line.short {
+  width: 60%;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error State */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 32rpx;
+}
+
+.error-icon {
+  font-size: 80rpx;
+  color: var(--error);
+  margin-bottom: 24rpx;
+}
+
+.error-text {
+  font-size: 28rpx;
+  color: var(--text-muted);
+  margin-bottom: 32rpx;
+}
+
+.retry-btn {
+  padding: 16rpx 40rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+}
+
+/* Action Section */
+.action-section {
+  display: flex;
+  gap: 24rpx;
+  padding: 32rpx 24rpx;
+}
+
+.action-btn {
+  flex: 1;
+  height: 96rpx;
+  border-radius: 48rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  box-shadow: 0 8rpx 24rpx rgba(16, 185, 129, 0.25);
+}
+
+.action-btn.secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 2rpx solid var(--border);
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background: var(--border-light);
+  }
+
+  .action-btn {
+    transition: none;
+  }
+
+  .action-btn:active {
+    transform: none;
+  }
+}
 </style>

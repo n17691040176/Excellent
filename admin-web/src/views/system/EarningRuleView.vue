@@ -456,9 +456,9 @@ onMounted(loadRules)
 .metric-card,
 .panel-card {
   border-radius: 18px;
-  border: 1px solid rgba(255, 122, 0, 0.14);
-  background: linear-gradient(180deg, #fffdfb 0%, #fff6ee 100%);
-  box-shadow: 0 12px 28px rgba(255, 108, 46, 0.08);
+  border: 1px solid var(--primary-100);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .page-heading {
@@ -472,12 +472,12 @@ onMounted(loadRules)
 .page-heading h2,
 .section-title h3 {
   margin: 0;
-  color: #4a2410;
+  color: var(--text-primary);
 }
 
 .page-heading p,
 .section-title p {
-  color: #7b5e4b;
+  color: var(--text-secondary);
 }
 
 .toolbar-row {
@@ -498,19 +498,19 @@ onMounted(loadRules)
 }
 
 .metric-card .label {
-  color: #8b6a57;
+  color: var(--text-muted);
 }
 
 .metric-card .value {
   margin-top: 8px;
   font-size: 28px;
   font-weight: 800;
-  color: #ff6a00;
+  color: var(--primary-deep);
 }
 
 .metric-card .subtext {
   margin-top: 8px;
-  color: #8d6f5a;
+  color: var(--text-muted);
 }
 
 .panel-card {

@@ -1,0 +1,139 @@
+# ===========================================
+# Excellent App - 生产环境 Docker Compose 配置
+# 使用方法: docker compose -f docker-compose.prod.yml up -d
+# ===========================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: excellent-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: zhuoyue1   # 修改为您的 MySQL Root 密码
+      MYSQL_DATABASE: excellent_app
+      MYSQL_USER: excellent
+      MYSQL_PASSWORD: zhuoyue1              # 修改为您的数据库密码
+    ports:
+      - "3306:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --max_connections=500
+      - --wait_timeout=28800
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -hlocalhost -uroot -pzhuoyue1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: excellent-redis
+    restart: always
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  server:
+    build:
+      context: /www/wwwroot/excellent/server
+      dockerfile: Dockerfile
+    container_name: excellent-server
+    restart: always
+    env_file:
+      - ./server/.env.alipay.local
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      APP_ENV: production
+      APP_DEBUG: "false"
+      SECRET_KEY: ${SECRET_KEY:?请设置 SECRET_KEY}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: excellent
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请设置 MYSQL_PASSWORD}
+      MYSQL_DB: excellent_app
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置 MYSQL_ROOT_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      CORS_ORIGINS: "https://175.27.228.166"
+      TENCENT_COS_ENABLED: ${TENCENT_COS_ENABLED:-false}
+      TENCENT_COS_SECRET_ID: ${TENCENT_COS_SECRET_ID:-}
+      TENCENT_COS_SECRET_KEY: ${TENCENT_COS_SECRET_KEY:-}
+      TENCENT_COS_REGION: ${TENCENT_COS_REGION:-ap-nanjing}
+      TENCENT_COS_BUCKET: ${TENCENT_COS_BUCKET:-}
+      TENCENT_COS_ENDPOINT: ${TENCENT_COS_ENDPOINT:-}
+      TENCENT_COS_PUBLIC_BASE_URL: ${TENCENT_COS_PUBLIC_BASE_URL:-}
+      TENCENT_COS_PRODUCT_PREFIX: ${TENCENT_COS_PRODUCT_PREFIX:-products}
+      TENCENT_COS_MAX_UPLOAD_SIZE: ${TENCENT_COS_MAX_UPLOAD_SIZE:-5242880}
+      # 阿里云一键登录配置
+      DYNPNS_ENABLED: "true"
+      DYNPNS_ACCESS_KEY_ID: ${DYNPNS_ACCESS_KEY_ID:-}
+      DYNPNS_ACCESS_KEY_SECRET: ${DYNPNS_ACCESS_KEY_SECRET:-}
+      DYNPNS_SIGNATURE_SECRET: ${DYNPNS_SIGNATURE_SECRET:-}
+      DYNPNS_APP_KEY: ${DYNPNS_APP_KEY:-}
+      # 阿里云短信验证码配置
+      SMS_ENABLED: "true"
+      SMS_ALIYUN_ACCESS_KEY_ID: ${SMS_ALIYUN_ACCESS_KEY_ID:-}
+      SMS_ALIYUN_ACCESS_KEY_SECRET: ${SMS_ALIYUN_ACCESS_KEY_SECRET:-}
+      SMS_SIGN_NAME: ${SMS_SIGN_NAME:-}
+      SMS_TEMPLATE_CODE: ${SMS_TEMPLATE_CODE:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - server_uploads:/app/uploads
+      - ${PAYMENT_SECRETS_DIR:-/www/wwwroot/excellent/secrets}:/run/secrets:ro
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  admin-web:
+    build:
+      context: /www/wwwroot/excellent/admin-web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /
+    container_name: excellent-admin-web
+    restart: always
+    depends_on:
+      - server
+    ports:
+      - "8081:80"
+
+  mobile-app:
+    build:
+      context: /www/wwwroot/excellent/mobile-uniNew2
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://zyhskj.shop/api/
+        VITE_INVITE_WEB_BASE_URL: https://zyhskj.shop
+        VITE_APP_ENV: prod
+    container_name: excellent-mobile-app
+    restart: always
+    depends_on:
+      - server
+    ports:
+      - "8082:80"
+
+volumes:
+  mysql_data:
+  server_uploads:

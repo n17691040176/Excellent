@@ -117,3 +117,13 @@ def reject_withdraw(
 ):
     record = CommissionService.reject_withdraw(db, withdraw_id, current_user)
     return {'code': 0, 'message': 'success', 'data': serialize_withdraw_request(record)}
+
+
+@admin_router.patch('/withdraws/{withdraw_id}/pay')
+def pay_withdraw(
+    withdraw_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    record = CommissionService.pay_withdraw(db, withdraw_id, current_user)
+    return {'code': 0, 'message': 'success', 'data': serialize_withdraw_request(record)}

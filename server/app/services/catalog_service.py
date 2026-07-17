@@ -22,7 +22,7 @@ from app.models.enums import (
 from app.models.local_life import LocalLifeMerchant
 from app.models.order import Order, OrderAssetDeduction, OrderItem
 from app.models.package import Package
-from app.models.product import Product, ProductQualification, ProductZoneConfig
+from app.models.product import Product, ProductCategory, ProductQualification, ProductZoneConfig
 from app.models.supplier import Supplier, SupplierAgreement
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
@@ -170,7 +170,7 @@ class PackageService:
             payable_amount=package_price,
             paid_amount=0,
             pay_status=PayStatus.UNPAID,
-            order_status=OrderStatus.CREATED,
+            order_status=OrderStatus.PENDING_PAYMENT,
         )
         db.add(order)
         db.flush()
@@ -197,7 +197,7 @@ class PackageService:
 
         order.discount_amount = use_ai
         order.payable_amount = max(package_price - use_ai, Decimal('0.00'))
-        order.paid_amount = order.payable_amount
+        order.paid_amount = Decimal('0.00')
         db.commit()
         db.refresh(order)
         return order
@@ -251,6 +251,7 @@ class ProductService:
     IMPORT_TEMPLATE_HEADERS = [
         '商品ID',
         '商品名称',
+        '分类ID',
         '专区',
         '商品类型',
         '归属类型',
@@ -267,7 +268,7 @@ class ProductService:
         '详情',
         '卖点',
         '排序',
-        '热门商品',
+        '爆款推荐标记',
         '需要物流',
         '一件代发',
     ]
@@ -294,6 +295,7 @@ class ProductService:
     IMPORT_FIELD_ALIASES = {
         'id': ['商品ID', 'ID', 'id', 'product_id'],
         'product_name': ['商品名称', '名称', 'product_name', 'name', 'title'],
+        'category_id': ['分类ID', '商品分类ID', 'category_id'],
         'zone_type': ['专区', '专区类型', 'zone_type', 'zone'],
         'product_type': ['商品类型', '类型', 'product_type'],
         'owner_type': ['归属类型', 'owner_type'],
@@ -310,7 +312,7 @@ class ProductService:
         'detail': ['详情', '商品详情', 'detail', 'description'],
         'feature': ['卖点', '特色', 'feature'],
         'order_by': ['排序', '排序值', 'order_by', 'sort'],
-        'is_hot': ['热门商品', '热门', 'is_hot', 'hot'],
+        'is_hot': ['爆款推荐标记', '爆款推荐', '爆款', '热门商品', '热门', 'is_hot', 'hot'],
         'requires_shipping': ['需要物流', 'requires_shipping', 'shipping'],
         'drop_shipping_enabled': ['一件代发', '代发', 'drop_shipping_enabled'],
     }
@@ -497,6 +499,7 @@ class ProductService:
 
     @staticmethod
     def _validate_product_payload(payload: dict) -> None:
+        payload['zone_type'] = payload.get('zone_type') or ZoneType.SELF_OPERATED
         payload['product_name'] = str(payload.get('product_name') or '').strip()
         if not payload['product_name']:
             raise ConflictError('Product name required')
@@ -522,9 +525,20 @@ class ProductService:
                 payload[field] = str(value).strip() if value is not None and str(value).strip() else None
 
     @staticmethod
+    def _ensure_active_category(db: Session, category_id: int | None) -> ProductCategory:
+        if not category_id:
+            raise ConflictError('Product category required')
+        category = db.get(ProductCategory, category_id)
+        if not category:
+            raise NotFoundError('Product category not found')
+        if category.status != 'active':
+            raise ConflictError('Product category is disabled')
+        return category
+
+    @staticmethod
     def _admin_product_query(db: Session, current_user: User):
         query = db.query(Product)
-        if AdminScopeService.is_super_admin(current_user):
+        if AdminScopeService.has_global_scope(current_user):
             return query
 
         team_user_ids = AdminScopeService.team_user_ids_subquery(current_user)
@@ -545,7 +559,7 @@ class ProductService:
             owner_user = db.get(User, resolved_owner_id)
             if not owner_user:
                 raise NotFoundError('Owner user not found')
-            if not AdminScopeService.is_super_admin(current_user):
+            if not AdminScopeService.has_global_scope(current_user):
                 AdminScopeService.ensure_user_visible(current_user, owner_user)
             return owner_type, resolved_owner_id
 
@@ -556,7 +570,7 @@ class ProductService:
             if not supplier:
                 raise NotFoundError('Supplier not found')
             supplier_user = db.get(User, supplier.user_id)
-            if supplier_user and not AdminScopeService.is_super_admin(current_user):
+            if supplier_user and not AdminScopeService.has_global_scope(current_user):
                 AdminScopeService.ensure_user_visible(current_user, supplier_user)
             return owner_type, supplier.id
 
@@ -566,7 +580,7 @@ class ProductService:
         if not merchant:
             raise NotFoundError('Local merchant not found')
         merchant_owner = db.get(User, merchant.owner_user_id)
-        if merchant_owner and not AdminScopeService.is_super_admin(current_user):
+        if merchant_owner and not AdminScopeService.has_global_scope(current_user):
             AdminScopeService.ensure_user_visible(current_user, merchant_owner)
         return owner_type, merchant.id
 
@@ -792,6 +806,7 @@ class ProductService:
             'owner_id': product.owner_id,
             'owner_name': owner_name,
             'zone_type': product.zone_type.value,
+            'category_id': product.category_id,
             'market_price': float(product.market_price) if product.market_price is not None else None,
             'sale_price': float(product.sale_price),
             'cost_price': float(product.cost_price) if product.cost_price is not None else None,
@@ -875,6 +890,7 @@ class ProductService:
     @staticmethod
     def create_for_admin(db: Session, current_user: User, payload: dict) -> Product:
         ProductService._validate_product_payload(payload)
+        category = ProductService._ensure_active_category(db, payload.get('category_id'))
         owner_type, owner_id = ProductService._resolve_owner(
             db,
             current_user,
@@ -889,6 +905,7 @@ class ProductService:
             owner_type=owner_type,
             owner_id=owner_id,
             zone_type=payload['zone_type'],
+            category_id=category.id,
             market_price=payload.get('market_price'),
             sale_price=payload['sale_price'],
             cost_price=payload.get('cost_price'),
@@ -949,6 +966,7 @@ class ProductService:
     def update_for_admin(db: Session, product_id: int, current_user: User, payload: dict) -> Product:
         product = ProductService._ensure_product_visible_for_admin(db, product_id, current_user)
         ProductService._validate_product_payload(payload)
+        category = ProductService._ensure_active_category(db, payload.get('category_id'))
 
         order_count = ProductService._product_order_count(db, product.id)
         if order_count > 0 and payload['zone_type'] != product.zone_type:
@@ -970,6 +988,7 @@ class ProductService:
         product.owner_type = owner_type
         product.owner_id = owner_id
         product.zone_type = payload['zone_type']
+        product.category_id = category.id
         product.market_price = payload.get('market_price')
         product.sale_price = payload['sale_price']
         product.cost_price = payload.get('cost_price')
@@ -1105,6 +1124,7 @@ class ProductService:
         writer.writerow([
             '',
             '示例商品-复购区',
+            '1',
             'REPURCHASE',
             'PHYSICAL',
             'SELF_OPERATED',
@@ -1144,6 +1164,7 @@ class ProductService:
         writer.writerow([
             '10001',
             '示例商品-更新已有商品',
+            '1',
             'SELF_OPERATED',
             'PHYSICAL',
             'SUPPLIER',
@@ -1280,7 +1301,9 @@ class ProductService:
             'zone_type',
         )
         if zone_type is None:
-            raise ConflictError('zone_type is required')
+            if product_id:
+                raise ConflictError('zone_type is required when updating a product')
+            zone_type = ZoneType.SELF_OPERATED
 
         product_type = ProductService._parse_import_enum(
             ProductService._extract_import_value(row, 'product_type'),
@@ -1298,6 +1321,10 @@ class ProductService:
 
         payload = {
             'product_name': ProductService._extract_import_value(row, 'product_name'),
+            'category_id': ProductService._parse_import_int(
+                ProductService._extract_import_value(row, 'category_id'),
+                'category_id',
+            ),
             'zone_type': zone_type,
             'product_type': product_type,
             'owner_type': owner_type,

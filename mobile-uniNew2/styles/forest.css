@@ -1,0 +1,352 @@
+/**
+ * Forest Design System - 林间设计系统
+ * 基于统一设计令牌（保持旧变量名兼容）
+ */
+
+@import './tokens.css';
+
+/* ===== 兼容别名 ===== */
+/* 为了向后兼容，保留林间系统的变量名映射 */
+page {
+  /* 绿色系别名 */
+  --green-primary: var(--primary);
+  --green-deep: var(--primary-dark);
+  --green-light: var(--primary-light);
+  --green-pale: var(--primary-bg);
+  --green-mist: var(--bg);
+
+  /* 文字别名 */
+  --ink: var(--text);
+  --ink-secondary: var(--text-secondary);
+  --ink-muted: var(--text-muted);
+  --ink-faint: var(--border-light);
+
+  /* 品牌色 */
+  --white: var(--card);
+
+  /* 基础样式 */
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--font-base);
+  line-height: 1.6;
+}
+
+/* ===== 排版 ===== */
+.text-display {
+  font-size: 48rpx;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.text-heading {
+  font-size: 36rpx;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.text-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.text-body {
+  font-size: var(--font-base);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.text-caption {
+  font-size: var(--font-sm);
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.text-bold {
+  font-weight: 700;
+}
+
+/* ===== 容器 ===== */
+.container {
+  padding: var(--space-lg);
+  box-sizing: border-box;
+}
+
+.container-fluid {
+  padding-left: var(--space-lg);
+  padding-right: var(--space-lg);
+}
+
+/* ===== 卡片 ===== */
+.card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-sizing: border-box;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-soft {
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-gradient {
+  background: linear-gradient(135deg, var(--card) 0%, var(--primary-bg) 100%);
+  border: 1rpx solid var(--primary-bg);
+}
+
+/* ===== 按钮 ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  padding: 0 var(--space-xl);
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: var(--font-base);
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+  box-shadow: var(--shadow-primary);
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--primary-bg);
+  color: var(--primary-dark);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--primary);
+  border: 2rpx solid var(--primary);
+}
+
+.btn-sm {
+  height: 64rpx;
+  padding: 0 var(--space-lg);
+  font-size: var(--font-sm);
+}
+
+.btn-lg {
+  height: 96rpx;
+  padding: 0 var(--space-xl);
+  font-size: var(--font-lg);
+}
+
+/* ===== 徽章 ===== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36rpx;
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  background: var(--primary-bg);
+  color: var(--primary-dark);
+}
+
+.badge-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.badge-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+/* ===== 布局 ===== */
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-1 { flex: 1; }
+
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-md); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-sm); }
+
+.gap-xs { gap: var(--space-xs); }
+.gap-sm { gap: var(--space-sm); }
+.gap-md { gap: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+
+/* ===== 间距 ===== */
+.mt-xs { margin-top: var(--space-xs); }
+.mt-sm { margin-top: var(--space-sm); }
+.mt-md { margin-top: var(--space-md); }
+.mt-lg { margin-top: var(--space-lg); }
+.mt-xl { margin-top: var(--space-xl); }
+
+.mb-xs { margin-bottom: var(--space-xs); }
+.mb-sm { margin-bottom: var(--space-sm); }
+.mb-md { margin-bottom: var(--space-md); }
+.mb-lg { margin-bottom: var(--space-lg); }
+
+.p-md { padding: var(--space-md); }
+.p-lg { padding: var(--space-lg); }
+
+/* ===== 分割线 ===== */
+.divider {
+  height: 1rpx;
+  background: var(--border-light);
+}
+
+.divider-v {
+  width: 1rpx;
+  height: 100%;
+  background: var(--border-light);
+}
+
+.soft-divider {
+  height: 1rpx;
+  background: linear-gradient(90deg, transparent, var(--primary-light), transparent);
+}
+
+/* ===== 输入框 ===== */
+.input {
+  height: 88rpx;
+  padding: 0 var(--space-lg);
+  border: 2rpx solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  font-size: var(--font-base);
+  transition: border-color 0.2s ease;
+}
+
+.input:focus {
+  border-color: var(--primary);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ===== 动画 ===== */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease;
+}
+
+/* ===== 交互态 ===== */
+.touchable {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.touchable:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+/* ===== 空状态 ===== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl) var(--space-lg);
+  text-align: center;
+}
+
+.empty-icon {
+  width: 160rpx;
+  height: 160rpx;
+  margin-bottom: var(--space-lg);
+  opacity: 0.4;
+  color: var(--text-muted);
+}
+
+.empty-text {
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+/* ===== 价格样式 ===== */
+.price {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4rpx;
+}
+
+.price-symbol {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.price-value {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.price-original {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/* ===== 图片占位 ===== */
+.image-placeholder {
+  background: var(--primary-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ===== 骨架屏 ===== */
+.skeleton {
+  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

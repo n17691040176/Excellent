@@ -104,7 +104,7 @@ class LocalLifeServiceLayer:
         owner_user = db.get(User, resolved_owner_user_id)
         if not owner_user:
             raise NotFoundError('Merchant owner user not found')
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             AdminScopeService.ensure_user_visible(current_user, owner_user)
         return resolved_owner_user_id
 
@@ -113,7 +113,7 @@ class LocalLifeServiceLayer:
         merchant = db.get(LocalLifeMerchant, merchant_id)
         if not merchant:
             raise NotFoundError('Merchant not found')
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             owner_user = db.get(User, merchant.owner_user_id) if merchant.owner_user_id else None
             if owner_user:
                 AdminScopeService.ensure_user_visible(current_user, owner_user)
@@ -355,7 +355,7 @@ class LocalLifeServiceLayer:
             payable_amount=total_amount,
             paid_amount=0,
             pay_status=PayStatus.UNPAID,
-            order_status=OrderStatus.CREATED,
+            order_status=OrderStatus.PENDING_PAYMENT,
         )
         db.add(order)
         db.flush()
@@ -448,12 +448,12 @@ class LocalLifeServiceLayer:
         if order:
             if order.pay_status != PayStatus.PAID:
                 order.pay_status = PayStatus.PAID
-                order.order_status = OrderStatus.PAID
+                order.order_status = OrderStatus.SHIPPED
                 order.paid_at = now()
                 buyer = db.get(User, order.user_id)
                 if buyer:
                     CommissionService.freeze_for_order(db, order, buyer)
-            order.order_status = OrderStatus.CONFIRMED
+            order.order_status = OrderStatus.COMPLETED
             order.confirmed_at = now()
 
         db.commit()
@@ -475,14 +475,14 @@ class LocalLifeServiceLayer:
     @staticmethod
     def list_merchants_for_admin(db: Session, current_user: User) -> list[LocalLifeMerchant]:
         query = db.query(LocalLifeMerchant)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(LocalLifeMerchant.owner_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user)))
         return query.order_by(LocalLifeMerchant.id.desc()).all()
 
     @staticmethod
     def list_stores_for_admin(db: Session, current_user: User) -> list[MerchantStore]:
         query = db.query(MerchantStore)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             merchant_ids = db.query(LocalLifeMerchant.id).filter(
                 LocalLifeMerchant.owner_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user))
             )
@@ -494,7 +494,7 @@ class LocalLifeServiceLayer:
         query = db.query(LocalLifeService)
         if merchant_id is not None:
             query = query.filter(LocalLifeService.merchant_id == merchant_id)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             merchant_ids = db.query(LocalLifeMerchant.id).filter(
                 LocalLifeMerchant.owner_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user))
             )
@@ -504,14 +504,14 @@ class LocalLifeServiceLayer:
     @staticmethod
     def list_orders_for_admin(db: Session, current_user: User) -> list[LocalLifeOrder]:
         query = db.query(LocalLifeOrder).join(Order, LocalLifeOrder.order_id == Order.id)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(Order.team_id == AdminScopeService.require_team_id(current_user))
         return query.order_by(LocalLifeOrder.id.desc()).all()
 
     @staticmethod
     def list_commission_rules_for_admin(db: Session, current_user: User) -> list[MerchantCommissionRule]:
         query = db.query(MerchantCommissionRule)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             merchant_ids = db.query(LocalLifeMerchant.id).filter(
                 LocalLifeMerchant.owner_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user))
             )
@@ -521,14 +521,14 @@ class LocalLifeServiceLayer:
     @staticmethod
     def list_device_revenues_for_admin(db: Session, current_user: User) -> list[DeviceRevenueFlow]:
         query = db.query(DeviceRevenueFlow)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(DeviceRevenueFlow.beneficiary_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user)))
         return query.order_by(DeviceRevenueFlow.id.desc()).all()
 
     @staticmethod
     def list_ad_revenues_for_admin(db: Session, current_user: User) -> list[AdRevenueFlow]:
         query = db.query(AdRevenueFlow)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(AdRevenueFlow.beneficiary_user_id.in_(AdminScopeService.team_user_ids_subquery(current_user)))
         return query.order_by(AdRevenueFlow.id.desc()).all()
 

@@ -118,11 +118,17 @@ export const orderApi = {
   markPaid(id) {
     return request.post(`/api/v1/admin/orders/${id}/pay`)
   },
+  ship(id, data = {}) {
+    return request.post(`/api/v1/admin/orders/${id}/ship`, null, { params: data })
+  },
   confirm(id) {
     return request.post(`/api/v1/admin/orders/${id}/confirm`)
   },
   close(id) {
     return request.post(`/api/v1/admin/orders/${id}/close`)
+  },
+  refund(id) {
+    return request.post(`/api/v1/admin/orders/${id}/refund`)
   }
 }
 
@@ -142,8 +148,11 @@ export const commissionApi = {
   approveWithdraw(id) {
     return request.patch(`/api/v1/admin/withdraws/${id}/approve`)
   },
-  rejectWithdraw(id) {
-    return request.patch(`/api/v1/admin/withdraws/${id}/reject`)
+  rejectWithdraw(id, remark = '') {
+    return request.patch(`/api/v1/admin/withdraws/${id}/reject`, { remark })
+  },
+  payWithdraw(id) {
+    return request.patch(`/api/v1/admin/withdraws/${id}/pay`)
   }
 }
 
@@ -162,6 +171,21 @@ export const earningRuleApi = {
   },
   remove(id) {
     return request.delete(`/api/v1/admin/earning-rules/${id}`)
+  }
+}
+
+export const regionApi = {
+  agents(params) {
+    return request.get('/api/v1/admin/region-agents/list', { params })
+  },
+  summary() {
+    return request.get('/api/v1/admin/region-agents/summary')
+  },
+  auditAgent(id, data) {
+    return request.post(`/api/v1/admin/region-agents/audit/${id}`, data)
+  },
+  dividends(params) {
+    return request.get('/api/v1/admin/region-agents/dividends', { params })
   }
 }
 
@@ -201,6 +225,13 @@ export const assetApi = {
 export const productApi = {
   list(params) {
     return request.get('/api/v1/admin/products', { params })
+  },
+  uploadImage(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request.post('/api/v1/admin/products/upload-image', formData, {
+      timeout: 60000
+    })
   },
   repurchase() {
     return request.get('/api/v1/admin/zones/repurchase/products')
@@ -320,5 +351,157 @@ export const localLifeApi = {
   },
   adRevenues() {
     return request.get('/api/v1/admin/local-life/ad-revenues')
+  }
+}
+
+// 邀请裂变管理 API
+export const inviteApi = {
+  summary() {
+    return request.get('/api/v1/admin/invites/summary')
+  },
+  users(params) {
+    return request.get('/api/v1/admin/invites/users', { params })
+  },
+  records(params) {
+    return request.get('/api/v1/admin/invites/records', { params })
+  },
+  tree(userId) {
+    return request.get(`/api/v1/admin/invites/tree/${userId}`)
+  }
+}
+
+// 快递物流管理 API
+export const shipmentApi = {
+  list(params) {
+    return request.get('/api/v1/admin/commerce/shipments', { params })
+  },
+  detail(orderId) {
+    return request.get(`/api/v1/admin/commerce/shipments/${orderId}`)
+  },
+  updateTracking(orderId, data) {
+    return request.post(`/api/v1/admin/commerce/shipments/${orderId}/update-tracking`, null, { params: data })
+  }
+}
+
+// 收藏管理 API
+export const favoriteApi = {
+  list(params) {
+    return request.get('/api/v1/admin/commerce/favorites', { params })
+  },
+  remove(favoriteId) {
+    return request.delete(`/api/v1/admin/commerce/favorites/${favoriteId}`)
+  }
+}
+
+// 足迹管理 API
+export const footprintApi = {
+  list(params) {
+    return request.get('/api/v1/admin/commerce/footprints', { params })
+  },
+  remove(footprintId) {
+    return request.delete(`/api/v1/admin/commerce/footprints/${footprintId}`)
+  }
+}
+
+// 商品分类管理 API
+export const categoryApi = {
+  list(params) {
+    return request.get('/api/v1/admin/categories', { params })
+  },
+  create(data) {
+    return request.post('/api/v1/admin/categories', data)
+  },
+  update(id, data) {
+    return request.put(`/api/v1/admin/categories/${id}`, data)
+  },
+  updateStatus(id, data) {
+    return request.patch(`/api/v1/admin/categories/${id}/status`, data)
+  },
+  remove(id) {
+    return request.delete(`/api/v1/admin/categories/${id}`)
+  },
+  delete(id) {
+    return request.delete(`/api/v1/admin/categories/${id}`)
+  }
+}
+
+// 后台权限管理 API
+export const permissionApi = {
+  options() {
+    return request.get('/api/v1/admin/permissions/options')
+  },
+  admins() {
+    return request.get('/api/v1/admin/permissions/admins')
+  },
+  detail(userId) {
+    return request.get(`/api/v1/admin/permissions/admins/${userId}`)
+  },
+  update(userId, data) {
+    return request.put(`/api/v1/admin/permissions/admins/${userId}`, data)
+  }
+}
+
+// 动态角色管理 API
+export const roleApi = {
+  options() {
+    return request.get('/api/v1/admin/roles/options')
+  },
+  list(params = {}) {
+    return request.get('/api/v1/admin/roles', { params })
+  },
+  detail(id) {
+    return request.get(`/api/v1/admin/roles/${id}`)
+  },
+  create(data) {
+    return request.post('/api/v1/admin/roles', data)
+  },
+  update(id, data) {
+    return request.put(`/api/v1/admin/roles/${id}`, data)
+  },
+  remove(id) {
+    return request.delete(`/api/v1/admin/roles/${id}`)
+  }
+}
+
+// 管理员账号 API
+export const adminAccountApi = {
+  list(params = {}) {
+    return request.get('/api/v1/admin/admins', { params })
+  },
+  candidates(params = {}) {
+    return request.get('/api/v1/admin/admins/candidates', { params })
+  },
+  teams() {
+    return request.get('/api/v1/admin/admins/teams')
+  },
+  create(data) {
+    return request.post('/api/v1/admin/admins', data)
+  },
+  promote(data) {
+    return request.post('/api/v1/admin/admins/promote', data)
+  },
+  update(id, data) {
+    return request.put(`/api/v1/admin/admins/${id}`, data)
+  },
+  updateStatus(id, data) {
+    return request.patch(`/api/v1/admin/admins/${id}/status`, data)
+  },
+  resetPassword(id, data) {
+    return request.post(`/api/v1/admin/admins/${id}/reset-password`, data)
+  },
+  demote(id) {
+    return request.post(`/api/v1/admin/admins/${id}/demote`)
+  }
+}
+
+export const adminProfileApi = {
+  get() {
+    return request.get('/api/v1/admin/profile')
+  },
+  update(data) {
+    return request.put('/api/v1/admin/profile', data)
+  },
+  changePassword(data) {
+    return request.post('/api/v1/admin/profile/password', data)
   }
 }

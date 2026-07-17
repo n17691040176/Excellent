@@ -1,126 +1,127 @@
 <template>
   <div class="orders-view">
-    <div class="page-heading">
-      <div>
-        <h2>订单管理</h2>
-        <p>{{ scopeHint }}</p>
-      </div>
-      <div class="toolbar-row">
+    <!-- 统一页面头部 -->
+    <PageHeader title="订单管理" :description="scopeHint">
+      <template #actions>
         <el-button plain @click="resetFilters">重置筛选</el-button>
-        <el-button type="primary" @click="loadData">刷新订单</el-button>
-      </div>
-    </div>
+        <el-button type="primary" @click="loadData">
+          <el-icon><Refresh /></el-icon>
+          刷新订单
+        </el-button>
+      </template>
+    </PageHeader>
 
+    <!-- 指标卡片行 -->
     <div class="metric-grid">
-      <div v-for="item in metrics" :key="item.label" class="metric-card">
-        <div class="label">{{ item.label }}</div>
-        <div class="value">{{ item.value }}</div>
-        <div class="subtext">{{ item.subtext }}</div>
-      </div>
+      <MetricCard
+        v-for="item in metrics"
+        :key="item.label"
+        :value="item.value"
+        :label="item.label"
+        :subtext="item.subtext"
+        :variant="item.variant"
+      />
     </div>
 
-    <div class="panel-card data-card block-gap">
-      <div class="toolbar-row toolbar-wrap">
-        <el-input
-          v-model="filters.keyword"
-          clearable
-          placeholder="搜索订单号 / 用户昵称 / 手机号"
-          style="max-width: 280px;"
-          @keyup.enter="handleSearch"
-        />
-        <el-select v-model="filters.order_status" clearable placeholder="订单状态" style="width: 160px;">
-          <el-option v-for="item in orderStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.pay_status" clearable placeholder="支付状态" style="width: 160px;">
-          <el-option v-for="item in payStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.order_type" clearable placeholder="订单类型" style="width: 180px;">
-          <el-option v-for="item in orderTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.zone_type" clearable placeholder="业务专区" style="width: 170px;">
-          <el-option v-for="item in zoneTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-button plain @click="handleSearch">查询</el-button>
-      </div>
+    <!-- 数据卡片 -->
+    <div class="panel-card data-card">
+      <!-- 统一的筛选栏 -->
+      <FilterBar
+        :fields="filterFields"
+        v-model="filters"
+        @search="handleSearch"
+        @reset="handleReset"
+      />
 
+      <!-- 数据表格 -->
       <el-table v-loading="loading" :data="rows" border>
         <el-table-column prop="order_no" label="订单号" min-width="180" />
-        <el-table-column label="用户信息" min-width="180">
+        <el-table-column label="用户信息" min-width="160">
           <template #default="{ row }">
             <div class="cell-title">{{ row.user_nickname || '--' }}</div>
             <div class="cell-meta">{{ row.user_phone || '--' }}</div>
-            <div class="cell-meta">{{ row.team_name || '未绑定团队' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="订单类型" min-width="160">
+        <el-table-column label="订单类型" width="140">
           <template #default="{ row }">
             <el-tag size="small">{{ orderTypeLabel(row.order_type) }}</el-tag>
-            <div class="cell-meta">{{ zoneTypeLabel(row.zone_type) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="商品摘要" min-width="240">
+        <el-table-column label="商品摘要" min-width="200">
           <template #default="{ row }">
             <div class="cell-title">{{ row.title || '--' }}</div>
             <div class="cell-meta">{{ row.products_summary || '--' }}</div>
-            <div class="cell-meta">商品数 {{ row.item_count || 0 }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="金额" min-width="150">
+        <el-table-column label="金额" width="120">
           <template #default="{ row }">
-            <div>总额 {{ formatMoney(row.total_amount) }}</div>
-            <div class="cell-meta">优惠 {{ formatMoney(row.discount_amount) }}</div>
-            <div class="cell-meta">待付 {{ formatMoney(row.payable_amount) }}</div>
+            <div class="cell-title">{{ formatMoney(row.payable_amount) }}</div>
+            <div class="cell-meta">共 {{ row.item_count || 0 }} 件</div>
           </template>
         </el-table-column>
-        <el-table-column label="订单状态" width="120">
+        <el-table-column label="状态" width="140">
           <template #default="{ row }">
-            <el-tag :type="orderStatusType(row.order_status)">{{ row.status_text || row.order_status }}</el-tag>
+            <StatusTag :type="orderStatusType(row.order_status)">{{ row.status_text || row.order_status }}</StatusTag>
+            <div class="cell-meta" style="margin-top: 4px;">
+              <StatusTag :type="payStatusType(row.pay_status)" :dot="false">{{ payStatusLabel(row.pay_status) }}</StatusTag>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="支付状态" width="120">
+        <el-table-column label="创建时间" width="150">
           <template #default="{ row }">
-            <el-tag :type="payStatusType(row.pay_status)">{{ payStatusLabel(row.pay_status) }}</el-tag>
+            <div class="cell-title">{{ formatDate(row.created_at) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="物流状态" min-width="160">
+        <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-tag :type="deliveryTagType(row.delivery_status)">{{ row.delivery_status_text }}</el-tag>
-            <div class="cell-meta">{{ row.tracking_no || '无需物流' }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建时间" min-width="160">
-          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" min-width="260" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button
-              v-permission="'orders:manage'"
-              link
-              type="success"
-              :disabled="row.pay_status === 'PAID' || row.order_status === 'CLOSED'"
-              @click="handleAction(row, 'pay')"
-            >
-              置为已支付
-            </el-button>
-            <el-button
-              v-permission="'orders:manage'"
-              link
-              type="warning"
-              :disabled="!row.can_confirm"
-              @click="handleAction(row, 'confirm')"
-            >
-              确认完成
-            </el-button>
-            <el-button
-              v-permission="'orders:manage'"
-              link
-              type="danger"
-              :disabled="row.order_status === 'CLOSED' || row.order_status === 'CONFIRMED' || row.pay_status === 'PAID'"
-              @click="handleAction(row, 'close')"
-            >
-              关闭订单
-            </el-button>
+            <div class="action-group">
+              <!-- 主要操作 -->
+              <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+              <!-- 次要操作 -->
+              <el-button
+                v-permission="'orders:manage'"
+                link
+                type="success"
+                :disabled="row.pay_status === 'PAID' || row.order_status === 'REFUND'"
+                @click="handleAction(row, 'pay')"
+              >
+                支付
+              </el-button>
+              <el-button
+                v-permission="'orders:manage'"
+                link
+                type="warning"
+                :disabled="!row.can_ship"
+                @click="handleAction(row, 'ship')"
+              >
+                发货
+              </el-button>
+              <!-- 更多操作下拉 -->
+              <el-dropdown trigger="click" @command="(cmd) => handleAction(row, cmd)">
+                <el-button link>
+                  更多
+                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      command="close"
+                      :disabled="!row.can_cancel"
+                    >
+                      关闭订单
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      v-permission="'orders:manage'"
+                      command="refund"
+                      :disabled="!row.can_refund"
+                      divided
+                    >
+                      <span style="color: var(--danger-600);">退款</span>
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -137,9 +138,11 @@
       />
     </div>
 
-    <el-drawer v-model="detailVisible" title="订单详情" size="960px" destroy-on-close>
+    <!-- 详情抽屉 - Tab 模式 -->
+    <el-drawer v-model="detailVisible" title="订单详情" size="900px" destroy-on-close>
       <div v-loading="detailLoading" class="detail-layout">
         <template v-if="detail">
+          <!-- 基本信息卡片 -->
           <div class="panel-card data-card">
             <div class="detail-top">
               <div>
@@ -147,9 +150,9 @@
                 <div class="cell-meta">订单号 {{ detail.order_no }}</div>
               </div>
               <div class="detail-tags">
-                <el-tag :type="orderStatusType(detail.order_status)">{{ detail.status_text || detail.order_status }}</el-tag>
-                <el-tag :type="payStatusType(detail.pay_status)">{{ payStatusLabel(detail.pay_status) }}</el-tag>
-                <el-tag :type="deliveryTagType(detail.delivery_status)">{{ detail.delivery_status_text }}</el-tag>
+                <StatusTag :type="orderStatusType(detail.order_status)">{{ detail.status_text || detail.order_status }}</StatusTag>
+                <StatusTag :type="payStatusType(detail.pay_status)">{{ payStatusLabel(detail.pay_status) }}</StatusTag>
+                <StatusTag :type="deliveryTagType(detail.delivery_status)">{{ detail.delivery_status_text }}</StatusTag>
               </div>
             </div>
 
@@ -159,59 +162,85 @@
               <el-descriptions-item label="订单类型">{{ orderTypeLabel(detail.order_type) }}</el-descriptions-item>
               <el-descriptions-item label="业务专区">{{ zoneTypeLabel(detail.zone_type) }}</el-descriptions-item>
               <el-descriptions-item label="支付组合">{{ detail.payment_combo || '--' }}</el-descriptions-item>
-              <el-descriptions-item label="物流方式">{{ detail.delivery_mode_text || '无需物流' }}</el-descriptions-item>
-              <el-descriptions-item label="总金额">{{ formatMoney(detail.total_amount) }}</el-descriptions-item>
-              <el-descriptions-item label="优惠金额">{{ formatMoney(detail.discount_amount) }}</el-descriptions-item>
-              <el-descriptions-item label="待支付">{{ formatMoney(detail.payable_amount) }}</el-descriptions-item>
+              <el-descriptions-item label="物流方式">{{ detail.delivery_mode_text || (detail.requires_shipping ? '待配置' : '无需物流') }}</el-descriptions-item>
+              <el-descriptions-item label="待支付">
+                <span class="text-primary">{{ formatMoney(detail.payable_amount) }}</span>
+              </el-descriptions-item>
               <el-descriptions-item label="已支付">{{ formatMoney(detail.paid_amount) }}</el-descriptions-item>
               <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
-              <el-descriptions-item label="更新时间">{{ formatDate(detail.updated_at) }}</el-descriptions-item>
               <el-descriptions-item label="支付时间">{{ formatDate(detail.paid_at) }}</el-descriptions-item>
-              <el-descriptions-item label="完成时间">{{ formatDate(detail.confirmed_at) }}</el-descriptions-item>
-              <el-descriptions-item label="物流单号" :span="2">{{ detail.tracking_no || '无需物流' }}</el-descriptions-item>
+              <el-descriptions-item v-if="detail.requires_shipping" label="收货地址" :span="2">
+                <template v-if="detail.shipping_address">
+                  {{ detail.shipping_address.receiver_name }} / {{ detail.shipping_address.receiver_phone }} / {{ detail.shipping_address.full_address }}
+                </template>
+                <span v-else class="text-danger">未保存收货地址</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="物流单号" :span="2">{{ detail.tracking_no || (detail.requires_shipping ? '待发货' : '无需物流') }}</el-descriptions-item>
             </el-descriptions>
           </div>
 
-          <div class="split-grid block-gap">
-            <div class="panel-card data-card">
-              <div class="section-title">
-                <div>
-                  <h3>订单商品</h3>
-                  <p>与移动端订单详情保持同一组商品明细。</p>
-                </div>
-              </div>
-              <el-table :data="detail.items || []" border>
-                <el-table-column prop="product_name" label="商品名称" min-width="220" />
-                <el-table-column prop="quantity" label="数量" width="90" />
-                <el-table-column label="单价" width="120">
-                  <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
-                </el-table-column>
-                <el-table-column label="小计" width="120">
-                  <template #default="{ row }">{{ formatMoney(row.total_amount) }}</template>
-                </el-table-column>
-              </el-table>
-            </div>
+          <!-- Tab 切换区域 -->
+          <div class="detail-tabs">
+            <el-tabs v-model="activeTab" class="detail-tabs-inner">
+              <el-tab-pane label="订单商品" name="items">
+                <el-table :data="detail.items || []" border>
+                  <el-table-column prop="product_name" label="商品名称" min-width="220" />
+                  <el-table-column prop="quantity" label="数量" width="80" align="center" />
+                  <el-table-column label="单价" width="120" align="right">
+                    <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
+                  </el-table-column>
+                  <el-table-column label="小计" width="120" align="right">
+                    <template #default="{ row }">{{ formatMoney(row.total_amount) }}</template>
+                  </el-table-column>
+                </el-table>
+              </el-tab-pane>
 
-            <div class="panel-card data-card">
-              <div class="section-title">
-                <div>
-                  <h3>物流轨迹</h3>
-                  <p>直接对齐移动端物流详情页时间轴。</p>
-                </div>
-              </div>
-              <div class="timeline-list">
-                <div v-for="item in detail.shipment?.timeline || detail.timeline || []" :key="`${item.title}-${item.time}`" class="timeline-item">
-                  <div class="timeline-dot" :class="{ active: item.active }"></div>
-                  <div>
-                    <div class="cell-title">{{ item.title }}</div>
-                    <div class="cell-meta">{{ formatDate(item.time) }}</div>
+              <el-tab-pane label="物流轨迹" name="logistics">
+                <div class="timeline-list">
+                  <div v-for="item in detail.shipment?.timeline || detail.timeline || []" :key="`${item.title}-${item.time}`" class="timeline-item">
+                    <div class="timeline-dot" :class="{ active: item.active }"></div>
+                    <div>
+                      <div class="cell-title">{{ item.title }}</div>
+                      <div class="cell-meta">{{ formatDate(item.time) }}</div>
+                    </div>
+                  </div>
+                  <div v-if="!detail.shipment?.timeline?.length && !detail.timeline?.length" class="empty-hint">
+                    暂无物流信息
                   </div>
                 </div>
-              </div>
-            </div>
+              </el-tab-pane>
+            </el-tabs>
           </div>
         </template>
       </div>
+
+      <!-- 抽屉底部操作 -->
+      <template #footer>
+        <div class="drawer-footer">
+          <el-button @click="detailVisible = false">关闭</el-button>
+          <el-button
+            v-if="detail?.can_ship"
+            type="primary"
+            @click="handleShip"
+          >
+            确认发货
+          </el-button>
+          <el-button
+            v-if="detail?.can_cancel"
+            type="warning"
+            @click="handleClose"
+          >
+            关闭订单
+          </el-button>
+          <el-button
+            v-if="detail?.can_refund"
+            type="danger"
+            @click="handleRefund"
+          >
+            订单退款
+          </el-button>
+        </div>
+      </template>
     </el-drawer>
   </div>
 </template>
@@ -220,15 +249,18 @@
 import { computed, onMounted, ref } from 'vue'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Refresh, ArrowDown } from '@element-plus/icons-vue'
 
 import { orderApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
+import { PageHeader, MetricCard, FilterBar, StatusTag } from '@/components/common'
 
 const userStore = useUserStore()
 
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
+const activeTab = ref('items')
 const rows = ref([])
 const detail = ref(null)
 const total = ref(0)
@@ -244,11 +276,11 @@ const filters = ref({
 })
 
 const orderStatusOptions = [
-  { label: '待支付', value: 'CREATED' },
-  { label: '已支付', value: 'PAID' },
-  { label: '已完成', value: 'CONFIRMED' },
-  { label: '已关闭', value: 'CLOSED' },
-  { label: '已退款', value: 'REFUNDED' }
+  { label: '待支付', value: 'PENDING_PAYMENT' },
+  { label: '待发货', value: 'PENDING_SHIP' },
+  { label: '已发货', value: 'SHIPPED' },
+  { label: '已完成', value: 'COMPLETED' },
+  { label: '已取消/已退款', value: 'REFUND' }
 ]
 
 const payStatusOptions = [
@@ -274,6 +306,14 @@ const zoneTypeOptions = [
   { label: '本地生活', value: 'LOCAL_LIFE' }
 ]
 
+// 筛选字段配置
+const filterFields = [
+  { key: 'keyword', type: 'input', placeholder: '搜索订单号 / 用户昵称 / 手机号', width: 240 },
+  { key: 'order_status', type: 'select', label: '订单状态', options: orderStatusOptions, width: 140 },
+  { key: 'pay_status', type: 'select', label: '支付状态', options: payStatusOptions, width: 120 },
+  { key: 'order_type', type: 'select', label: '订单类型', options: orderTypeOptions, width: 160 }
+]
+
 const scopeHint = computed(() =>
   userStore.role === 'TEAM_ADMIN'
     ? '按移动端订单链路统一后台视角，当前仅展示所属团队订单。'
@@ -283,10 +323,10 @@ const scopeHint = computed(() =>
 const metrics = computed(() => {
   const currentRows = rows.value
   return [
-    { label: '当前结果', value: total.value, subtext: `本页 ${currentRows.length} 条订单` },
-    { label: '待支付', value: currentRows.filter((item) => item.order_status === 'CREATED').length, subtext: '可人工补记支付或继续跟单' },
-    { label: '运输中', value: currentRows.filter((item) => item.delivery_status === 'shipping').length, subtext: '移动端物流页展示中' },
-    { label: '已完成', value: currentRows.filter((item) => item.order_status === 'CONFIRMED').length, subtext: '已完成收货或服务履约' }
+    { label: '当前结果', value: total.value, subtext: `本页 ${currentRows.length} 条`, variant: 'neutral' },
+    { label: '待支付', value: currentRows.filter((item) => item.order_status === 'PENDING_PAYMENT').length, subtext: '待付款', variant: 'warning' },
+    { label: '待发货', value: currentRows.filter((item) => item.order_status === 'PENDING_SHIP').length, subtext: '已付款', variant: 'primary' },
+    { label: '已完成', value: currentRows.filter((item) => item.order_status === 'COMPLETED').length, subtext: '累计完成', variant: 'success' }
   ]
 })
 
@@ -312,29 +352,29 @@ function payStatusLabel(value) {
 
 function orderStatusType(status) {
   return {
-    CREATED: 'warning',
-    PAID: 'primary',
-    CONFIRMED: 'success',
-    CLOSED: 'info',
-    REFUNDED: 'danger'
-  }[status] || 'info'
+    PENDING_PAYMENT: 'warning',
+    PENDING_SHIP: 'primary',
+    SHIPPED: 'info',
+    COMPLETED: 'success',
+    REFUND: 'danger'
+  }[status] || 'default'
 }
 
 function payStatusType(status) {
   return {
-    UNPAID: 'info',
+    UNPAID: 'default',
     PAID: 'success',
     REFUNDED: 'danger'
-  }[status] || 'info'
+  }[status] || 'default'
 }
 
 function deliveryTagType(status) {
   return {
     pending: 'warning',
-    shipping: 'primary',
+    shipping: 'info',
     delivered: 'success',
-    not_required: 'info'
-  }[status] || 'info'
+    not_required: 'default'
+  }[status] || 'default'
 }
 
 function buildParams() {
@@ -372,14 +412,31 @@ async function loadDetail(id) {
 async function openDetail(row) {
   detailVisible.value = true
   detail.value = null
+  activeTab.value = 'items'
   await loadDetail(row.id)
 }
 
 async function handleAction(row, action) {
+  if (action === 'ship') {
+    const res = await ElMessageBox.prompt('确认发货该订单吗？请填写物流单号', '订单发货', {
+      confirmButtonText: '确认发货',
+      cancelButtonText: '取消',
+      inputPlaceholder: '请输入物流单号',
+      inputValidator: (value) => Boolean(String(value || '').trim()) || '物流单号不能为空'
+    })
+    await orderApi.ship(row.id, { tracking_no: res.value })
+    ElMessage.success('发货成功')
+    await loadData()
+    if (detailVisible.value && detail.value?.id === row.id) {
+      await loadDetail(row.id)
+    }
+    return
+  }
+
   const actionMap = {
     pay: { label: '置为已支付', request: () => orderApi.markPaid(row.id) },
-    confirm: { label: '确认完成', request: () => orderApi.confirm(row.id) },
-    close: { label: '关闭订单', request: () => orderApi.close(row.id) }
+    close: { label: '关闭订单', request: () => orderApi.close(row.id) },
+    refund: { label: '退款', request: () => orderApi.refund(row.id) }
   }
   const target = actionMap[action]
   if (!target) return
@@ -392,7 +449,44 @@ async function handleAction(row, action) {
   }
 }
 
+async function handleShip() {
+  if (!detail.value) return
+  const res = await ElMessageBox.prompt('确认发货该订单吗？请填写物流单号', '订单发货', {
+    confirmButtonText: '确认发货',
+    cancelButtonText: '取消',
+    inputPlaceholder: '请输入物流单号',
+    inputValidator: (value) => Boolean(String(value || '').trim()) || '物流单号不能为空'
+  })
+  await orderApi.ship(detail.value.id, { tracking_no: res.value })
+  ElMessage.success('发货成功')
+  await loadData()
+  await loadDetail(detail.value.id)
+}
+
+async function handleClose() {
+  if (!detail.value) return
+  await ElMessageBox.confirm(`确认关闭订单 ${detail.value.order_no} 吗？`, '关闭订单', { type: 'warning' })
+  await orderApi.close(detail.value.id)
+  ElMessage.success('订单已关闭')
+  await loadData()
+  await loadDetail(detail.value.id)
+}
+
+async function handleRefund() {
+  if (!detail.value) return
+  await ElMessageBox.confirm(`确认退款订单 ${detail.value.order_no} 吗？`, '订单退款', { type: 'warning' })
+  await orderApi.refund(detail.value.id)
+  ElMessage.success('订单已退款')
+  await loadData()
+  await loadDetail(detail.value.id)
+}
+
 function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function handleReset() {
   page.value = 1
   loadData()
 }
@@ -418,85 +512,154 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+@import '@/styles/variables.css';
+
 .orders-view {
   display: grid;
-  gap: 18px;
+  gap: var(--space-4);
 }
 
-.block-gap {
-  margin-top: 18px;
+.data-card {
+  padding: var(--space-5);
 }
 
-.toolbar-wrap {
-  flex-wrap: wrap;
-}
-
-.table-pagination {
-  margin-top: 18px;
-  justify-content: flex-end;
-}
-
+/* 表格样式 */
 .cell-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--brand-deep);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
 }
 
 .cell-meta {
-  margin-top: 6px;
-  font-size: 12px;
-  color: rgba(58, 45, 36, 0.68);
+  margin-top: 4px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
 }
 
+.table-pagination {
+  margin-top: var(--space-5);
+  justify-content: flex-end;
+}
+
+/* 操作按钮组 */
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+/* 详情抽屉 */
 .detail-layout {
   display: grid;
-  gap: 18px;
+  gap: var(--space-5);
 }
 
 .detail-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .detail-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--brand-deep);
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
 }
 
 .detail-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 .detail-desc {
-  margin-top: 18px;
+  margin-top: var(--space-4);
 }
 
+/* Tab 样式 */
+.detail-tabs {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.detail-tabs-inner {
+  padding: 0 var(--space-4);
+}
+
+.detail-tabs-inner :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.detail-tabs-inner :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+}
+
+/* 时间轴 */
 .timeline-list {
   display: grid;
-  gap: 14px;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
 }
 
 .timeline-item {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: flex-start;
 }
 
 .timeline-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  margin-top: 5px;
-  background: rgba(198, 132, 79, 0.22);
+  margin-top: 6px;
+  background: var(--border-default);
+  flex-shrink: 0;
 }
 
 .timeline-dot.active {
-  background: var(--brand-primary);
+  background: var(--primary-mid);
+}
+
+.empty-hint {
+  text-align: center;
+  color: var(--text-muted);
+  padding: var(--space-6);
+}
+
+/* 抽屉底部 */
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-surface);
+}
+
+/* 文字辅助 */
+.text-primary {
+  color: var(--primary-deep);
+  font-weight: var(--font-medium);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .action-group {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detail-top {
+    flex-direction: column;
+  }
+
+  .detail-tags {
+    width: 100%;
+  }
 }
 </style>

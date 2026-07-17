@@ -1,146 +1,129 @@
 <template>
-  <view class="container assets-page">
-    <StateView v-if="pageLoading" title="加载中..." custom-class="mt-24" />
-    <StateView
-      v-else-if="pageFailed"
-      title="资产数据加载失败"
-      :show-retry="true"
-      custom-class="mt-24"
-      @retry="reloadPage"
-    />
+  <view class="assets-page">
+    <!-- Header -->
+    <view class="page-header">
+      <view class="back-btn" @click="goBack">←</view>
+      <text class="header-title">我的资产</text>
+      <view class="header-spacer" />
+    </view>
 
+    <!-- Loading -->
+    <view v-if="pageLoading && !summary.total" class="loading-state">
+      <view class="skeleton skeleton-hero" />
+      <view v-for="i in 3" :key="i" class="skeleton skeleton-card" />
+    </view>
+
+    <!-- Error -->
+    <view v-else-if="pageFailed && !summary.total" class="error-state">
+      <text class="error-icon">⚠</text>
+      <text class="error-text">资产数据加载失败</text>
+      <view class="retry-btn" @click="reloadPage">点击重试</view>
+    </view>
+
+    <!-- Content -->
     <template v-else>
-      <view class="card hero-card">
-        <view class="hero-tag">资产中心</view>
-        <view class="row-between mt-12 section-row">
-          <view>
-            <view class="section-title slim-title">资产明细</view>
-            <view class="muted">按资产分类查看账户余额和每一笔变动</view>
-          </view>
-          <view class="badge badge-orange">{{ activeAssetTab.label }}</view>
+      <!-- Balance Card -->
+      <view class="balance-card">
+        <view class="balance-header">
+          <text class="balance-label">账户余额</text>
+          <view v-if="activeAssetType === 'balance'" class="withdraw-btn" @click="goWithdraw">提现</view>
         </view>
-
-        <view class="tab-wrap">
-          <view
-            v-for="tab in assetTabs"
-            :key="tab.value"
-            class="tab-chip interactive"
-            :class="{ active: activeAssetType === tab.value }"
-            @click="changeAssetType(tab.value)"
-          >
-            {{ tab.label }}
+        <text class="balance-amount">¥{{ money(activeBalance) }}</text>
+        <view class="balance-strip">
+          <view class="strip-item">
+            <text class="strip-label">可提现</text>
+            <text class="strip-value">¥{{ money(activeAvailable) }}</text>
           </view>
-        </view>
-
-        <FilterChips
-          class="mt-16"
-          :items="detailRangeOptions"
-          :model-value="activeDetailRange"
-          @change="changeDetailRange"
-        />
-
-        <view class="detail-stat-grid mt-20">
-          <view v-for="item in detailCards" :key="item.key" class="detail-stat-card">
-            <view class="detail-stat-label">{{ item.label }}</view>
-            <view class="detail-stat-value">{{ item.value }}</view>
-            <view class="detail-stat-meta">{{ item.meta }}</view>
+          <view class="strip-divider" />
+          <view class="strip-item">
+            <text class="strip-label">累计提现</text>
+            <text class="strip-value">¥{{ money(activeWithdrawn) }}</text>
           </view>
-        </view>
-
-        <view class="detail-caption mt-16">{{ activeAssetTab.desc }}</view>
-
-        <view v-if="activeAssetTips.length" class="asset-guide mt-16">
-          <view v-for="item in activeAssetTips" :key="item.title" class="asset-guide-item">
-            <view class="asset-guide-title">{{ item.title }}</view>
-            <view class="asset-guide-desc">{{ item.desc }}</view>
-          </view>
-        </view>
-
-        <view v-if="activeAssetType === 'balance'" class="withdraw-entry mt-20">
-          <view>
-            <view class="withdraw-title">余额提现</view>
-            <view class="withdraw-tip">提现功能已拆分到独立页面，审核通过后 80% 到账，20% 自动转入消费金。</view>
-          </view>
-          <button class="btn btn-primary withdraw-link-btn" @click="goBalanceWithdraw">去提现</button>
-        </view>
-
-        <StateView
-          v-if="detailLoading && !detailRows.length"
-          title="明细加载中..."
-          custom-class="asset-empty"
-        />
-        <StateView
-          v-else-if="detailFailed && !detailRows.length"
-          title="明细加载失败"
-          :show-retry="true"
-          custom-class="asset-empty"
-          @retry="reloadAssetDetail"
-        />
-        <StateView
-          v-else-if="!detailRows.length"
-          :title="activeAssetTab.emptyTitle"
-          :description="activeAssetTab.emptyDesc"
-          custom-class="asset-empty"
-        />
-
-        <view v-else class="detail-list mt-20">
-          <view v-for="item in detailRows" :key="item.id" class="detail-item">
-            <view class="row-between detail-top">
-              <view class="detail-name">{{ item.name }}</view>
-              <view class="detail-amount" :class="item.type === 'in' ? 'amount-in' : 'amount-out'">
-                {{ item.type === 'in' ? '+' : '-' }}{{ item.amountText }}
-              </view>
-            </view>
-            <view class="detail-note">{{ item.summaryText }}</view>
-            <view class="detail-action-row">
-              <view class="detail-meta">{{ item.time }}</view>
-              <view class="copy-link interactive" @click.stop="toggleDetailExpand(item.id)">
-                {{ isDetailExpanded(item.id) ? '收起详情' : '展开详情' }}
-              </view>
-            </view>
-            <DetailInfoPanel
-              v-if="isDetailExpanded(item.id)"
-              :items="item.detailItems"
-              :note="item.detailNote"
-            >
-              <view v-if="item.sourceNo" class="detail-meta-copy">
-                <text class="detail-meta">{{ item.sourceLabel }} {{ item.sourceNo }}</text>
-                <view class="copy-link interactive" @click.stop="copyText(item.sourceNo, item.sourceLabel)">复制</view>
-              </view>
-            </DetailInfoPanel>
-          </view>
-        </view>
-
-        <view v-if="detailRows.length" class="load-more muted">
-          {{ detailLoadMoreText }}
         </view>
       </view>
 
-      <view v-if="isPowerBankTab" class="card mt-24 power-card">
-        <view class="row-between section-row">
-          <view class="section-title slim-title">{{ powerBankSectionTitle }}</view>
-          <view class="muted">{{ powerBanks.length }} 台</view>
+      <!-- Asset Tabs -->
+      <view class="tabs-wrap">
+        <view
+          v-for="tab in assetTabs"
+          :key="tab.value"
+          class="tab-item"
+          :class="{ active: activeAssetType === tab.value }"
+          @click="changeAssetType(tab.value)"
+        >
+          {{ tab.label }}
         </view>
-        <StateView
-          v-if="!powerBanks.length"
-          title="暂时还没有绑定的充电宝"
-          description="绑定成功后，这里会展示设备状态、累计收益和最近结算时间。"
-          custom-class="asset-empty"
-        />
-        <view v-else class="power-bank-list">
-          <view v-for="item in powerBanks" :key="item.id" class="power-bank-item">
-            <view class="row-between">
-              <view class="power-bank-title">{{ item.device_name || item.device_code }}</view>
-              <view class="power-bank-status" :class="item.status === 'ACTIVE' ? 'status-active' : 'status-disabled'">
+      </view>
+
+      <!-- Detail Card -->
+      <view class="detail-card">
+        <!-- Stats Grid -->
+        <view class="stats-grid">
+          <view v-for="item in detailCards" :key="item.key" class="stat-cell">
+            <text class="stat-label">{{ item.label }}</text>
+            <text class="stat-value">{{ item.value }}</text>
+          </view>
+        </view>
+
+        <!-- Loading More -->
+        <view v-if="detailLoading && !detailRows.length" class="state-loading">
+          <view class="loading-spinner" />
+          <text>加载中...</text>
+        </view>
+
+        <!-- Error -->
+        <view v-else-if="detailFailed && !detailRows.length" class="state-error">
+          <text>明细加载失败</text>
+          <text class="retry-link" @click="reloadAssetDetail">重试</text>
+        </view>
+
+        <!-- Empty -->
+        <view v-else-if="!detailRows.length" class="state-empty">
+          <view class="empty-icon">◇</view>
+          <text class="empty-title">暂无明细记录</text>
+        </view>
+
+        <!-- List -->
+        <view v-else class="detail-list">
+          <view v-for="item in detailRows" :key="item.id" class="detail-item">
+            <view class="detail-top">
+              <view class="detail-info">
+                <text class="detail-name">{{ item.name }}</text>
+                <text class="detail-time">{{ item.time }}</text>
+              </view>
+              <text class="detail-amount" :class="item.type === 'in' ? 'amount-in' : 'amount-out'">
+                {{ item.type === 'in' ? '+' : '-' }}{{ item.amountText }}
+              </text>
+            </view>
+            <view class="detail-summary">{{ item.summaryText }}</view>
+          </view>
+
+          <view v-if="hasMore" class="load-more" @click="loadMoreDetail">
+            {{ detailLoading ? '加载中...' : '加载更多' }}
+          </view>
+          <view v-else class="load-more done">— 没有更多了 —</view>
+        </view>
+      </view>
+
+      <!-- Power Bank Section -->
+      <view v-if="isPowerBankTab" class="power-card">
+        <text class="section-title">充电宝设备</text>
+        <view v-if="!powerBanks.length" class="state-empty">
+          <view class="empty-icon">◇</view>
+          <text class="empty-title">暂无绑定设备</text>
+        </view>
+        <view v-else class="power-list">
+          <view v-for="item in powerBanks" :key="item.id" class="power-item">
+            <view class="power-header">
+              <text class="power-name">{{ item.device_name || item.device_code }}</text>
+              <view class="power-status" :class="item.status === 'ACTIVE' ? 'status-active' : 'status-disabled'">
                 {{ item.status === 'ACTIVE' ? '生效中' : '已停用' }}
               </view>
             </view>
-            <view class="power-bank-code">编号：{{ item.device_code }}</view>
-            <view class="power-bank-meta">
+            <view class="power-meta">
+              <text>编号：{{ item.device_code }}</text>
               <text>累计收益 ¥{{ money(item.total_income_amount) }}</text>
-              <text>最近结算 {{ item.last_income_date || '--' }}</text>
             </view>
-            <view v-if="item.remark" class="power-bank-remark">{{ item.remark }}</view>
           </view>
         </view>
       </view>
@@ -150,50 +133,17 @@
 
 <script setup>
 import { computed, ref } from 'vue';
-import { onLoad, onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app';
-
-import DetailInfoPanel from '@/components/DetailInfoPanel.vue';
-import FilterChips from '@/components/FilterChips.vue';
-import StateView from '@/components/StateView.vue';
+import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app';
 import { assetApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
 
 const DETAIL_PAGE_SIZE = 12;
-const ASSET_PAGE_CACHE_KEY = 'asset_page_view_state';
-const detailRangeOptions = [
-  { value: 7, label: '最近7天' },
-  { value: 30, label: '最近30天' },
-  { value: 0, label: '全部' }
-];
+
 const assetTabs = [
-  {
-    value: 'balance',
-    label: '余额',
-    desc: '充电宝收益、推荐奖等会进入余额账户，也支持提现。',
-    emptyTitle: '暂时还没有余额明细',
-    emptyDesc: '收益入账、提现申请或余额支出后，会在这里更新记录。'
-  },
-  {
-    value: 'voucher',
-    label: '消费金',
-    desc: '消费金主要用于商城抵扣，也会承接余额提现的 20% 转入。',
-    emptyTitle: '暂时还没有消费金明细',
-    emptyDesc: '消费金转入、抵扣使用后，会在这里更新记录。'
-  },
-  {
-    value: 'points',
-    label: '积分',
-    desc: '积分用于补贴、转赠以及商城支付抵扣。',
-    emptyTitle: '暂时还没有积分明细',
-    emptyDesc: '积分转入、转出或抵扣使用后，会在这里更新记录。'
-  },
-  {
-    value: 'power_bank',
-    label: '充电宝',
-    desc: '查看已绑定充电宝数量，以及绑定、启用、停用等设备明细。',
-    emptyTitle: '暂时还没有充电宝明细',
-    emptyDesc: '充电宝绑定、启用、停用或收益更新后，会在这里展示记录。'
-  }
+  { value: 'balance', label: '余额' },
+  { value: 'voucher', label: '消费金' },
+  { value: 'points', label: '积分' },
+  { value: 'power_bank', label: '充电宝' }
 ];
 
 const pageLoading = ref(false);
@@ -202,188 +152,58 @@ const detailLoading = ref(false);
 const detailFailed = ref(false);
 const summary = ref({});
 const powerBanks = ref([]);
-const activeAssetType = ref(assetTabs[0].value);
+const activeAssetType = ref('balance');
 const assetDetail = ref({});
 const detailRows = ref([]);
 const detailPage = ref(1);
 const detailHasMore = ref(true);
-const detailRequestKey = ref(0);
-const activeDetailRange = ref(detailRangeOptions[0].value);
-const expandedDetailIds = ref([]);
 
-const activeAssetTab = computed(() => assetTabs.find((item) => item.value === activeAssetType.value) || assetTabs[0]);
 const isPowerBankTab = computed(() => activeAssetType.value === 'power_bank');
-const activeAssetTips = computed(() => {
-  if (activeAssetType.value === 'voucher') {
-    return [
-      { title: '消费场景', desc: '消费金主要用于商城下单抵扣，明细里会展示转入和抵扣记录。' },
-      { title: '余额联动', desc: '余额提现审核通过后，其中 20% 会自动进入消费金账户。' }
-    ];
-  }
 
-  if (activeAssetType.value === 'points') {
-    return [
-      { title: '积分用途', desc: '积分可用于补贴、转赠以及商城支付抵扣，变动都会进入明细。' },
-      { title: '明细查看', desc: '转入、转出、抵扣等记录都可以通过下方明细继续追踪。' }
-    ];
-  }
+const activeBalance = computed(() => assetDetail.value.available_amount || 0);
+const activeAvailable = computed(() => assetDetail.value.available_amount || 0);
+const activeWithdrawn = computed(() => assetDetail.value.withdrawn_amount || 0);
 
-  if (activeAssetType.value === 'power_bank') {
-    return [
-      { title: '设备明细', desc: '绑定、启用、停用和收益入账都会在当前明细中展示。' },
-      { title: '设备列表', desc: '下方设备列表会展示已绑定充电宝的状态、收益和最近结算时间。' }
-    ];
-  }
-
-  return [];
-});
-const powerBankStats = computed(() => {
-  const rows = Array.isArray(powerBanks.value) ? powerBanks.value : [];
-  const activeFromList = rows.filter((item) => String(item.status || '').toUpperCase() === 'ACTIVE').length;
-  const totalCount = firstNumber(
-    assetDetail.value.total_amount,
-    summary.value.POWER_BANK,
-    summary.value.power_bank,
-    summary.value.power_bank_count,
-    rows.length
-  );
-  const activeCount = firstNumber(assetDetail.value.available_amount, activeFromList);
-
-  return {
-    activeCount,
-    totalCount
-  };
-});
-const powerBankSectionTitle = computed(() => (isPowerBankTab.value ? '充电宝设备' : '已绑定充电宝'));
 const detailCards = computed(() => {
   if (isPowerBankTab.value) {
+    const activeCount = powerBanks.value.filter((item) => item.status === 'ACTIVE').length;
     return [
-      {
-        key: 'active',
-        label: '当前生效',
-        value: formatAssetValue(powerBankStats.value.activeCount, true),
-        meta: '当前可正常结算收益的设备数'
-      },
-      {
-        key: 'total',
-        label: '累计绑定',
-        value: formatAssetValue(powerBankStats.value.totalCount, true),
-        meta: '当前账号下已绑定设备总数'
-      }
+      { key: 'active', label: '当前生效', value: `${activeCount} 台` },
+      { key: 'total', label: '累计绑定', value: `${powerBanks.value.length} 台` }
     ];
   }
 
-  if (activeAssetType.value === 'balance') {
-    return [
-      {
-        key: 'available',
-        label: '当前可用',
-        value: `¥${money(assetDetail.value.available_amount)}`,
-        meta: '当前可直接提现或使用的余额'
-      },
-      {
-        key: 'withdrawn',
-        label: '累计提现',
-        value: `¥${money(assetDetail.value.withdrawn_amount)}`,
-        meta: '审核通过后实际到账金额'
-      }
-    ];
-  }
-
-  if (activeAssetType.value === 'voucher') {
-    return [
-      {
-        key: 'available',
-        label: '当前可用',
-        value: `¥${money(assetDetail.value.available_amount)}`,
-        meta: '当前可用于商城抵扣的消费金额度'
-      },
-      {
-        key: 'consumed',
-        label: '累计抵扣',
-        value: `¥${money(assetDetail.value.consumed_amount)}`,
-        meta: '历史下单抵扣和消费使用金额'
-      }
-    ];
-  }
+  const available = assetDetail.value.available_amount || 0;
+  const consumed = assetDetail.value.consumed_amount || 0;
 
   return [
-    {
-      key: 'available',
-      label: '当前可用',
-      value: `¥${money(assetDetail.value.available_amount)}`,
-      meta: '当前可继续使用或转赠的积分额度'
-    },
-    {
-      key: 'consumed',
-      label: '累计使用',
-      value: `¥${money(assetDetail.value.consumed_amount)}`,
-      meta: '历史转赠、抵扣或其他积分支出'
-    }
+    { key: 'available', label: '当前可用', value: `¥${money(available)}` },
+    { key: 'consumed', label: activeAssetType.value === 'balance' ? '累计提现' : '累计使用', value: `¥${money(consumed)}` }
   ];
 });
 
-const detailLoadMoreText = computed(() => {
-  if (detailLoading.value && detailRows.value.length) return '加载更多明细中...';
-  if (detailHasMore.value) return '上拉可继续加载更多明细';
-  return '已经到底了';
-});
+const hasMore = computed(() => detailHasMore.value);
 
 function money(value) {
   return Number(value || 0).toFixed(2);
 }
 
-function normalizeAssetType(type) {
-  return String(type || '').trim().toLowerCase();
+function goBack() {
+  uni.navigateBack();
 }
 
-function normalizeDetailRange(value) {
-  const num = Number(value);
-  return detailRangeOptions.some((item) => item.value === num) ? num : detailRangeOptions[0].value;
+function goWithdraw() {
+  uni.navigateTo({ url: '/subpackages/assets/withdraw' });
 }
 
-function readPageCache() {
-  const cached = uni.getStorageSync(ASSET_PAGE_CACHE_KEY);
-  return cached && typeof cached === 'object' ? cached : {};
-}
-
-function writePageCache() {
-  uni.setStorageSync(ASSET_PAGE_CACHE_KEY, {
-    tab: activeAssetType.value,
-    range: activeDetailRange.value
-  });
-}
-
-function firstNumber(...values) {
-  for (const value of values) {
-    if (value === null || value === undefined || value === '') continue;
-    const num = Number(value);
-    if (Number.isFinite(num)) return num;
-  }
-  return 0;
-}
-
-function countText(value) {
-  const num = firstNumber(value);
-  if (Math.abs(num - Math.round(num)) < 0.000001) {
-    return String(Math.round(num));
-  }
-  return num.toFixed(2).replace(/\.?0+$/, '');
-}
-
-function formatAssetValue(value, isCount = false) {
-  return isCount ? `${countText(value)} 台` : `¥${money(value)}`;
-}
-
-function formatDetailTime(value, short = false) {
+function formatDetailTime(value) {
   if (!value) return '--';
-  const text = String(value).replace('T', ' ');
-  return short ? text.slice(5, 16) : text.slice(0, 16);
+  return String(value).replace('T', ' ').slice(0, 16);
 }
 
-function formatLedgerBizName(item, isCountAsset = false) {
+function formatLedgerBizName(item) {
   const businessType = String(item.business_type || '').trim().toUpperCase();
-  const mappedName = {
+  const names = {
     DAILY_SIGNIN: '每日签到奖励',
     POINTS_TRANSFER_OUT: '积分转出',
     POINTS_TRANSFER_IN: '积分转入',
@@ -400,93 +220,21 @@ function formatLedgerBizName(item, isCountAsset = false) {
     POWER_BANK_DAILY_INCOME: '充电宝每日收益',
     POWER_BANK_REFERRAL_INCOME: '充电宝推荐收益',
     ORDER_DEDUCT: '下单抵扣',
-    SELF_OPERATED_REWARD: '自营专区奖励',
-    TEST_SEED: '测试资产初始化',
-    PAYFLOW_SMOKE_SEED: '支付流程测试充值'
-  }[businessType];
-
-  if (mappedName) return mappedName;
-  if (item.biz_name) return item.biz_name;
-  if (businessType) return businessType.replace(/_/g, ' ');
-  return isCountAsset ? '充电宝变动' : '资产变动';
-}
-
-function formatLedgerSourceLabel(item) {
-  const businessType = String(item.business_type || '').trim().toUpperCase();
-  return {
-    ORDER_DEDUCT: '订单号',
-    BALANCE_WITHDRAW_APPLY: '提现单号',
-    BALANCE_WITHDRAW_APPROVE: '提现单号',
-    BALANCE_WITHDRAW_REJECT: '提现单号',
-    BALANCE_WITHDRAW_VOUCHER: '提现单号',
-    POINTS_WITHDRAW_APPLY: '提现单号',
-    POINTS_WITHDRAW_APPROVE: '提现单号',
-    POINTS_WITHDRAW_REJECT: '提现单号',
-    POWER_BANK_BIND: '设备编号',
-    POWER_BANK_ENABLE: '设备编号',
-    POWER_BANK_DISABLE: '设备编号'
-  }[businessType] || '来源单号';
-}
-
-function formatLedgerNote(item, beforeText) {
-  const businessType = String(item.business_type || '').trim().toUpperCase();
-  const noteParts = [];
-  const mappedNote = {
-    ORDER_DEDUCT: '下单支付时使用该资产完成抵扣',
-    DAILY_SIGNIN: '签到奖励已发放到账户',
-    POINTS_TRANSFER_OUT: '积分已转赠给其他用户',
-    POINTS_TRANSFER_IN: '收到他人转赠的积分',
-    BALANCE_WITHDRAW_APPLY: '提现申请已提交，等待审核',
-    BALANCE_WITHDRAW_APPROVE: '提现审核通过，到账部分已处理',
-    BALANCE_WITHDRAW_REJECT: '提现申请未通过，金额已退回',
-    BALANCE_WITHDRAW_VOUCHER: '余额提现的 20% 已自动转入消费金',
-    POINTS_WITHDRAW_APPLY: '积分提现申请已提交，等待审核',
-    POINTS_WITHDRAW_APPROVE: '积分提现审核通过',
-    POINTS_WITHDRAW_REJECT: '积分提现未通过，积分已退回',
-    POWER_BANK_BIND: '充电宝设备已绑定到当前账号',
-    POWER_BANK_ENABLE: '充电宝设备已恢复生效',
-    POWER_BANK_DISABLE: '充电宝设备已停用',
-    POWER_BANK_DAILY_INCOME: '充电宝每日收益已入账',
-    POWER_BANK_REFERRAL_INCOME: '推荐充电宝收益已入账',
-    SELF_OPERATED_REWARD: '自营专区奖励已发放',
-    TEST_SEED: '测试环境初始化资产',
-    PAYFLOW_SMOKE_SEED: '支付流程联调初始化资产'
-  }[businessType];
-
-  if (item.remark) {
-    noteParts.push(item.remark);
-  } else if (mappedNote) {
-    noteParts.push(mappedNote);
-  }
-  noteParts.push(`变动前 ${beforeText}`);
-  return noteParts.join(' · ');
+    SELF_OPERATED_REWARD: '自营专区奖励'
+  };
+  return names[businessType] || item.biz_name || businessType || '资产变动';
 }
 
 function buildDetailRows(rows = []) {
-  const isCountAsset = activeAssetType.value === 'power_bank';
-
   return rows.map((item, index) => {
     const amount = Number(item.amount ?? item.change_amount ?? 0);
     const type = amount >= 0 ? 'in' : 'out';
-    const beforeText = formatAssetValue(item.before_amount, isCountAsset);
-    const afterText = formatAssetValue(item.after_amount, isCountAsset);
-
     return {
       id: item.id || `${activeAssetType.value}-${index}`,
-      name: formatLedgerBizName(item, isCountAsset),
-      amountText: formatAssetValue(Math.abs(amount), isCountAsset),
+      name: formatLedgerBizName(item),
+      amountText: `¥${money(Math.abs(amount))}`,
       type,
-      summaryText: item.remark || formatLedgerBizName(item, isCountAsset),
-      detailNote: formatLedgerNote(item, beforeText),
-      beforeText,
-      afterText,
-      detailItems: [
-        { key: 'before', label: '变动前', value: beforeText },
-        { key: 'after', label: '变动后', value: afterText },
-        { key: 'time', label: '变动时间', value: formatDetailTime(item.created_at || item.time) }
-      ],
-      sourceLabel: item.source_no ? formatLedgerSourceLabel(item) : '',
-      sourceNo: item.source_no || '',
+      summaryText: item.remark || formatLedgerBizName(item),
       time: formatDetailTime(item.created_at || item.time)
     };
   });
@@ -514,8 +262,6 @@ async function loadAssetDetail({ reset = false } = {}) {
   if (detailLoading.value && !reset) return;
   if (!reset && !detailHasMore.value) return;
 
-  const requestKey = detailRequestKey.value + 1;
-  detailRequestKey.value = requestKey;
   if (reset) {
     detailRows.value = [];
     detailPage.value = 1;
@@ -526,48 +272,38 @@ async function loadAssetDetail({ reset = false } = {}) {
   const targetPage = reset ? 1 : detailPage.value;
 
   try {
-    let detailRes = assetDetail.value;
+    let detailRes = {};
     const ledgerParams = { page: targetPage, page_size: DETAIL_PAGE_SIZE };
-    if (Number(activeDetailRange.value) > 0) {
-      ledgerParams.recent_days = Number(activeDetailRange.value);
-    }
+
     if (reset) {
       const [accountRes, ledgerRes] = await Promise.all([
         assetApi.detail(activeAssetType.value),
         assetApi.ledgers(activeAssetType.value, ledgerParams)
       ]);
-      if (requestKey !== detailRequestKey.value) return;
       detailRes = accountRes || {};
       assetDetail.value = detailRes;
       const rows = buildDetailRows(pickListPayload(ledgerRes));
       detailRows.value = rows;
-      expandedDetailIds.value = expandedDetailIds.value.filter((id) => rows.some((item) => String(item.id) === String(id)));
       detailHasMore.value = rows.length >= DETAIL_PAGE_SIZE;
       detailPage.value = targetPage + 1;
       return;
     }
 
     const ledgerRes = await assetApi.ledgers(activeAssetType.value, ledgerParams);
-    if (requestKey !== detailRequestKey.value) return;
-    assetDetail.value = detailRes || {};
+    detailRes = assetDetail.value || {};
     const rows = buildDetailRows(pickListPayload(ledgerRes));
     detailRows.value = [...detailRows.value, ...rows];
-    expandedDetailIds.value = expandedDetailIds.value.filter((id) => detailRows.value.some((item) => String(item.id) === String(id)));
     detailHasMore.value = rows.length >= DETAIL_PAGE_SIZE;
     detailPage.value = targetPage + 1;
   } catch (error) {
-    if (requestKey === detailRequestKey.value) {
-      detailFailed.value = true;
-    }
+    detailFailed.value = true;
   } finally {
-    if (requestKey === detailRequestKey.value) {
-      detailLoading.value = false;
-    }
+    detailLoading.value = false;
   }
 }
 
-async function reloadAssetDetail() {
-  await loadAssetDetail({ reset: true });
+function reloadAssetDetail() {
+  loadAssetDetail({ reset: true });
 }
 
 async function reloadPage() {
@@ -583,68 +319,15 @@ async function reloadPage() {
   }
 }
 
-function syncPageOptions(extra = {}) {
-  const pages = getCurrentPages();
-  const currentPage = pages[pages.length - 1];
-  if (!currentPage?.options) return;
-  currentPage.options.tab = activeAssetType.value;
-  currentPage.options.range = String(activeDetailRange.value);
-  Object.keys(extra).forEach((key) => {
-    currentPage.options[key] = String(extra[key]);
-  });
-  writePageCache();
-}
-
 function changeAssetType(type) {
-  const nextType = normalizeAssetType(type);
-  const exists = assetTabs.some((item) => item.value === nextType);
-  if (!exists || activeAssetType.value === nextType) return;
-  activeAssetType.value = nextType;
-  syncPageOptions();
+  if (activeAssetType.value === type) return;
+  activeAssetType.value = type;
   reloadAssetDetail();
 }
 
-function changeDetailRange(value) {
-  if (activeDetailRange.value === value) return;
-  activeDetailRange.value = value;
-  syncPageOptions();
-  reloadAssetDetail();
+function loadMoreDetail() {
+  loadAssetDetail();
 }
-
-function goBalanceWithdraw() {
-  uni.navigateTo({ url: `/subpackages/assets/withdraw?range=${activeDetailRange.value}` });
-}
-
-function copyText(value, label = '内容') {
-  if (!value) return;
-  uni.setClipboardData({
-    data: String(value),
-    success: () => uni.showToast({ title: `已复制${label}`, icon: 'none' })
-  });
-}
-
-function toggleDetailExpand(id) {
-  const key = String(id);
-  if (expandedDetailIds.value.includes(key)) {
-    expandedDetailIds.value = expandedDetailIds.value.filter((item) => item !== key);
-    return;
-  }
-  expandedDetailIds.value = [...expandedDetailIds.value, key];
-}
-
-function isDetailExpanded(id) {
-  return expandedDetailIds.value.includes(String(id));
-}
-
-onLoad((options = {}) => {
-  const cached = readPageCache();
-  const nextType = normalizeAssetType(options.tab || options.asset_type || cached.tab);
-  if (assetTabs.some((item) => item.value === nextType)) {
-    activeAssetType.value = nextType;
-  }
-  activeDetailRange.value = normalizeDetailRange(options.range || options.recent_days || cached.range);
-  syncPageOptions();
-});
 
 onShow(() => {
   reloadPage();
@@ -656,273 +339,418 @@ onPullDownRefresh(async () => {
 });
 
 onReachBottom(() => {
-  loadAssetDetail();
+  loadMoreDetail();
 });
 </script>
 
 <style scoped>
-@import '@/styles/common.css';
+@import '@/styles/elegant.css';
 
 .assets-page {
-  padding-bottom: 36rpx;
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 48rpx;
 }
 
-.hero-card {
-  background:
-    radial-gradient(circle at 95% 8%, rgba(255, 166, 82, 0.16), transparent 36%),
-    linear-gradient(180deg, #fffdf9 0%, #fff6ec 100%);
-  border: 1rpx solid rgba(255, 154, 106, 0.16);
-}
-
-.hero-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #ff6a00;
-  font-size: 20rpx;
-  font-weight: 800;
-}
-
-.slim-title {
-  margin-bottom: 0;
-}
-
-.section-row {
-  margin-bottom: 16rpx;
-}
-
-.tab-wrap {
-  display: flex;
-  gap: 12rpx;
-  overflow-x: auto;
-}
-
-.tab-chip {
-  flex-shrink: 0;
-  padding: 12rpx 22rpx;
-  border-radius: 999rpx;
-  background: #f6f1ea;
-  color: #7f6954;
-  font-size: 24rpx;
-  border: 1rpx solid rgba(194, 156, 117, 0.18);
-}
-
-.tab-chip.active {
-  background: linear-gradient(135deg, #ff7a00, #ff5f3d);
-  color: #ffffff;
-  border-color: transparent;
-}
-
-.detail-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14rpx;
-}
-
-.detail-stat-card,
-.withdraw-entry {
-  padding: 18rpx;
-  border-radius: 20rpx;
-  background: #fffaf4;
-  border: 1rpx solid rgba(198, 161, 124, 0.14);
-}
-
-.detail-stat-label {
-  font-size: 22rpx;
-  color: #8b7158;
-}
-
-.detail-stat-value {
-  margin-top: 10rpx;
-  font-size: 30rpx;
-  font-weight: 900;
-  color: #4f321a;
-}
-
-.detail-stat-meta,
-.detail-caption {
-  margin-top: 8rpx;
-  font-size: 20rpx;
-  color: #9a7e63;
-}
-
-.asset-guide {
-  display: grid;
-  gap: 12rpx;
-}
-
-.asset-guide-item {
-  padding: 16rpx 18rpx;
-  border-radius: 18rpx;
-  background: #fffaf4;
-  border: 1rpx solid rgba(198, 161, 124, 0.14);
-}
-
-.asset-guide-title {
-  font-size: 24rpx;
-  font-weight: 700;
-  color: #4f321a;
-}
-
-.asset-guide-desc {
-  margin-top: 6rpx;
-  font-size: 21rpx;
-  line-height: 1.55;
-  color: #8d745d;
-}
-
-.withdraw-entry {
+/* Header */
+.page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20rpx;
+  padding: 24rpx 32rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: var(--card);
+  border-bottom: 1rpx solid var(--border-light);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
 }
 
-.withdraw-title {
-  font-size: 26rpx;
+.back-btn, .header-spacer {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: var(--text);
+}
+
+.header-title {
+  font-size: 32rpx;
   font-weight: 700;
-  color: #4f321a;
+  color: var(--text);
 }
 
-.withdraw-tip {
-  margin-top: 8rpx;
-  font-size: 21rpx;
-  line-height: 1.5;
-  color: #8d745d;
-}
-
-.withdraw-link-btn {
-  width: 180rpx;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.asset-empty {
-  padding: 16rpx 0 8rpx;
-}
-
-.detail-list,
-.power-bank-list {
-  display: grid;
+/* Loading */
+.loading-state {
+  padding: 24rpx;
+  margin-top: 120rpx;
+  display: flex;
+  flex-direction: column;
   gap: 16rpx;
 }
 
-.detail-item,
-.power-bank-item {
-  padding: 18rpx;
-  border-radius: 22rpx;
-  background: #fffdf9;
-  border: 1rpx solid rgba(198, 161, 124, 0.16);
+.skeleton {
+  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-xl);
 }
 
-.detail-name,
-.power-bank-title {
-  font-size: 27rpx;
+.skeleton-hero {
+  height: 320rpx;
+}
+
+.skeleton-card {
+  height: 200rpx;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 200rpx;
+  gap: 16rpx;
+}
+
+.error-icon {
+  font-size: 80rpx;
+  color: var(--error);
+}
+
+.error-text {
+  font-size: 28rpx;
+  color: var(--text-muted);
+}
+
+.retry-btn {
+  padding: 16rpx 40rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+  margin-top: 16rpx;
+}
+
+/* Balance Card */
+.balance-card {
+  margin: 120rpx 24rpx 24rpx;
+  padding: 40rpx 32rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-radius: var(--radius-xl);
+  box-shadow: 0 12rpx 32rpx rgba(16, 185, 129, 0.25);
+}
+
+.balance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.balance-label {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.withdraw-btn {
+  padding: 10rpx 24rpx;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 24rpx;
+  font-weight: 600;
+  border-radius: 20rpx;
+}
+
+.balance-amount {
+  font-size: 64rpx;
+  font-weight: 800;
+  color: white;
+  display: block;
+  margin-bottom: 24rpx;
+}
+
+.balance-strip {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-lg);
+  padding: 20rpx;
+}
+
+.strip-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.strip-divider {
+  width: 1rpx;
+  height: 40rpx;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.strip-label {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.strip-value {
+  font-size: 26rpx;
   font-weight: 700;
-  color: #4f321a;
-  line-height: 1.35;
+  color: white;
+}
+
+/* Tabs */
+.tabs-wrap {
+  display: flex;
+  gap: 12rpx;
+  padding: 0 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.tab-item {
+  padding: 12rpx 24rpx;
+  background: var(--card);
+  color: var(--text-muted);
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 24rpx;
+  border: 1rpx solid var(--border-light);
+}
+
+.tab-item.active {
+  background: var(--primary);
+  color: white;
+  border-color: transparent;
+}
+
+/* Detail Card */
+.detail-card {
+  margin: 0 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.stat-cell {
+  padding: 20rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.stat-label {
+  font-size: 20rpx;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* States */
+.state-loading, .state-error, .state-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60rpx 0;
+  gap: 12rpx;
+}
+
+.loading-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 3rpx solid var(--border-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.state-loading {
+  font-size: 24rpx;
+  color: var(--text-muted);
+}
+
+.state-error {
+  font-size: 24rpx;
+  color: var(--error);
+}
+
+.retry-link {
+  color: var(--primary);
+  margin-top: 8rpx;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  color: var(--border);
+  margin-bottom: 16rpx;
+}
+
+.empty-title {
+  font-size: 28rpx;
+  color: var(--text-muted);
+}
+
+/* Detail List */
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.detail-item {
+  padding: 20rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
 }
 
 .detail-top {
-  gap: 12rpx;
+  display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.detail-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.detail-time {
+  font-size: 20rpx;
+  color: var(--text-muted);
 }
 
 .detail-amount {
-  flex-shrink: 0;
   font-size: 28rpx;
-  font-weight: 800;
-}
-
-.detail-note {
-  margin-top: 8rpx;
-  font-size: 21rpx;
-  line-height: 1.5;
-  color: #8d745d;
-}
-
-.detail-action-row {
-  margin-top: 10rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12rpx;
-}
-
-.detail-meta,
-.power-bank-code,
-.power-bank-meta,
-.power-bank-remark {
-  font-size: 20rpx;
-  color: #9a7e63;
-}
-
-.detail-meta-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 10rpx;
-  flex-wrap: wrap;
-}
-
-.copy-link {
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #c96a14;
-  font-size: 20rpx;
-  line-height: 1.4;
-}
-
-.load-more {
-  padding-top: 18rpx;
-  text-align: center;
-}
-
-.power-card { border: 1rpx solid rgba(255, 154, 106, 0.16); }
-.power-bank-status {
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  font-size: 20rpx;
-}
-
-.status-active {
-  color: #0f8b56;
-  background: rgba(79, 207, 136, 0.14);
-}
-
-.status-disabled {
-  color: #9a6a3d;
-  background: rgba(198, 161, 124, 0.16);
-}
-
-.power-bank-code,
-.power-bank-meta,
-.power-bank-remark {
-  margin-top: 10rpx;
-}
-
-.power-bank-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12rpx;
+  font-weight: 700;
 }
 
 .amount-in {
-  color: #ff6a00;
+  color: var(--success);
 }
 
 .amount-out {
-  color: #8e6d4f;
+  color: var(--text-muted);
 }
 
-.interactive {
-  transition: transform 180ms ease, opacity 180ms ease;
+.detail-summary {
+  font-size: 22rpx;
+  color: var(--text-muted);
 }
 
-.interactive:active {
-  transform: scale(0.98);
-  opacity: 0.92;
+.load-more {
+  text-align: center;
+  padding: 24rpx;
+  font-size: 24rpx;
+  color: var(--text-muted);
+}
+
+.load-more.done {
+  color: var(--border);
+}
+
+/* Power Card */
+.power-card {
+  margin: 24rpx;
+  padding: 32rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 24rpx;
+}
+
+.power-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.power-item {
+  padding: 20rpx;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+}
+
+.power-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.power-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.power-status {
+  padding: 6rpx 16rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.status-active {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.status-disabled {
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.power-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  font-size: 22rpx;
+  color: var(--text-muted);
 }
 </style>

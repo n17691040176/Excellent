@@ -14,6 +14,7 @@ from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProdu
 from app.models.enums import GlobalRole, UserStatus
 from app.models.order import Order
 from app.models.user import User, UserLegacyProfile
+from app.services.admin_permission_service import AdminPermissionService
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 
@@ -28,7 +29,7 @@ class UserService:
         source: str | None = None,
     ):
         query = db.query(User, UserLegacyProfile).outerjoin(UserLegacyProfile, UserLegacyProfile.user_id == User.id)
-        if not AdminScopeService.is_super_admin(current_user):
+        if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(User.team_id == AdminScopeService.require_team_id(current_user))
         if role:
             query = query.filter(User.global_role == role)
@@ -66,6 +67,13 @@ class UserService:
             'nickname': user.nickname,
             'avatar': user.avatar,
             'global_role': user.global_role.value,
+            'admin_role': {
+                'id': user.admin_role.id,
+                'code': user.admin_role.code,
+                'name': user.admin_role.name,
+                'data_scope': user.admin_role.data_scope,
+                'status': user.admin_role.status,
+            } if user.admin_role else None,
             'business_identity': user.business_identity.value,
             'status': user.status.value,
             'invite_code': user.invite_code,
@@ -78,6 +86,7 @@ class UserService:
             'updated_at': user.updated_at,
             'is_legacy_user': UserService.is_legacy_user(db, user),
             'is_legacy_imported': UserService.is_legacy_user(db, user),
+            'permissions': AdminPermissionService.effective_permissions(db, user),
         }
 
     @staticmethod
@@ -88,6 +97,13 @@ class UserService:
             'nickname': user.nickname,
             'avatar': user.avatar,
             'global_role': user.global_role.value,
+            'admin_role': {
+                'id': user.admin_role.id,
+                'code': user.admin_role.code,
+                'name': user.admin_role.name,
+                'data_scope': user.admin_role.data_scope,
+                'status': user.admin_role.status,
+            } if user.admin_role else None,
             'business_identity': user.business_identity.value,
             'status': user.status.value,
             'invite_code': user.invite_code,
@@ -317,7 +333,7 @@ class UserService:
         user = UserService.get_user(db, user_id, current_user)
         level1 = db.query(User).filter(User.parent_id == user.id).all()
         level2 = db.query(User).filter(User.grandparent_id == user.id).all()
-        if current_user and not AdminScopeService.is_super_admin(current_user):
+        if current_user and not AdminScopeService.has_global_scope(current_user):
             team_id = AdminScopeService.require_team_id(current_user)
             level1 = [item for item in level1 if item.team_id == team_id]
             level2 = [item for item in level2 if item.team_id == team_id]

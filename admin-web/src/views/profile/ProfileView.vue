@@ -55,6 +55,9 @@
           </div>
         </div>
         <el-form :model="passwordForm" label-position="top">
+          <el-form-item label="当前密码">
+            <el-input v-model="passwordForm.current_password" type="password" show-password placeholder="请输入当前密码" />
+          </el-form-item>
           <el-form-item label="新密码">
             <el-input v-model="passwordForm.new_password" type="password" show-password placeholder="请输入新密码" />
           </el-form-item>
@@ -74,8 +77,7 @@
 import { computed, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 
-import { userApi } from '@/api/modules'
-import { authApi } from '@/api/modules/auth'
+import { adminProfileApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -88,6 +90,7 @@ const profileForm = reactive({
   global_role: ''
 })
 const passwordForm = reactive({
+  current_password: '',
   new_password: '',
   confirm_password: ''
 })
@@ -99,7 +102,7 @@ const roleLabel = computed(() => ({
 }[profileForm.global_role] || '--'))
 
 async function loadData() {
-  const profile = await userApi.profile()
+  const profile = await adminProfileApi.get()
   Object.assign(profileForm, profile)
   userStore.userInfo = profile
 }
@@ -110,13 +113,17 @@ async function saveProfile() {
     real_name: profileForm.real_name,
     avatar: profileForm.avatar
   }
-  const profile = await userApi.updateProfile(payload)
+  const profile = await adminProfileApi.update(payload)
   Object.assign(profileForm, profile)
   userStore.userInfo = profile
   ElMessage.success('资料已更新')
 }
 
 async function resetPassword() {
+  if (!passwordForm.current_password) {
+    ElMessage.warning('请输入当前密码')
+    return
+  }
   if (!passwordForm.new_password) {
     ElMessage.warning('请输入新密码')
     return
@@ -125,10 +132,11 @@ async function resetPassword() {
     ElMessage.warning('两次输入的新密码不一致')
     return
   }
-  await authApi.resetPassword({
-    phone: profileForm.phone,
+  await adminProfileApi.changePassword({
+    current_password: passwordForm.current_password,
     new_password: passwordForm.new_password
   })
+  passwordForm.current_password = ''
   passwordForm.new_password = ''
   passwordForm.confirm_password = ''
   ElMessage.success('密码已重置，请使用新密码重新登录')

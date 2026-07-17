@@ -6,6 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
+    base: env.VITE_PUBLIC_BASE || '/',
     plugins: [vue()],
     resolve: {
       alias: {

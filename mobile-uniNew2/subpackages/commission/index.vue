@@ -1,50 +1,96 @@
 <template>
-  <view class="container commission-page">
-    <view class="card summary-card">
-      <view class="summary-tag">佣金中心</view>
-      <view class="section-title mt-12">收益趋势与结算进度实时同步</view>
-      <view class="muted">查看可提现金额、历史收益和结算状态，提现操作更直观</view>
-
-      <view class="summary-main mt-20">
-        <view>
-          <view class="summary-label">可提现金额</view>
-          <view class="num">¥{{ withdrawable }}</view>
+  <view class="commission-page">
+    <!-- Header -->
+    <view class="page-header">
+      <view class="header-content">
+        <view class="back-btn" @click="goBack">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </view>
-        <button class="btn btn-primary withdraw-btn" @click="withdraw">立即提现</button>
-      </view>
-
-      <view class="summary-strip mt-20">
-        <view class="summary-chip">
-          <view class="chip-value">{{ list.length }}</view>
-          <view class="chip-label">收益记录</view>
+        <view class="logo-mark">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
+            <path d="M12 6v12M6 12h12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
         </view>
-        <view class="summary-chip">
-          <view class="chip-value">{{ settledCount }}</view>
-          <view class="chip-label">已结算</view>
-        </view>
-        <view class="summary-chip">
-          <view class="chip-value">{{ pendingCount }}</view>
-          <view class="chip-label">待结算</view>
+        <text class="page-title">佣金中心</text>
+        <view class="header-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" fill="currentColor"/>
+          </svg>
+          实时
         </view>
       </view>
     </view>
 
-    <StateView v-if="loading" title="加载中..." custom-class="mt-24" />
-    <StateView v-else-if="failed" title="佣金记录加载失败" :show-retry="true" custom-class="mt-24" @retry="loadCommission" />
-    <StateView v-else-if="!list.length" title="暂无佣金记录" description="产生收益后会同步展示结算进度" custom-class="mt-24" />
+    <!-- Summary Card -->
+    <view class="summary-card">
+      <view class="card-icon">◆</view>
+      <text class="card-subtitle">收益趋势与结算进度实时同步</text>
 
-    <view v-else class="record-list mt-24">
-      <view class="card record-card" v-for="item in list" :key="item.id">
-        <view class="row-between record-top">
-          <view>
-            <view class="name">{{ item.name }}</view>
-            <view class="muted mt-8">{{ item.time }}</view>
-          </view>
-          <view class="badge" :class="item.status === '已结算' ? 'badge-green' : 'badge-orange'">{{ item.status }}</view>
+      <view class="balance-wrap">
+        <text class="balance-label">可提现金额</text>
+        <text class="balance-value">¥{{ withdrawable }}</text>
+      </view>
+
+      <button class="withdraw-btn" @click="withdraw">立即提现</button>
+
+      <view class="stats-strip">
+        <view class="stat-item">
+          <text class="stat-value">{{ list.length }}</text>
+          <text class="stat-label">收益记录</text>
         </view>
-        <view class="record-bottom mt-16">
-          <view class="record-desc">{{ item.desc || '收益入账记录' }}</view>
-          <view class="income">+¥{{ item.amount }}</view>
+        <view class="stat-divider" />
+        <view class="stat-item">
+          <text class="stat-value">{{ settledCount }}</text>
+          <text class="stat-label">已结算</text>
+        </view>
+        <view class="stat-divider" />
+        <view class="stat-item">
+          <text class="stat-value">{{ pendingCount }}</text>
+          <text class="stat-label">待结算</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- Loading -->
+    <view v-if="loading" class="loading-state">
+      <view v-for="i in 3" :key="i" class="skeleton-item">
+        <view class="skeleton skeleton-content" />
+      </view>
+    </view>
+
+    <!-- Error -->
+    <view v-else-if="failed" class="error-state">
+      <text class="error-icon">⚠</text>
+      <text class="error-text">佣金记录加载失败</text>
+      <view class="retry-btn" @click="loadCommission">点击重试</view>
+    </view>
+
+    <!-- Empty -->
+    <view v-else-if="!list.length" class="empty-state">
+      <text class="empty-icon">◇</text>
+      <text class="empty-title">暂无佣金记录</text>
+      <text class="empty-desc">产生收益后会同步展示结算进度</text>
+    </view>
+
+    <!-- Records -->
+    <view v-else class="records-list">
+      <text class="section-title">收益记录</text>
+      <view v-for="item in list" :key="item.id" class="record-card">
+        <view class="record-header">
+          <view class="record-info">
+            <text class="record-name">{{ item.name }}</text>
+            <text class="record-time">{{ item.time }}</text>
+          </view>
+          <view class="record-status" :class="item.status === '已结算' ? 'settled' : 'pending'">
+            {{ item.status }}
+          </view>
+        </view>
+        <view class="record-footer">
+          <text class="record-desc">{{ item.desc || '收益入账记录' }}</text>
+          <text class="record-amount">+¥{{ item.amount }}</text>
         </view>
       </view>
     </view>
@@ -54,9 +100,9 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
-import StateView from '@/components/StateView.vue';
 import { commissionApi } from '@/api/modules';
 import { pickListPayload, toCommissionFlows } from '@/utils/adapters';
+import { trackPageView } from '@/utils/track';
 
 const loading = ref(false);
 const failed = ref(false);
@@ -105,11 +151,16 @@ const withdraw = async () => {
     uni.showToast({ title: '提现申请已提交', icon: 'none' });
     loadCommission();
   } catch (error) {
-    // 请求层统一提示
+    uni.showToast({ title: '提现申请失败，请稍后重试', icon: 'none' });
   }
 };
 
+function goBack() {
+  uni.navigateBack();
+}
+
 onShow(() => {
+  trackPageView('commission');
   loadCommission();
 });
 
@@ -120,65 +171,332 @@ onPullDownRefresh(async () => {
 </script>
 
 <style scoped>
-@import '@/styles/common.css';
-.commission-page { padding-bottom: 36rpx; }
-.summary-card {
-  background:
-    radial-gradient(circle at 95% 8%, rgba(255, 166, 82, 0.16), transparent 36%),
-    linear-gradient(180deg, #fffdf9 0%, #fff5eb 100%);
-  border: 1rpx solid rgba(255, 154, 106, 0.18);
-  position: relative;
-  overflow: hidden;
+@import '@/styles/elegant.css';
+
+.commission-page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 48rpx;
 }
-.summary-card::after {
-  content: '';
-  position: absolute;
-  right: -30rpx;
-  top: -30rpx;
-  width: 150rpx;
-  height: 150rpx;
-  border-radius: 50%;
-  background: rgba(255, 122, 0, 0.08);
+
+/* Header */
+.page-header {
+  padding: 24rpx 32rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
+  background: var(--card);
+  border-bottom: 1rpx solid var(--border);
 }
-.summary-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 138, 43, 0.12);
-  color: #ff6a00;
-  font-size: 20rpx;
-  font-weight: 800;
-}
-.summary-main {
+
+.header-content {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
   gap: 16rpx;
 }
-.summary-label { font-size: 22rpx; color: #8b7158; }
-.num { margin-top: 6rpx; font-size: 48rpx; color: #ff6a00; font-weight: 900; }
-.withdraw-btn { width: 200rpx; padding: 0; }
-.summary-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12rpx;
+
+.logo-mark {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.summary-chip {
-  padding: 14rpx 12rpx;
-  border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1rpx solid rgba(255, 154, 106, 0.12);
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  color: var(--text);
+  transition: opacity var(--duration-fast);
 }
-.chip-value { font-size: 30rpx; font-weight: 900; color: #4f321a; }
-.chip-label { margin-top: 4rpx; font-size: 20rpx; color: #8b7158; }
-.record-list { display: grid; gap: 14rpx; }
-.record-card { border: 1rpx solid rgba(255, 154, 106, 0.16); border-radius: 24rpx; }
-.record-top { align-items: flex-start; }
-.name { font-size: 28rpx; color: #4f321a; font-weight: 800; }
-.record-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; }
-.record-desc { font-size: 22rpx; color: #8b7158; }
-.income { color: #ff6a00; font-size: 30rpx; font-weight: 800; }
-.state-card { text-align: center; }
-.retry-btn { width: 180rpx; }
+
+.back-btn:active {
+  opacity: 0.6;
+}
+
+.page-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
+  flex: 1;
+}
+
+.header-badge {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 16rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 20rpx;
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-full);
+}
+
+/* Summary Card */
+.summary-card {
+  margin: 24rpx;
+  padding: 40rpx 32rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 12rpx 40rpx rgba(16, 185, 129, 0.25);
+}
+
+.card-icon {
+  width: 80rpx;
+  height: 80rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  color: white;
+  margin-bottom: 16rpx;
+}
+
+.card-subtitle {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 32rpx;
+}
+
+.balance-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 24rpx;
+}
+
+.balance-label {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.balance-value {
+  font-size: 56rpx;
+  font-weight: 800;
+  color: white;
+}
+
+.withdraw-btn {
+  width: 100%;
+  height: 88rpx;
+  background: white;
+  border-radius: 44rpx;
+  color: var(--primary);
+  font-size: 30rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  margin-bottom: 32rpx;
+}
+
+.stats-strip {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-lg);
+  padding: 20rpx;
+}
+
+.stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.stat-value {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: white;
+}
+
+.stat-label {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.stat-divider {
+  width: 1rpx;
+  height: 48rpx;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Loading */
+.loading-state {
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.skeleton-item {
+  padding: 24rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+.skeleton-content {
+  height: 120rpx;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Error */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 32rpx;
+}
+
+.error-icon {
+  font-size: 80rpx;
+  color: var(--error);
+  margin-bottom: 24rpx;
+}
+
+.error-text {
+  font-size: 28rpx;
+  color: var(--text-muted);
+  margin-bottom: 32rpx;
+}
+
+.retry-btn {
+  padding: 16rpx 40rpx;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 40rpx;
+}
+
+/* Empty */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 32rpx;
+}
+
+.empty-icon {
+  font-size: 120rpx;
+  color: var(--border);
+  margin-bottom: 32rpx;
+}
+
+.empty-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8rpx;
+}
+
+.empty-desc {
+  font-size: 26rpx;
+  color: var(--text-muted);
+}
+
+/* Records */
+.records-list {
+  padding: 0 24rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 20rpx;
+}
+
+.record-card {
+  padding: 24rpx;
+  background: var(--card);
+  border-radius: var(--radius-xl);
+  margin-bottom: 16rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.record-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.record-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.record-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.record-time {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+.record-status {
+  padding: 6rpx 16rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  border-radius: 20rpx;
+}
+
+.record-status.settled {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.record-status.pending {
+  background: var(--secondary-bg);
+  color: var(--secondary);
+}
+
+.record-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.record-desc {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+.record-amount {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--secondary);
+}
 </style>

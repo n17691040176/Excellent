@@ -32,3 +32,22 @@ class CodeLoginRequest(AppBaseModel):
 class ResetPasswordRequest(AppBaseModel):
     phone: str
     new_password: str = Field(min_length=6, max_length=64)
+
+
+class OneClickLoginRequest(AppBaseModel):
+    """一键登录请求"""
+    access_token: str  # 阿里云 SDK 返回的令牌
+
+
+class OneClickRegisterRequest(AppBaseModel):
+    """一键登录新用户注册请求"""
+    access_token: str
+    nickname: str = Field(min_length=1, max_length=64)
+    invite_code: str | None = Field(default=None, max_length=32)
+
+
+class AppLoginRequest(AppBaseModel):
+    """App端传递手机号免注册登录"""
+    phone: str = Field(min_length=11, max_length=11, description="手机号（App端已验证）")
+    nickname: str | None = Field(default=None, max_length=64, description="昵称（首次登录时可选）")
+    invite_code: str | None = Field(default=None, max_length=32, description="邀请码")

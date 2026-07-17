@@ -16,7 +16,7 @@ def list_rules(
     rule_type: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     EarningRuleService.ensure_default_rules(db)
     return {'code': 0, 'message': 'success', 'data': EarningRuleService.list_rules(db, rule_type=rule_type, is_active=is_active)}
@@ -26,7 +26,7 @@ def list_rules(
 def create_rule(
     payload: EarningRuleCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     return {'code': 0, 'message': 'success', 'data': EarningRuleService.create_rule(db, current_user, payload)}
 
@@ -36,7 +36,7 @@ def update_rule(
     rule_id: int,
     payload: EarningRuleUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     return {'code': 0, 'message': 'success', 'data': EarningRuleService.update_rule(db, rule_id, current_user, payload)}
 
@@ -46,7 +46,7 @@ def update_rule_status(
     rule_id: int,
     payload: EarningRuleStatusRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     return {'code': 0, 'message': 'success', 'data': EarningRuleService.update_status(db, rule_id, current_user, payload.is_active)}
 
@@ -55,7 +55,7 @@ def update_rule_status(
 def delete_rule(
     rule_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     EarningRuleService.delete_rule(db, rule_id)
     return {'code': 0, 'message': 'success', 'data': True}

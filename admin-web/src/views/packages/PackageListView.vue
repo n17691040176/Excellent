@@ -1,17 +1,15 @@
 <template>
   <div class="packages-view">
-    <div class="page-heading">
-      <div>
-        <h2>套餐管理</h2>
-        <p>维护套餐价格、抵扣比例、赠券规则和上架资格来源。</p>
-      </div>
-      <div class="toolbar-row">
+    <!-- 统一页面头部 -->
+    <PageHeader title="套餐管理" description="维护套餐价格、抵扣比例、赠券规则和上架资格来源。">
+      <template #actions>
         <el-button type="primary" plain @click="loadData">刷新数据</el-button>
         <el-button v-permission="'packages:create'" type="primary" @click="openCreate">新增套餐</el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
-    <div class="panel-card data-card block-gap">
+    <!-- 套餐列表卡片 -->
+    <div class="panel-card data-card">
       <el-table :data="packages" border>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="package_name" label="套餐名称" min-width="180" />
@@ -26,7 +24,7 @@
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="scope">
-            <el-tag :type="statusType(scope.row.status)">{{ statusLabel(scope.row.status) }}</el-tag>
+            <StatusTag :status="scope.row.status" type="package" />
           </template>
         </el-table-column>
         <el-table-column label="操作" min-width="260" fixed="right">
@@ -40,6 +38,7 @@
       </el-table>
     </div>
 
+    <!-- 我的套餐资格卡片 -->
     <div class="panel-card data-card">
       <div class="section-title-lite">
         <h3>我的套餐资格</h3>
@@ -55,6 +54,7 @@
       </el-table>
     </div>
 
+    <!-- 新增/编辑套餐抽屉 -->
     <el-drawer v-model="dialogVisible" :title="dialogTitle" size="520px">
       <div class="panel-card data-card">
         <el-form label-position="top" :model="form">
@@ -107,6 +107,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { packageApi } from '@/api/modules'
+import { PageHeader, StatusTag } from '@/components/common'
 
 const packages = ref([])
 const qualifications = ref([])
@@ -129,24 +130,6 @@ function createDefaultForm() {
 }
 
 const dialogTitle = computed(() => (editingId.value ? '编辑套餐' : '新增套餐'))
-
-function statusType(status) {
-  return {
-    DRAFT: 'info',
-    ON_SHELF: 'success',
-    OFF_SHELF: 'warning',
-    APPROVED: 'success'
-  }[status] || 'info'
-}
-
-function statusLabel(status) {
-  return {
-    DRAFT: '草稿',
-    ON_SHELF: '已上架',
-    OFF_SHELF: '已下架',
-    APPROVED: '已通过'
-  }[status] || status || '--'
-}
 
 function canShelfUp(row) {
   return ['DRAFT', 'OFF_SHELF', 'APPROVED'].includes(row.status)
@@ -206,14 +189,14 @@ async function savePackage() {
 
 async function updateStatus(row, status) {
   const label = status === 'ON_SHELF' ? '上架' : '下架'
-  await ElMessageBox.confirm(`确认${label}套餐“${row.package_name}”吗？`, '套餐状态', { type: 'warning' })
+  await ElMessageBox.confirm(`确认${label}套餐"${row.package_name}"吗？`, '套餐状态', { type: 'warning' })
   await packageApi.updateStatus(row.id, { status })
   ElMessage.success(`套餐已${label}`)
   await loadData()
 }
 
 async function removePackage(row) {
-  await ElMessageBox.confirm(`确认删除套餐“${row.package_name}”吗？删除后不可恢复。`, '删除套餐', { type: 'warning' })
+  await ElMessageBox.confirm(`确认删除套餐"${row.package_name}"吗？删除后不可恢复。`, '删除套餐', { type: 'warning' })
   await packageApi.remove(row.id)
   ElMessage.success('套餐已删除')
   await loadData()
@@ -223,50 +206,49 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+@import '@/styles/variables.css';
+
 .packages-view {
   display: grid;
-  gap: 18px;
-}
-
-.block-gap {
-  margin-bottom: 18px;
+  gap: var(--space-4);
 }
 
 .section-title-lite {
-  margin-bottom: 14px;
+  margin-bottom: var(--space-4);
 }
 
 .section-title-lite h3 {
   margin: 0;
-  font-size: 22px;
-  color: var(--brand-deep);
+  font-size: var(--text-xl);
+  color: var(--text-primary);
 }
 
 .section-title-lite p {
-  margin: 6px 0 0;
-  color: rgba(58, 45, 36, 0.62);
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
 }
 
 .form-split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--space-3);
 }
 
 .config-tips {
-  margin-top: 12px;
-  padding: 14px 16px;
-  background: rgba(198, 132, 79, 0.1);
-  border-radius: 14px;
-  color: rgba(58, 45, 36, 0.78);
-  line-height: 1.7;
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--primary-50);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
 }
 
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 18px;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
 }
 
 @media (max-width: 900px) {
