@@ -204,12 +204,7 @@ def _product_payment_flags(db: Session, product: Product) -> dict[str, bool]:
         ZoneType.HOT_SALE: True,
         ZoneType.LOCAL_LIFE: True,
     }
-    default_balance_enabled = {
-        ZoneType.REPURCHASE: True,
-        ZoneType.SELF_OPERATED: False,
-        ZoneType.HOT_SALE: True,
-        ZoneType.LOCAL_LIFE: True,
-    }
+    default_balance_enabled = dict.fromkeys(ZoneType, True)
 
     points_enabled = default_points_enabled.get(product.zone_type, True)
     balance_enabled = default_balance_enabled.get(product.zone_type, True)
@@ -218,6 +213,8 @@ def _product_payment_flags(db: Session, product: Product) -> dict[str, bool]:
     cash_only_enabled = True
     balance_only_enabled = True
     balance_points_enabled = True
+    alipay_enabled = True
+    wechat_enabled = False
     if config:
         points_enabled = bool(config.points_purchase_enabled)
         if product.zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED, ZoneType.LOCAL_LIFE, ZoneType.REPURCHASE}:
@@ -227,6 +224,8 @@ def _product_payment_flags(db: Session, product: Product) -> dict[str, bool]:
         cash_only_enabled = bool(config.cash_only_enabled)
         balance_only_enabled = bool(getattr(config, 'balance_only_enabled', True))
         balance_points_enabled = bool(getattr(config, 'balance_points_enabled', True))
+        alipay_enabled = bool(getattr(config, 'alipay_purchase_enabled', True))
+        wechat_enabled = bool(getattr(config, 'wechat_purchase_enabled', False))
 
     return {
         'points_purchase_enabled': points_enabled,
@@ -236,6 +235,8 @@ def _product_payment_flags(db: Session, product: Product) -> dict[str, bool]:
         'cash_only_enabled': cash_only_enabled,
         'balance_only_enabled': balance_only_enabled,
         'balance_points_enabled': balance_points_enabled,
+        'alipay_purchase_enabled': alipay_enabled,
+        'wechat_purchase_enabled': wechat_enabled,
     }
 
 
@@ -259,13 +260,17 @@ def _payment_option(channel: str, purchase_mode: str) -> dict[str, Any]:
     }
 
 
-def _product_payment_options(_product: Product, _payment_flags: dict[str, bool]) -> list[dict[str, Any]]:
+def _product_payment_options(_product: Product, payment_flags: dict[str, bool]) -> list[dict[str, Any]]:
     active_channels = set(enabled_external_payment_channels())
+    balance_available = bool(payment_flags.get('balance_purchase_enabled'))
+    alipay_product_enabled = bool(payment_flags.get('alipay_purchase_enabled'))
+    alipay_provider_ready = 'ALIPAY' in active_channels
     return [
         {
             **_payment_option('BALANCE', 'CASH_ONLY'),
             'label': '余额支付',
-            'available': True,
+            'available': balance_available,
+            'unavailable_reason': '' if balance_available else '后台未开启余额支付',
         },
         {
             **_payment_option('WECHAT', 'CASH_ONLY'),
@@ -275,8 +280,14 @@ def _product_payment_options(_product: Product, _payment_flags: dict[str, bool])
         },
         {
             **_payment_option('ALIPAY', 'CASH_ONLY'),
-            'available': 'ALIPAY' in active_channels,
-            'unavailable_reason': '' if 'ALIPAY' in active_channels else '支付宝支付暂未启用',
+            'available': alipay_product_enabled and alipay_provider_ready,
+            'unavailable_reason': (
+                ''
+                if alipay_product_enabled and alipay_provider_ready
+                else '后台未开启支付宝支付'
+                if not alipay_product_enabled
+                else '支付宝全局配置未就绪'
+            ),
         },
     ]
 
@@ -285,6 +296,7 @@ def serialize_product(db: Session, product: Product) -> dict[str, Any]:
     owner_name = _product_owner_name(db, product)
     payment_flags = _product_payment_flags(db, product)
     payment_options = _product_payment_options(product, payment_flags)
+    available_payment_options = [item for item in payment_options if item.get('available')]
     sale_price = money(product.sale_price if product.sale_price is not None else product.legacy_price)
     market_price = product.market_price if product.market_price is not None else product.old_price
     cost_price = product.cost_price if product.cost_price is not None else product.hehuoren_price
@@ -331,8 +343,8 @@ def serialize_product(db: Session, product: Product) -> dict[str, Any]:
         'requires_shipping': product.requires_shipping,
         'drop_shipping_enabled': product.drop_shipping_enabled,
         'payment_options': payment_options,
-        'supported_pay_channels': list(dict.fromkeys(item['value'] for item in payment_options)),
-        'default_pay_channel': payment_options[0]['value'] if payment_options else None,
+        'supported_pay_channels': list(dict.fromkeys(item['value'] for item in available_payment_options)),
+        'default_pay_channel': available_payment_options[0]['value'] if available_payment_options else None,
         'points_purchase_enabled': bool(payment_flags['points_purchase_enabled']),
         'balance_purchase_enabled': bool(payment_flags['balance_purchase_enabled']),
         'points_only_enabled': bool(payment_flags['points_only_enabled']),
@@ -340,6 +352,8 @@ def serialize_product(db: Session, product: Product) -> dict[str, Any]:
         'cash_only_enabled': bool(payment_flags['cash_only_enabled']),
         'balance_only_enabled': bool(payment_flags['balance_only_enabled']),
         'balance_points_enabled': bool(payment_flags['balance_points_enabled']),
+        'alipay_purchase_enabled': bool(payment_flags['alipay_purchase_enabled']),
+        'wechat_purchase_enabled': bool(payment_flags['wechat_purchase_enabled']),
         'old_name': product.legacy_name,
         'old_type': product.legacy_type,
         'old_price': money(product.old_price) if product.old_price is not None else None,

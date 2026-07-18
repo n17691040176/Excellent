@@ -32,3 +32,31 @@ def apply_schema_migrations() -> None:
             connection.execute(text('ALTER TABLE withdraw_requests ADD COLUMN paid_by BIGINT NULL'))
         if 'paid_at' not in withdraw_columns:
             connection.execute(text('ALTER TABLE withdraw_requests ADD COLUMN paid_at DATETIME NULL'))
+
+        zone_config_columns = _column_names('product_zone_configs')
+        payment_columns_added = False
+        if 'alipay_purchase_enabled' not in zone_config_columns:
+            connection.execute(
+                text(
+                    'ALTER TABLE product_zone_configs '
+                    'ADD COLUMN alipay_purchase_enabled TINYINT(1) NOT NULL DEFAULT 1 '
+                    'AFTER balance_purchase_enabled'
+                )
+            )
+            payment_columns_added = True
+        if 'wechat_purchase_enabled' not in zone_config_columns:
+            connection.execute(
+                text(
+                    'ALTER TABLE product_zone_configs '
+                    'ADD COLUMN wechat_purchase_enabled TINYINT(1) NOT NULL DEFAULT 0 '
+                    'AFTER alipay_purchase_enabled'
+                )
+            )
+            payment_columns_added = True
+        if payment_columns_added:
+            connection.execute(
+                text(
+                    'UPDATE product_zone_configs '
+                    'SET balance_purchase_enabled = 1, balance_only_enabled = 1, cash_only_enabled = 1'
+                )
+            )

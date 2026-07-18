@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
+from app.core.payment_config import enabled_external_payment_channels
 from app.models.enums import (
     AssetType,
     OrderStatus,
@@ -280,13 +281,9 @@ class ProductService:
         '兑换券最高抵扣比例',
         '购物返AI券比例',
         'AI券最大抵扣比例',
-        '积分支付',
         '余额支付',
-        '纯积分购买',
-        '积分加现金购买',
-        '纯现金购买',
-        '余额纯支付',
-        '余额加积分支付',
+        '支付宝支付',
+        '微信支付',
         '开启闪购',
         '每人限购件数',
         '分佣规则ID',
@@ -353,6 +350,8 @@ class ProductService:
         'ai_coupon_max_deduct_rate': ['AI券最大抵扣比例', 'ai_coupon_max_deduct_rate'],
         'points_purchase_enabled': ['积分支付', 'points_purchase_enabled'],
         'balance_purchase_enabled': ['余额支付', 'balance_purchase_enabled'],
+        'alipay_purchase_enabled': ['支付宝支付', 'alipay_purchase_enabled'],
+        'wechat_purchase_enabled': ['微信支付', 'wechat_purchase_enabled'],
         'points_only_enabled': ['纯积分购买', 'points_only_enabled'],
         'points_cash_enabled': ['积分加现金购买', 'points_cash_enabled'],
         'cash_only_enabled': ['纯现金购买', 'cash_only_enabled'],
@@ -376,7 +375,9 @@ class ProductService:
                 'ai_coupon_reward_rate': None,
                 'ai_coupon_max_deduct_rate': None,
                 'points_purchase_enabled': True,
-                'balance_purchase_enabled': False,
+                'balance_purchase_enabled': True,
+                'alipay_purchase_enabled': True,
+                'wechat_purchase_enabled': False,
                 'points_only_enabled': False,
                 'points_cash_enabled': True,
                 'cash_only_enabled': True,
@@ -397,7 +398,9 @@ class ProductService:
                 'ai_coupon_reward_rate': 20.0,
                 'ai_coupon_max_deduct_rate': 20.0,
                 'points_purchase_enabled': False,
-                'balance_purchase_enabled': False,
+                'balance_purchase_enabled': True,
+                'alipay_purchase_enabled': True,
+                'wechat_purchase_enabled': False,
                 'points_only_enabled': False,
                 'points_cash_enabled': True,
                 'cash_only_enabled': True,
@@ -419,6 +422,8 @@ class ProductService:
                 'ai_coupon_max_deduct_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
+                'alipay_purchase_enabled': True,
+                'wechat_purchase_enabled': False,
                 'points_only_enabled': False,
                 'points_cash_enabled': True,
                 'cash_only_enabled': True,
@@ -439,6 +444,8 @@ class ProductService:
             'ai_coupon_max_deduct_rate': None,
             'points_purchase_enabled': True,
             'balance_purchase_enabled': True,
+            'alipay_purchase_enabled': True,
+            'wechat_purchase_enabled': False,
             'points_only_enabled': False,
             'points_cash_enabled': True,
             'cash_only_enabled': True,
@@ -701,6 +708,8 @@ class ProductService:
             'product_id': product.id,
             'zone_type': product.zone_type.value,
             'configured': bool(config),
+            'alipay_provider_ready': 'ALIPAY' in enabled_external_payment_channels(),
+            'wechat_provider_ready': False,
         }
         for key, value in defaults.items():
             current = getattr(config, key) if config and getattr(config, key) is not None else value
@@ -719,10 +728,6 @@ class ProductService:
             badges.append('需套餐资格' if snapshot.get('package_required') else '无需套餐资格')
             if snapshot.get('repurchase_discount_rate') is not None:
                 badges.append(f"复购折扣 {snapshot['repurchase_discount_rate']:g}%")
-            if snapshot.get('points_purchase_enabled'):
-                badges.append('支持积分支付')
-            if snapshot.get('balance_purchase_enabled'):
-                badges.append('支持余额支付')
             description = '影响复购专区的资格校验、折扣和支付方式。'
         elif zone_type == ZoneType.SELF_OPERATED.value:
             headline = '券抵扣与 AI 券规则'
@@ -737,10 +742,6 @@ class ProductService:
             description = '影响自营商城的券类抵扣、返券比例和转化玩法。'
         elif zone_type == ZoneType.HOT_SALE.value:
             headline = '限购与闪购规则'
-            if snapshot.get('points_purchase_enabled'):
-                badges.append('支持积分支付')
-            if snapshot.get('balance_purchase_enabled'):
-                badges.append('支持余额支付')
             if snapshot.get('flash_sale_enabled'):
                 badges.append('开启闪购')
             if snapshot.get('per_user_limit') is not None:
@@ -748,29 +749,18 @@ class ProductService:
             description = '影响爆款区的活动玩法、支付方式和限购约束。'
         else:
             headline = '本地生活分佣规则'
-            if snapshot.get('points_purchase_enabled'):
-                badges.append('支持积分支付')
-            if snapshot.get('balance_purchase_enabled'):
-                badges.append('支持余额支付')
             if snapshot.get('merchant_commission_rule_id'):
                 badges.append(f"分佣规则 #{snapshot['merchant_commission_rule_id']}")
             if snapshot.get('device_revenue_enabled'):
                 badges.append('联动设备收益')
             description = '影响到店服务的分佣、设备收益和支付规则。'
 
-        purchase_badges = []
-        if snapshot.get('points_only_enabled'):
-            purchase_badges.append('纯积分')
-        if snapshot.get('points_cash_enabled'):
-            purchase_badges.append('积分+现金')
-        if snapshot.get('cash_only_enabled'):
-            purchase_badges.append('纯现金')
-        if snapshot.get('balance_only_enabled') and snapshot.get('balance_purchase_enabled'):
-            purchase_badges.append('余额纯付')
-        if snapshot.get('balance_points_enabled') and snapshot.get('balance_purchase_enabled'):
-            purchase_badges.append('余额+积分')
-        if purchase_badges:
-            badges.extend(purchase_badges)
+        payment_badges = [
+            '余额支付' if snapshot.get('balance_purchase_enabled') else None,
+            '支付宝支付' if snapshot.get('alipay_purchase_enabled') else None,
+            '微信开发中',
+        ]
+        badges = [item for item in payment_badges if item] + badges
 
         return {
             'configured': bool(snapshot.get('configured')),
@@ -1273,6 +1263,8 @@ class ProductService:
             'ai_coupon_max_deduct_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'ai_coupon_max_deduct_rate'), 'ai_coupon_max_deduct_rate'),
             'points_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'points_purchase_enabled')),
             'balance_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'balance_purchase_enabled')),
+            'alipay_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'alipay_purchase_enabled')),
+            'wechat_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'wechat_purchase_enabled')),
             'points_only_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'points_only_enabled')),
             'points_cash_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'points_cash_enabled')),
             'cash_only_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'cash_only_enabled')),

@@ -24,3 +24,18 @@ test('requires alipay to be available for every product in a combined checkout',
 
   assert.equal(options.find((item) => item.value === 'ALIPAY').available, false);
 });
+
+test('preserves backend payment availability and reason', () => {
+  const options = normalizePaymentOptions([
+    {
+      value: 'ALIPAY',
+      purchase_mode: 'CASH_ONLY',
+      available: false,
+      unavailable_reason: '后台未开启支付宝支付'
+    }
+  ]);
+  const alipay = options.find((item) => item.value === 'ALIPAY');
+
+  assert.equal(alipay.available, false);
+  assert.equal(alipay.unavailable_reason, '后台未开启支付宝支付');
+});

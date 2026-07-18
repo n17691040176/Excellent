@@ -346,7 +346,9 @@ class OrderService:
                 'ai_coupon_max_deduct_rate': None,
                 'ai_coupon_reward_rate': None,
                 'points_purchase_enabled': True,
-                'balance_purchase_enabled': False,
+                'balance_purchase_enabled': True,
+                'alipay_purchase_enabled': True,
+                'wechat_purchase_enabled': False,
                 'points_only_enabled': False,
                 'points_cash_enabled': True,
                 'cash_only_enabled': True,
@@ -363,7 +365,9 @@ class OrderService:
                 'ai_coupon_max_deduct_rate': Decimal('20'),
                 'ai_coupon_reward_rate': Decimal('20'),
                 'points_purchase_enabled': False,
-                'balance_purchase_enabled': False,
+                'balance_purchase_enabled': True,
+                'alipay_purchase_enabled': True,
+                'wechat_purchase_enabled': False,
                 'points_only_enabled': False,
                 'points_cash_enabled': True,
                 'cash_only_enabled': True,
@@ -381,6 +385,8 @@ class OrderService:
                 'ai_coupon_reward_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
+                'alipay_purchase_enabled': True,
+                'wechat_purchase_enabled': False,
                 'points_only_enabled': False,
                 'points_cash_enabled': True,
                 'cash_only_enabled': True,
@@ -397,6 +403,8 @@ class OrderService:
             'ai_coupon_reward_rate': None,
             'points_purchase_enabled': True,
             'balance_purchase_enabled': True,
+            'alipay_purchase_enabled': True,
+            'wechat_purchase_enabled': False,
             'points_only_enabled': False,
             'points_cash_enabled': True,
             'cash_only_enabled': True,
@@ -618,6 +626,16 @@ class OrderService:
             if pay_channel == 'WECHAT':
                 raise ConflictError('Wechat payment is under development')
             raise ConflictError('Alipay payment is not enabled')
+
+        if pay_channel == 'BALANCE' and not all(
+            bool(OrderService._config_value(config, zone_type, 'balance_purchase_enabled')) for config in configs
+        ):
+            raise ConflictError('Balance payment is disabled for current product')
+
+        if pay_channel == 'ALIPAY' and not all(
+            bool(OrderService._config_value(config, zone_type, 'alipay_purchase_enabled')) for config in configs
+        ):
+            raise ConflictError('Alipay payment is disabled for current product')
 
         points_amount = deductions_by_type.get(AssetType.POINTS, Decimal('0'))
         if points_amount > total_amount:
@@ -981,6 +999,14 @@ class OrderService:
             OrderService._resolve_pay_channel(payload.get('pay_channel')),
             payload.get('address_id'),
         )
+        configs = [item['config'] for item in products_data]
+        balance_available = all(
+            bool(OrderService._config_value(config, actual_zone_type, 'balance_purchase_enabled')) for config in configs
+        )
+        alipay_product_enabled = all(
+            bool(OrderService._config_value(config, actual_zone_type, 'alipay_purchase_enabled')) for config in configs
+        )
+        alipay_provider_ready = 'ALIPAY' in enabled_external_payment_channels()
         return {
             'zone_type': actual_zone_type.value,
             'address_id': plan['address_id'],
@@ -996,12 +1022,24 @@ class OrderService:
                 for asset_type, amount in plan['deductions_by_type'].items()
             ],
             'pay_channel_options': [
-                {'value': 'BALANCE', 'label': '余额支付', 'available': True},
+                {
+                    'value': 'BALANCE',
+                    'label': '余额支付',
+                    'available': balance_available,
+                    'unavailable_reason': '' if balance_available else '后台未开启余额支付',
+                },
                 {'value': 'WECHAT', 'label': '微信支付', 'available': False, 'desc': '正在开发'},
                 {
                     'value': 'ALIPAY',
                     'label': '支付宝支付',
-                    'available': 'ALIPAY' in enabled_external_payment_channels(),
+                    'available': alipay_product_enabled and alipay_provider_ready,
+                    'unavailable_reason': (
+                        ''
+                        if alipay_product_enabled and alipay_provider_ready
+                        else '后台未开启支付宝支付'
+                        if not alipay_product_enabled
+                        else '支付宝全局配置未就绪'
+                    ),
                 },
             ],
         }
