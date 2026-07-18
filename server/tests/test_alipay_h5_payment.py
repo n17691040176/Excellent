@@ -151,3 +151,13 @@ class AlipayH5PaymentTest(TestCase):
             self.assertRaisesRegex(ConflictError, 'not enabled'),
         ):
             PaymentService.prepare_external_payment(db, order, PaymentChannel.ALIPAY.value)
+
+    def test_rejects_invalid_alipay_key_material(self):
+        self.private_path.write_text('not a private key', encoding='utf-8')
+        self.public_path.write_text('not a public key', encoding='utf-8')
+
+        with self.assertRaisesRegex(RuntimeError, 'valid unencrypted PEM private key'):
+            validate_payment_config(
+                'production',
+                PaymentConfig(mock_external_payment=False, alipay=self.config),
+            )

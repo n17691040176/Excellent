@@ -241,25 +241,13 @@ def _product_payment_flags(db: Session, product: Product) -> dict[str, bool]:
 
 def _payment_option(channel: str, purchase_mode: str) -> dict[str, Any]:
     label_map = {
-        ('POINTS', 'POINTS_ONLY'): '纯积分',
-        ('BALANCE', 'POINTS_CASH'): '余额+积分支付',
-        ('BALANCE', 'CASH_ONLY'): '余额纯支付',
-        ('VOUCHER', 'POINTS_CASH'): '消费金+积分支付',
-        ('VOUCHER', 'CASH_ONLY'): '消费金支付',
-        ('WECHAT', 'POINTS_CASH'): '微信+积分支付',
+        ('BALANCE', 'CASH_ONLY'): '余额支付',
         ('WECHAT', 'CASH_ONLY'): '微信支付',
-        ('ALIPAY', 'POINTS_CASH'): '支付宝+积分支付',
         ('ALIPAY', 'CASH_ONLY'): '支付宝支付',
     }
     desc_map = {
-        ('POINTS', 'POINTS_ONLY'): '全部使用积分完成支付',
-        ('BALANCE', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额从余额扣除',
         ('BALANCE', 'CASH_ONLY'): '全部使用账户余额完成支付',
-        ('VOUCHER', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额从消费金扣除',
-        ('VOUCHER', 'CASH_ONLY'): '全部使用消费金完成支付',
-        ('WECHAT', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额走微信支付',
         ('WECHAT', 'CASH_ONLY'): '全部使用微信支付',
-        ('ALIPAY', 'POINTS_CASH'): '使用积分抵扣一部分，剩余金额走支付宝支付',
         ('ALIPAY', 'CASH_ONLY'): '全部使用支付宝支付',
     }
     return {
@@ -267,37 +255,30 @@ def _payment_option(channel: str, purchase_mode: str) -> dict[str, Any]:
         'label': label_map.get((channel, purchase_mode), channel),
         'desc': desc_map.get((channel, purchase_mode), '按当前方式支付'),
         'purchase_mode': purchase_mode,
-        'supports_points': purchase_mode in {'POINTS_ONLY', 'POINTS_CASH'},
+        'supports_points': False,
     }
 
 
-def _product_payment_options(product: Product, payment_flags: dict[str, bool]) -> list[dict[str, Any]]:
-    options: list[dict[str, Any]] = []
-    if payment_flags.get('points_purchase_enabled') and payment_flags.get('points_only_enabled'):
-        options.append(_payment_option('POINTS', 'POINTS_ONLY'))
-    cash_channels = enabled_external_payment_channels()
-    if product.zone_type == ZoneType.SELF_OPERATED:
-        cash_channels = ['VOUCHER', *cash_channels]
-    if payment_flags.get('balance_purchase_enabled'):
-        cash_channels.insert(0, 'BALANCE')
-    if payment_flags.get('points_purchase_enabled') and payment_flags.get('points_cash_enabled'):
-        for channel in cash_channels:
-            if channel == 'BALANCE' and not payment_flags.get('balance_points_enabled'):
-                continue
-            options.append(_payment_option(channel, 'POINTS_CASH'))
-    if payment_flags.get('cash_only_enabled'):
-        for channel in cash_channels:
-            if channel == 'BALANCE' and not payment_flags.get('balance_only_enabled'):
-                continue
-            options.append(_payment_option(channel, 'CASH_ONLY'))
-    deduped: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
-    for item in options:
-        key = (item['value'], item['purchase_mode'])
-        if key not in seen:
-            deduped.append(item)
-            seen.add(key)
-    return deduped
+def _product_payment_options(_product: Product, _payment_flags: dict[str, bool]) -> list[dict[str, Any]]:
+    active_channels = set(enabled_external_payment_channels())
+    return [
+        {
+            **_payment_option('BALANCE', 'CASH_ONLY'),
+            'label': '余额支付',
+            'available': True,
+        },
+        {
+            **_payment_option('WECHAT', 'CASH_ONLY'),
+            'desc': '正在开发',
+            'available': False,
+            'unavailable_reason': '微信支付正在开发',
+        },
+        {
+            **_payment_option('ALIPAY', 'CASH_ONLY'),
+            'available': 'ALIPAY' in active_channels,
+            'unavailable_reason': '' if 'ALIPAY' in active_channels else '支付宝支付暂未启用',
+        },
+    ]
 
 
 def serialize_product(db: Session, product: Product) -> dict[str, Any]:
@@ -650,7 +631,6 @@ def _order_channel(order: Order) -> tuple[str, str]:
 
 def _order_pay_channel_options(order: Order, deductions: list[OrderAssetDeduction] | None = None) -> list[str]:
     order_type = enum_value(order.order_type)
-    zone_type = enum_value(order.zone_type)
     deduction_types = {str(item.asset_type) for item in (deductions or [])}
     if 'POINTS' in deduction_types and money(order.payable_amount) <= 0:
         return ['POINTS']
@@ -660,11 +640,7 @@ def _order_pay_channel_options(order: Order, deductions: list[OrderAssetDeductio
         return ['VOUCHER']
     if order_type == OrderType.PACKAGE_ORDER.value:
         return ['BALANCE']
-    if zone_type == ZoneType.REPURCHASE.value:
-        return ['BALANCE']
     external_channels = enabled_external_payment_channels()
-    if zone_type == ZoneType.SELF_OPERATED.value:
-        return ['VOUCHER', *external_channels]
     return ['BALANCE', *external_channels]
 
 

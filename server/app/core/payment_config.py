@@ -3,6 +3,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+
 
 def _settings_value(name: str) -> str | None:
     try:
@@ -97,11 +100,9 @@ payment_config = PaymentConfig()
 def enabled_external_payment_channels(config: PaymentConfig | None = None) -> list[str]:
     active_config = config or payment_config
     if active_config.mock_external_payment:
-        return ['WECHAT', 'ALIPAY']
+        return ['ALIPAY']
 
     channels = []
-    if active_config.wechat.enabled:
-        channels.append('WECHAT')
     if active_config.alipay.enabled:
         channels.append('ALIPAY')
     return channels
@@ -147,6 +148,22 @@ def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -
         }.items():
             if value and not Path(value).is_file():
                 errors.append(f'{name} does not point to a readable file')
+
+        if alipay.private_key_path and Path(alipay.private_key_path).is_file():
+            try:
+                private_key = load_pem_private_key(Path(alipay.private_key_path).read_bytes(), password=None)
+                if not isinstance(private_key, RSAPrivateKey) or private_key.key_size < 2048:
+                    errors.append('ALIPAY_PRIVATE_KEY_PATH must contain an RSA private key of at least 2048 bits')
+            except (TypeError, ValueError):
+                errors.append('ALIPAY_PRIVATE_KEY_PATH does not contain a valid unencrypted PEM private key')
+
+        if alipay.public_key_path and Path(alipay.public_key_path).is_file():
+            try:
+                public_key = load_pem_public_key(Path(alipay.public_key_path).read_bytes())
+                if not isinstance(public_key, RSAPublicKey) or public_key.key_size < 2048:
+                    errors.append('ALIPAY_PUBLIC_KEY_PATH must contain an RSA public key of at least 2048 bits')
+            except (TypeError, ValueError):
+                errors.append('ALIPAY_PUBLIC_KEY_PATH does not contain a valid PEM public key')
 
         for name, value in {
             'ALIPAY_NOTIFY_URL': alipay.notify_url,

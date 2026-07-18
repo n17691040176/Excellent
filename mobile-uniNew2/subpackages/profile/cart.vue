@@ -91,7 +91,7 @@
             v-for="item in paymentOptions"
             :key="item.key"
             class="pay-option"
-            :class="{ active: selectedPayKey === item.key }"
+            :class="{ active: selectedPayKey === item.key, disabled: item.available === false }"
             @click="selectPaymentOption(item)"
           >
             <text class="pay-title">{{ item.label }}</text>
@@ -146,22 +146,7 @@ import { computed, ref, watch } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { commerceApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
-
-const PAYMENT_LABEL_MAP = {
-  POINTS: '纯积分',
-  BALANCE: '余额',
-  VOUCHER: '消费金',
-  WECHAT: '微信支付',
-  ALIPAY: '支付宝'
-};
-
-const PAYMENT_DESC_MAP = {
-  POINTS: '全部使用积分完成支付',
-  BALANCE: '使用余额支付剩余金额',
-  VOUCHER: '使用消费金支付剩余金额',
-  WECHAT: '按微信支付完成付款',
-  ALIPAY: '在当前 H5 页面跳转支付宝完成付款'
-};
+import { commonPaymentOptions } from '@/utils/payment-options';
 
 const loading = ref(false);
 const failed = ref(false);
@@ -176,43 +161,10 @@ const selectedItems = computed(() => items.value.filter((item) => item.selected)
 const selectedProducts = computed(() => selectedItems.value.map((item) => item.product || {}).filter(Boolean));
 const selectedZones = computed(() => Array.from(new Set(selectedProducts.value.map((item) => item.zone_type).filter(Boolean))));
 
-function optionKey(item) {
-  return `${item.value || ''}|${item.purchase_mode || (item.supports_points ? 'POINTS_CASH' : 'CASH_ONLY')}`;
-}
-
-function paymentLabel(item, mode) {
-  if (item.label) return item.label;
-  if (item.value === 'BALANCE' && mode === 'POINTS_CASH') return '余额+积分支付';
-  if (item.value === 'BALANCE' && mode === 'CASH_ONLY') return '余额纯支付';
-  return `${PAYMENT_LABEL_MAP[item.value] || item.value}${item.supports_points ? ' + 积分' : ''}`;
-}
-
-function paymentDesc(item) {
-  if (item.desc) return item.desc;
-  return PAYMENT_DESC_MAP[item.value] || '按当前渠道支付';
-}
-
 const paymentOptions = computed(() => {
   if (!selectedProducts.value.length) return [];
   if (selectedZones.value.length > 1) return [];
-  const optionSets = selectedProducts.value.map((product) => new Set(
-    (product.payment_options || []).map((item) => optionKey(item))
-  ));
-  if (!optionSets.length || optionSets.some((set) => !set.size)) return [];
-  const keys = [...optionSets[0]].filter((key) => optionSets.every((set) => set.has(key)));
-  const firstOptions = selectedProducts.value[0].payment_options || [];
-  return keys.map((key) => {
-    const raw = firstOptions.find((item) => optionKey(item) === key) || {};
-    const mode = raw.purchase_mode || (raw.supports_points ? 'POINTS_CASH' : 'CASH_ONLY');
-    return {
-      key,
-      value: raw.value,
-      purchase_mode: mode,
-      supports_points: Boolean(raw.supports_points),
-      label: paymentLabel(raw, mode),
-      desc: paymentDesc(raw)
-    };
-  });
+  return commonPaymentOptions(selectedProducts.value);
 });
 
 const selectedPaymentOption = computed(() => paymentOptions.value.find((item) => item.key === selectedPayKey.value) || paymentOptions.value[0] || null);
@@ -229,7 +181,6 @@ const normalizedPoints = computed(() => {
 const cashAmount = computed(() => Math.max(0, Number(totalAmount.value) - Number(normalizedPoints.value)).toFixed(2));
 const cashLabel = computed(() => ({
   BALANCE: '余额支付',
-  VOUCHER: '消费金支付',
   WECHAT: '微信支付',
   ALIPAY: '支付宝支付'
 }[payChannel.value] || '现金支付'));
@@ -239,13 +190,17 @@ watch(
   (options) => {
     if (!options.length) return;
     if (!options.some((item) => item.key === selectedPayKey.value)) {
-      selectPaymentOption(options[0]);
+      selectPaymentOption(options.find((item) => item.available !== false) || options[0]);
     }
   },
   { immediate: true }
 );
 
 function selectPaymentOption(option) {
+  if (option.available === false) {
+    uni.showToast({ title: option.unavailable_reason || '该支付方式暂不可用', icon: 'none' });
+    return;
+  }
   selectedPayKey.value = option.key;
   payChannel.value = option.value;
   purchaseMode.value = option.purchase_mode;
@@ -721,6 +676,10 @@ onShow(loadData);
 .pay-option.active {
   border-color: var(--primary);
   background: var(--primary-bg);
+}
+
+.pay-option.disabled {
+  opacity: 0.55;
 }
 
 .pay-title {

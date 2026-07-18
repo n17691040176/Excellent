@@ -287,7 +287,7 @@ const viewDetail = (id) => {
 };
 
 const payOrder = async (order) => {
-  const payChannel = order.payChannel || order.payChannelOptions?.[0] || 'WECHAT';
+  const payChannel = order.payChannel || order.payChannelOptions?.[0] || 'BALANCE';
   const result = await orderApi.pay(order.id, {
     pay_channel: payChannel,
     auto_complete: true

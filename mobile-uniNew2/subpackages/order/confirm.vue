@@ -86,6 +86,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app';
 import { addressApi, assetApi, commerceApi, orderApi, packageApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
 import { requestPayment as requestPlatformPayment } from '@/utils/payment';
+import { commonPaymentOptions } from '@/utils/payment-options';
 
 const ORDER_TYPE_MAP = {
   HOT_SALE: 'HOT_SALE_ORDER',
@@ -117,33 +118,16 @@ const zoneType = computed(() => selectedProducts.value[0]?.zone_type || '');
 const requiresShipping = computed(() => selectedProducts.value.some((item) => Boolean(item.requires_shipping)));
 const totalAmount = computed(() => items.value.reduce((sum, item) => sum + Number(item.subtotal || 0), 0));
 
-function optionKey(item) {
-  const modeValue = item.purchase_mode || (item.supports_points ? 'POINTS_CASH' : 'CASH_ONLY');
-  return `${item.value || ''}|${modeValue}`;
-}
-
 const paymentOptions = computed(() => {
   if (!selectedProducts.value.length) return [];
-  const optionSets = selectedProducts.value.map((product) => new Set(
-    (product.payment_options || []).filter((item) => item.available !== false).map(optionKey)
-  ));
-  if (optionSets.some((set) => !set.size)) return [];
-  const keys = [...optionSets[0]].filter((key) => optionSets.every((set) => set.has(key)));
-  const source = selectedProducts.value[0].payment_options || [];
-  return keys.map((key) => {
-    const raw = source.find((item) => optionKey(item) === key) || {};
-    const purchaseMode = raw.purchase_mode || (raw.supports_points ? 'POINTS_CASH' : 'CASH_ONLY');
-    const assetKey = raw.value === 'BALANCE' ? 'BALANCE' : raw.value === 'VOUCHER' ? 'VOUCHER' : raw.value === 'POINTS' ? 'POINTS' : '';
-    const availableAmount = assetKey ? Number(assetSummary.value[assetKey] || 0) : Infinity;
-    const requiredAmount = purchaseMode === 'POINTS_CASH' ? 0.01 : Number(totalAmount.value || 0);
-    const available = raw.available !== false && availableAmount >= requiredAmount;
+  return commonPaymentOptions(selectedProducts.value).map((item) => {
+    const balanceSufficient = item.value !== 'BALANCE'
+      || Number(assetSummary.value.BALANCE || 0) >= Number(totalAmount.value || 0);
     return {
-      ...raw,
-      key,
-      purchase_mode: purchaseMode,
-      label: raw.label || raw.value || '支付',
-      desc: available ? (raw.desc || '按当前渠道支付') : `${raw.desc || '账户资产支付'}（余额不足）`,
-      available
+      ...item,
+      desc: !balanceSufficient ? `${item.desc}（余额不足）` : item.desc,
+      available: item.available !== false && balanceSufficient,
+      unavailable_reason: !balanceSufficient ? '账户余额不足' : item.unavailable_reason
     };
   });
 });
@@ -194,7 +178,6 @@ function buildDeductions() {
   if (points > 0) rows.push({ asset_type: 'POINTS', amount: points });
   const remaining = Math.max(total - points, 0);
   if (payment.value === 'BALANCE' && remaining > 0) rows.push({ asset_type: 'BALANCE', amount: remaining });
-  if (payment.value === 'VOUCHER' && remaining > 0) rows.push({ asset_type: 'VOUCHER', amount: remaining });
   return rows;
 }
 
@@ -283,7 +266,7 @@ async function loadData() {
 
 async function selectPayment(option) {
   if (option.available === false) {
-    uni.showToast({ title: '当前资产余额不足', icon: 'none' });
+    uni.showToast({ title: option.unavailable_reason || '该支付方式暂不可用', icon: 'none' });
     return;
   }
   selectedPayKey.value = option.key;

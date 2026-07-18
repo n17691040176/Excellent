@@ -273,17 +273,10 @@ import { computed, ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { assetApi, commerceApi, packageApi } from '@/api/modules';
 import { getApiBaseUrl } from '@/config/index';
+import { normalizePaymentOptions } from '@/utils/payment-options';
 import { trackEvent, trackPageView } from '@/utils/track';
 
 const LEGACY_FILE_BASE_URL = 'https://file.hoh516.com/huohonghuo';
-const PAYMENT_LABEL_MAP = {
-  POINTS: '纯积分',
-  BALANCE: '余额',
-  VOUCHER: '消费金',
-  WECHAT: '微信支付',
-  ALIPAY: '支付宝'
-};
-
 const loading = ref(false);
 const failed = ref(false);
 const id = ref('');
@@ -316,45 +309,16 @@ const detail = ref({
   defaultPayChannel: 'BALANCE'
 });
 
-function optionKey(item) {
-  return `${item.value || ''}|${item.purchase_mode || (item.supports_points ? 'POINTS_CASH' : 'CASH_ONLY')}`;
-}
-
-function paymentLabel(item, mode) {
-  if (item.label) return item.label;
-  if (item.value === 'BALANCE' && mode === 'POINTS_CASH') return '余额+积分支付';
-  if (item.value === 'BALANCE' && mode === 'CASH_ONLY') return '余额纯支付';
-  return `${PAYMENT_LABEL_MAP[item.value] || item.value}${item.supports_points ? ' + 积分' : ''}`;
-}
-
-function paymentDesc(item) {
-  return item.desc || '按当前渠道支付';
-}
-
 const paymentOptions = computed(() => {
-  const defaults = [
-    { value: 'BALANCE', label: '余额支付', desc: '可用余额支付', available: true, supports_points: false },
-    { value: 'WECHAT', label: '微信支付', desc: '正在开发中', available: false, supports_points: false },
-    { value: 'ALIPAY', label: '支付宝支付', desc: '正在开发中', available: false, supports_points: false },
-    { value: 'BANKCARD', label: '银行卡支付', desc: '正在开发中', available: false, supports_points: false },
-  ];
-  const raw = Array.isArray(detail.value.paymentOptions) && detail.value.paymentOptions.length
-    ? detail.value.paymentOptions
-    : defaults;
-  return raw.map((item) => {
-    const mode = item.purchase_mode || (item.supports_points ? 'POINTS_CASH' : 'CASH_ONLY');
-    const assetKey = item.value === 'BALANCE' ? 'BALANCE' : item.value === 'VOUCHER' ? 'VOUCHER' : item.value === 'POINTS' ? 'POINTS' : '';
-    const availableAmount = assetKey ? Number(assetSummary.value[assetKey] || 0) : Infinity;
-    const requiredAmount = mode === 'POINTS_CASH' ? 0.01 : Number(subtotal.value || 0);
-    const available = item.available !== false && availableAmount >= requiredAmount;
+  return normalizePaymentOptions(detail.value.paymentOptions).map((item) => {
+    const balanceSufficient = item.value !== 'BALANCE'
+      || Number(assetSummary.value.BALANCE || 0) >= Number(subtotal.value || 0);
+    const available = item.available !== false && balanceSufficient;
     return {
-      key: optionKey({ ...item, purchase_mode: mode }),
-      value: item.value,
-      purchase_mode: mode,
-      supports_points: Boolean(item.supports_points),
-      label: paymentLabel(item, mode),
-      desc: available ? paymentDesc(item) : `${paymentDesc(item)}（余额不足）`,
+      ...item,
+      desc: !balanceSufficient ? `${item.desc}（余额不足）` : item.desc,
       available,
+      unavailable_reason: !balanceSufficient ? '账户余额不足' : item.unavailable_reason
     };
   });
 });
@@ -377,7 +341,6 @@ const cashAmount = computed(() => {
 
 const cashLabel = computed(() => ({
   BALANCE: '余额支付',
-  VOUCHER: '消费金支付',
   WECHAT: '微信支付',
   ALIPAY: '支付宝支付'
 }[payChannel.value] || '现金支付'));
@@ -511,7 +474,7 @@ function changeQuantity(delta) {
 
 function selectPaymentOption(option) {
   if (option.available === false) {
-    uni.showToast({ title: '该支付方式正在开发中', icon: 'none' });
+    uni.showToast({ title: option.unavailable_reason || '该支付方式暂不可用', icon: 'none' });
     return;
   }
   selectedPayKey.value = option.key;

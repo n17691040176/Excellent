@@ -289,7 +289,7 @@ class ChainTest:
                 "order_type": "SELF_OPERATED_ORDER",
                 "zone_type": "SELF_OPERATED",
                 "items": [{"product_id": self.test_product_id, "quantity": 1}],
-                "pay_channel": "WECHAT",
+                "pay_channel": "ALIPAY",
                 "asset_deductions": []
             },
             headers=get_headers(self.user_token)
@@ -311,7 +311,7 @@ class ChainTest:
                 "order_type": "SELF_OPERATED_ORDER",
                 "zone_type": "SELF_OPERATED",
                 "items": [{"product_id": self.test_product_id, "quantity": 1}],
-                "pay_channel": "WECHAT",
+                "pay_channel": "ALIPAY",
                 "asset_deductions": []
             },
             headers=get_headers(self.user_token)

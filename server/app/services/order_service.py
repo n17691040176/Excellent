@@ -614,12 +614,10 @@ class OrderService:
         if pay_channel == 'VOUCHER' and zone_type != ZoneType.SELF_OPERATED:
             raise ConflictError('Voucher payment only supports self-operated zone')
 
-        if (
-            pay_channel == 'BALANCE'
-            and zone_type in {ZoneType.HOT_SALE, ZoneType.SELF_OPERATED, ZoneType.LOCAL_LIFE, ZoneType.REPURCHASE}
-            and not all(bool(OrderService._config_value(config, zone_type, 'balance_purchase_enabled')) for config in configs)
-        ):
-            raise ConflictError('Balance payment is disabled for current product')
+        if pay_channel in EXTERNAL_PAY_CHANNELS and pay_channel not in enabled_external_payment_channels():
+            if pay_channel == 'WECHAT':
+                raise ConflictError('Wechat payment is under development')
+            raise ConflictError('Alipay payment is not enabled')
 
         points_amount = deductions_by_type.get(AssetType.POINTS, Decimal('0'))
         if points_amount > total_amount:
@@ -635,12 +633,8 @@ class OrderService:
         if total_deduction > total_amount:
             raise ConflictError('Asset deductions exceed order total')
         purchase_mode = OrderService._purchase_mode(total_amount, deductions_by_type, pay_channel)
-        OrderService._validate_purchase_mode(zone_type, configs, purchase_mode)
-        if pay_channel == 'BALANCE':
-            field = 'balance_points_enabled' if purchase_mode == 'POINTS_CASH' else 'balance_only_enabled'
-            if not all(bool(OrderService._config_value(config, zone_type, field)) for config in configs):
-                label = 'balance + points' if purchase_mode == 'POINTS_CASH' else 'balance only'
-                raise ConflictError(f'Current product does not support {label} purchase')
+        if purchase_mode != 'CASH_ONLY':
+            OrderService._validate_purchase_mode(zone_type, configs, purchase_mode)
 
     @staticmethod
     def build_payment_plan(
@@ -1002,16 +996,13 @@ class OrderService:
                 for asset_type, amount in plan['deductions_by_type'].items()
             ],
             'pay_channel_options': [
-                {'value': 'POINTS', 'label': '纯积分'},
-                {'value': 'BALANCE', 'label': '余额'},
-                {'value': 'VOUCHER', 'label': '消费金'},
-                *[
-                    {
-                        'value': channel,
-                        'label': '微信支付' if channel == 'WECHAT' else '支付宝支付',
-                    }
-                    for channel in enabled_external_payment_channels()
-                ],
+                {'value': 'BALANCE', 'label': '余额支付', 'available': True},
+                {'value': 'WECHAT', 'label': '微信支付', 'available': False, 'desc': '正在开发'},
+                {
+                    'value': 'ALIPAY',
+                    'label': '支付宝支付',
+                    'available': 'ALIPAY' in enabled_external_payment_channels(),
+                },
             ],
         }
 
