@@ -1,13 +1,16 @@
 import base64
 import tempfile
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
+from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.x509.oid import NameOID
 
 from app.core.exceptions import ConflictError
 from app.core.payment_config import AlipayConfig, PaymentConfig, validate_payment_config
@@ -89,9 +92,30 @@ class AlipayH5PaymentTest(TestCase):
         params = dict(payment['payment_form']['params'])
         signature = base64.b64decode(params.pop('sign'))
         message = PaymentService._alipay_sign_string(params)
+        self.assertIn('sign_type=RSA2', message)
         self.public_key.verify(signature, message.encode('utf-8'), padding.PKCS1v15(), hashes.SHA256())
         self.assertIn('#/subpackages/order/detail?order_id=12&out_trade_no=PAYAL0012ABCDEF', payment['return_url'])
         self.assertEqual(payment['provider_payload']['biz_content']['product_code'], 'QUICK_WAP_WAP')
+
+    def test_loads_public_key_from_x509_certificate(self):
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Alipay Test')])
+        now_utc = datetime.now(UTC)
+        certificate = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(self.public_key)
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now_utc - timedelta(days=1))
+            .not_valid_after(now_utc + timedelta(days=1))
+            .sign(self.private_key, hashes.SHA256())
+        )
+        certificate_path = Path(self.temp_dir.name) / 'alipay-public-cert.pem'
+        certificate_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+
+        loaded_key = PaymentService._load_public_key(str(certificate_path))
+
+        self.assertEqual(loaded_key.public_numbers(), self.public_key.public_numbers())
 
     def test_notify_requires_valid_signature_and_amount(self):
         tx = self.build_transaction()
@@ -107,7 +131,7 @@ class AlipayH5PaymentTest(TestCase):
         }
         payload['sign'] = PaymentService._rsa_sign(
             self.private_key,
-            PaymentService._alipay_sign_string(payload),
+            PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
         )
         db = MagicMock()
         db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = tx
@@ -124,7 +148,7 @@ class AlipayH5PaymentTest(TestCase):
         payload['total_amount'] = '9.91'
         payload['sign'] = PaymentService._rsa_sign(
             self.private_key,
-            PaymentService._alipay_sign_string(payload),
+            PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
         )
         with (
             patch.object(payment_module, 'payment_config', PaymentConfig(mock_external_payment=False, alipay=self.config)),

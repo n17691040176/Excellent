@@ -11,6 +11,7 @@ from urllib import request as urlrequest
 from urllib.parse import quote_plus, urlencode, urlparse
 from uuid import uuid4
 
+from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -118,6 +119,10 @@ class PaymentService:
         for candidate in PaymentService._key_candidates(path, ('PUBLIC KEY', 'RSA PUBLIC KEY')):
             try:
                 return serialization.load_pem_public_key(candidate)
+            except ValueError as exc:
+                last_error = exc
+            try:
+                return x509.load_pem_x509_certificate(candidate).public_key()
             except ValueError as exc:
                 last_error = exc
         raise ConflictError('Payment public key format is invalid') from last_error
@@ -242,11 +247,11 @@ class PaymentService:
         }
 
     @staticmethod
-    def _alipay_sign_string(params: dict[str, Any]) -> str:
+    def _alipay_sign_string(params: dict[str, Any], *, exclude_sign_type: bool = False) -> str:
         ordered_parts = []
         for key in sorted(params):
             value = params[key]
-            if value is None or key in {'sign', 'sign_type'}:
+            if value is None or key == 'sign' or (exclude_sign_type and key == 'sign_type'):
                 continue
             ordered_parts.append(f'{key}={value}')
         return '&'.join(ordered_parts)
@@ -452,7 +457,7 @@ class PaymentService:
             for key, value in payload.items()
             if key not in {'sign', 'sign_type'}
         }
-        message = PaymentService._alipay_sign_string(unsigned_payload)
+        message = PaymentService._alipay_sign_string(unsigned_payload, exclude_sign_type=True)
         try:
             signature = base64.b64decode(str(payload['sign']), validate=True)
             public_key.verify(
