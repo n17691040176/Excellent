@@ -303,6 +303,9 @@ class PaymentService:
         sign = PaymentService._rsa_sign(private_key, unsigned)
         form_params = {key: str(value) for key, value in params.items() if value is not None}
         form_params['sign'] = sign
+        form_action_separator = '&' if '?' in config.gateway_url else '?'
+        form_action = f'{config.gateway_url}{form_action_separator}{urlencode({"charset": config.charset})}'
+        form_body_params = {key: value for key, value in form_params.items() if key != 'charset'}
         request_payment = '&'.join(
             f'{key}={quote_plus(value, safe="")}' for key, value in form_params.items()
         )
@@ -319,9 +322,9 @@ class PaymentService:
             'payment_method': config.payment_method,
             'payment_url': f'{config.gateway_url}?{request_payment}' if is_h5 else None,
             'payment_form': {
-                'action': config.gateway_url,
+                'action': form_action,
                 'method': 'POST',
-                'params': form_params,
+                'params': form_body_params,
             } if is_h5 else None,
             'provider_payload': {
                 'biz_content': biz_content,

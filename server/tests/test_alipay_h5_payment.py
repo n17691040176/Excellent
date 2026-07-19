@@ -88,8 +88,9 @@ class AlipayH5PaymentTest(TestCase):
         )
 
         self.assertEqual(payment['payment_method'], 'alipay.trade.wap.pay')
-        self.assertEqual(payment['payment_form']['action'], self.config.gateway_url)
-        params = dict(payment['payment_form']['params'])
+        self.assertEqual(payment['payment_form']['action'], f'{self.config.gateway_url}?charset=utf-8')
+        self.assertNotIn('charset', payment['payment_form']['params'])
+        params = dict(payment['payment_form']['params'], charset=self.config.charset)
         signature = base64.b64decode(params.pop('sign'))
         message = PaymentService._alipay_sign_string(params)
         self.assertIn('sign_type=RSA2', message)
