@@ -19,7 +19,14 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
-from app.core.payment_config import AlipayConfig, WechatPayConfig, payment_config
+from app.core.payment_config import (
+    AlipayConfig,
+    WechatPayConfig,
+    alipay_certificate_sn,
+    alipay_root_certificate_sn,
+    load_alipay_certificates,
+    payment_config,
+)
 from app.models.enums import OrderType, PaymentChannel, PaymentStatus, PayStatus
 from app.models.order import Order
 from app.models.payment import PaymentTransaction
@@ -296,6 +303,11 @@ class PaymentService:
             'notify_url': config.notify_url,
             'biz_content': json.dumps(biz_content, ensure_ascii=False, separators=(',', ':')),
         }
+        if config.certificate_mode:
+            app_certificates = load_alipay_certificates(config.app_cert_path)
+            root_certificates = load_alipay_certificates(config.root_cert_path)
+            params['app_cert_sn'] = alipay_certificate_sn(app_certificates[0])
+            params['alipay_root_cert_sn'] = alipay_root_certificate_sn(root_certificates)
         if return_url:
             params['return_url'] = return_url
         unsigned = PaymentService._alipay_sign_string(params)
@@ -448,13 +460,14 @@ class PaymentService:
 
     @staticmethod
     def _alipay_verify_notify(payload: dict[str, Any], config: AlipayConfig) -> None:
-        if not config.public_key_path:
+        public_key_path = config.alipay_public_cert_path if config.certificate_mode else config.public_key_path
+        if not public_key_path:
             raise ConflictError('Alipay public key path is not configured')
         if 'sign' not in payload:
             raise ConflictError('Alipay notify payload is missing sign')
         if str(payload.get('sign_type') or '').upper() != 'RSA2':
             raise ForbiddenError('Alipay notify sign_type is invalid')
-        public_key = PaymentService._load_public_key(config.public_key_path)
+        public_key = PaymentService._load_public_key(public_key_path)
         unsigned_payload = {
             key: value
             for key, value in payload.items()

@@ -2,6 +2,7 @@ import base64
 import tempfile
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from hashlib import md5
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
@@ -117,6 +118,49 @@ class AlipayH5PaymentTest(TestCase):
         loaded_key = PaymentService._load_public_key(str(certificate_path))
 
         self.assertEqual(loaded_key.public_numbers(), self.public_key.public_numbers())
+
+    def test_builds_certificate_mode_request_with_certificate_serial_numbers(self):
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Alipay Test')])
+        now_utc = datetime.now(UTC)
+        app_certificate = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(self.public_key)
+            .serial_number(123456789)
+            .not_valid_before(now_utc - timedelta(days=1))
+            .not_valid_after(now_utc + timedelta(days=1))
+            .sign(self.private_key, hashes.SHA256())
+        )
+        app_cert_path = Path(self.temp_dir.name) / 'app-cert.crt'
+        root_cert_path = Path(self.temp_dir.name) / 'root-cert.crt'
+        app_cert_path.write_bytes(app_certificate.public_bytes(serialization.Encoding.PEM))
+        root_cert_path.write_bytes(app_certificate.public_bytes(serialization.Encoding.PEM))
+        cert_config = AlipayConfig(
+            **{
+                **self.config.__dict__,
+                'app_cert_path': str(app_cert_path),
+                'alipay_public_cert_path': str(app_cert_path),
+                'root_cert_path': str(root_cert_path),
+            }
+        )
+
+        payment = PaymentService._alipay_build_request_payment(
+            self.build_order(),
+            self.build_transaction(),
+            cert_config,
+        )
+
+        params = dict(payment['payment_form']['params'], charset=cert_config.charset)
+        expected_sn = md5(
+            f'{app_certificate.issuer.rfc4514_string()}{app_certificate.serial_number}'.encode(),
+            usedforsecurity=False,
+        ).hexdigest()
+        self.assertEqual(params['app_cert_sn'], expected_sn)
+        self.assertEqual(params['alipay_root_cert_sn'], expected_sn)
+        signature = base64.b64decode(params.pop('sign'))
+        message = PaymentService._alipay_sign_string(params)
+        self.public_key.verify(signature, message.encode(), padding.PKCS1v15(), hashes.SHA256())
 
     def test_notify_requires_valid_signature_and_amount(self):
         tx = self.build_transaction()

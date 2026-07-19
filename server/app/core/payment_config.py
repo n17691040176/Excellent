@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass, field
+from hashlib import md5
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -73,6 +74,9 @@ class AlipayConfig:
     app_id: str = _env('ALIPAY_APP_ID')
     private_key_path: str = _env('ALIPAY_PRIVATE_KEY_PATH')
     public_key_path: str = _env('ALIPAY_PUBLIC_KEY_PATH')
+    app_cert_path: str = _env('ALIPAY_APP_CERT_PATH')
+    alipay_public_cert_path: str = _env('ALIPAY_PUBLIC_CERT_PATH')
+    root_cert_path: str = _env('ALIPAY_ROOT_CERT_PATH')
     notify_url: str = _env('ALIPAY_NOTIFY_URL')
     return_url: str = _env('ALIPAY_RETURN_URL')
     gateway_url: str = _env('ALIPAY_GATEWAY_URL', 'https://openapi.alipay.com/gateway.do') or 'https://openapi.alipay.com/gateway.do'
@@ -81,6 +85,10 @@ class AlipayConfig:
     sign_type: str = _env('ALIPAY_SIGN_TYPE', 'RSA2') or 'RSA2'
     seller_id: str = _env('ALIPAY_SELLER_ID')
     app_pay_subject_prefix: str = _env('ALIPAY_APP_SUBJECT_PREFIX', 'Excellent') or 'Excellent'
+
+    @property
+    def certificate_mode(self) -> bool:
+        return bool(self.app_cert_path or self.alipay_public_cert_path or self.root_cert_path)
 
 
 @dataclass(frozen=True)
@@ -116,6 +124,24 @@ def _valid_url(value: str, *, require_https: bool) -> bool:
     return not require_https or parsed.scheme.lower() == 'https'
 
 
+def load_alipay_certificates(path: str) -> list[x509.Certificate]:
+    return x509.load_pem_x509_certificates(Path(path).read_bytes())
+
+
+def alipay_certificate_sn(certificate: x509.Certificate) -> str:
+    content = f'{certificate.issuer.rfc4514_string()}{certificate.serial_number}'
+    return md5(content.encode('utf-8'), usedforsecurity=False).hexdigest()
+
+
+def alipay_root_certificate_sn(certificates: list[x509.Certificate]) -> str:
+    serial_numbers = [
+        alipay_certificate_sn(certificate)
+        for certificate in certificates
+        if certificate.signature_algorithm_oid.dotted_string.startswith('1.2.840.113549.1.1')
+    ]
+    return '_'.join(serial_numbers)
+
+
 def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -> None:
     active_config = config or payment_config
     production = app_env.strip().lower() == 'production'
@@ -129,10 +155,19 @@ def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -
         required_values = {
             'ALIPAY_APP_ID': alipay.app_id,
             'ALIPAY_PRIVATE_KEY_PATH': alipay.private_key_path,
-            'ALIPAY_PUBLIC_KEY_PATH': alipay.public_key_path,
             'ALIPAY_NOTIFY_URL': alipay.notify_url,
             'ALIPAY_GATEWAY_URL': alipay.gateway_url,
         }
+        if alipay.certificate_mode:
+            required_values.update(
+                {
+                    'ALIPAY_APP_CERT_PATH': alipay.app_cert_path,
+                    'ALIPAY_PUBLIC_CERT_PATH': alipay.alipay_public_cert_path,
+                    'ALIPAY_ROOT_CERT_PATH': alipay.root_cert_path,
+                }
+            )
+        else:
+            required_values['ALIPAY_PUBLIC_KEY_PATH'] = alipay.public_key_path
         errors.extend(f'{name} is required when ALIPAY_ENABLED=true' for name, value in required_values.items() if not value)
 
         if alipay.payment_method not in {'alipay.trade.wap.pay', 'alipay.trade.app.pay'}:
@@ -143,13 +178,22 @@ def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -
         if alipay.sign_type.upper() != 'RSA2':
             errors.append('ALIPAY_SIGN_TYPE must be RSA2')
 
-        for name, value in {
-            'ALIPAY_PRIVATE_KEY_PATH': alipay.private_key_path,
-            'ALIPAY_PUBLIC_KEY_PATH': alipay.public_key_path,
-        }.items():
+        key_paths = {'ALIPAY_PRIVATE_KEY_PATH': alipay.private_key_path}
+        if alipay.certificate_mode:
+            key_paths.update(
+                {
+                    'ALIPAY_APP_CERT_PATH': alipay.app_cert_path,
+                    'ALIPAY_PUBLIC_CERT_PATH': alipay.alipay_public_cert_path,
+                    'ALIPAY_ROOT_CERT_PATH': alipay.root_cert_path,
+                }
+            )
+        else:
+            key_paths['ALIPAY_PUBLIC_KEY_PATH'] = alipay.public_key_path
+        for name, value in key_paths.items():
             if value and not Path(value).is_file():
                 errors.append(f'{name} does not point to a readable file')
 
+        private_key = None
         if alipay.private_key_path and Path(alipay.private_key_path).is_file():
             try:
                 private_key = load_pem_private_key(Path(alipay.private_key_path).read_bytes(), password=None)
@@ -158,25 +202,51 @@ def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -
             except (TypeError, ValueError):
                 errors.append('ALIPAY_PRIVATE_KEY_PATH does not contain a valid unencrypted PEM private key')
 
-        # ========== 修改区域：兼容支付宝X.509公钥证书 ==========
-        if alipay.public_key_path and Path(alipay.public_key_path).is_file():
+        if not alipay.certificate_mode and alipay.public_key_path and Path(alipay.public_key_path).is_file():
             pub_data = Path(alipay.public_key_path).read_bytes()
             public_key = None
             try:
-                # 优先尝试普通公钥格式
                 public_key = load_pem_public_key(pub_data)
             except (TypeError, ValueError):
                 try:
-                    # 解析X.509证书，提取内部公钥
-                    cert = x509.load_pem_x509_certificate(pub_data)
-                    public_key = cert.public_key()
+                    public_key = x509.load_pem_x509_certificate(pub_data).public_key()
                 except (TypeError, ValueError):
                     errors.append('ALIPAY_PUBLIC_KEY_PATH does not contain a valid PEM public key')
 
-            if public_key is not None:
-                if not isinstance(public_key, RSAPublicKey) or public_key.key_size < 2048:
-                    errors.append('ALIPAY_PUBLIC_KEY_PATH must contain an RSA public key of at least 2048 bits')
-        # =======================================================
+            if public_key is not None and (not isinstance(public_key, RSAPublicKey) or public_key.key_size < 2048):
+                errors.append('ALIPAY_PUBLIC_KEY_PATH must contain an RSA public key of at least 2048 bits')
+
+        if alipay.certificate_mode:
+            parsed_certificates: dict[str, list[x509.Certificate]] = {}
+            for name, value in {
+                'ALIPAY_APP_CERT_PATH': alipay.app_cert_path,
+                'ALIPAY_PUBLIC_CERT_PATH': alipay.alipay_public_cert_path,
+                'ALIPAY_ROOT_CERT_PATH': alipay.root_cert_path,
+            }.items():
+                if not value or not Path(value).is_file():
+                    continue
+                try:
+                    parsed_certificates[name] = load_alipay_certificates(value)
+                except ValueError:
+                    errors.append(f'{name} does not contain a valid PEM X.509 certificate')
+
+            app_certificates = parsed_certificates.get('ALIPAY_APP_CERT_PATH', [])
+            if app_certificates:
+                app_public_key = app_certificates[0].public_key()
+                if not isinstance(app_public_key, RSAPublicKey) or app_public_key.key_size < 2048:
+                    errors.append('ALIPAY_APP_CERT_PATH must contain an RSA certificate of at least 2048 bits')
+                elif isinstance(private_key, RSAPrivateKey) and app_public_key.public_numbers() != private_key.public_key().public_numbers():
+                    errors.append('ALIPAY_APP_CERT_PATH does not match ALIPAY_PRIVATE_KEY_PATH')
+
+            alipay_certificates = parsed_certificates.get('ALIPAY_PUBLIC_CERT_PATH', [])
+            if alipay_certificates:
+                alipay_public_key = alipay_certificates[0].public_key()
+                if not isinstance(alipay_public_key, RSAPublicKey) or alipay_public_key.key_size < 2048:
+                    errors.append('ALIPAY_PUBLIC_CERT_PATH must contain an RSA certificate of at least 2048 bits')
+
+            root_certificates = parsed_certificates.get('ALIPAY_ROOT_CERT_PATH', [])
+            if root_certificates and not alipay_root_certificate_sn(root_certificates):
+                errors.append('ALIPAY_ROOT_CERT_PATH does not contain an RSA root certificate')
 
         for name, value in {
             'ALIPAY_NOTIFY_URL': alipay.notify_url,
