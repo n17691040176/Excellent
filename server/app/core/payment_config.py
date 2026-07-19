@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
 
@@ -157,13 +158,25 @@ def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -
             except (TypeError, ValueError):
                 errors.append('ALIPAY_PRIVATE_KEY_PATH does not contain a valid unencrypted PEM private key')
 
+        # ========== 修改区域：兼容支付宝X.509公钥证书 ==========
         if alipay.public_key_path and Path(alipay.public_key_path).is_file():
+            pub_data = Path(alipay.public_key_path).read_bytes()
+            public_key = None
             try:
-                public_key = load_pem_public_key(Path(alipay.public_key_path).read_bytes())
+                # 优先尝试普通公钥格式
+                public_key = load_pem_public_key(pub_data)
+            except (TypeError, ValueError):
+                try:
+                    # 解析X.509证书，提取内部公钥
+                    cert = x509.load_pem_x509_certificate(pub_data)
+                    public_key = cert.public_key()
+                except (TypeError, ValueError):
+                    errors.append('ALIPAY_PUBLIC_KEY_PATH does not contain a valid PEM public key')
+
+            if public_key is not None:
                 if not isinstance(public_key, RSAPublicKey) or public_key.key_size < 2048:
                     errors.append('ALIPAY_PUBLIC_KEY_PATH must contain an RSA public key of at least 2048 bits')
-            except (TypeError, ValueError):
-                errors.append('ALIPAY_PUBLIC_KEY_PATH does not contain a valid PEM public key')
+        # =======================================================
 
         for name, value in {
             'ALIPAY_NOTIFY_URL': alipay.notify_url,
