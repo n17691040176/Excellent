@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.api.v1.mobile_serializers import _product_payment_flags, _product_payment_options
+from app.api.v1.mobile_serializers import _default_order_pay_channel, _product_payment_flags, _product_payment_options
 from app.core.exceptions import ConflictError
 from app.core.payment_config import AlipayConfig, PaymentConfig, WechatPayConfig, enabled_external_payment_channels
 from app.models.enums import AssetType, ZoneType
@@ -54,6 +54,12 @@ def test_product_payment_options_require_admin_and_provider_alipay_configuration
     assert admin_disabled[2]['unavailable_reason'] == '后台未开启支付宝支付'
     assert provider_disabled[2]['available'] is False
     assert provider_disabled[2]['unavailable_reason'] == '支付宝全局配置未就绪'
+
+
+def test_unpaid_cash_order_defaults_to_external_payment_channel():
+    order = SimpleNamespace(payable_amount=Decimal('850.00'))
+
+    assert _default_order_pay_channel(order, ['BALANCE', 'ALIPAY']) == 'ALIPAY'
 
 
 def test_product_payment_flags_use_admin_channel_switches():

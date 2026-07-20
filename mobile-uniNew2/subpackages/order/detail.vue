@@ -214,6 +214,14 @@ function findPaymentCombo(assetDeductions = [], payableAmount = 0, payStatus = '
   return '待支付';
 }
 
+function preferredPayChannel(options = [], cashDue = 0, fallback = '') {
+  if (Number(cashDue || 0) > 0) {
+    const externalChannel = options.find((item) => ['ALIPAY', 'WECHAT'].includes(item));
+    if (externalChannel) return externalChannel;
+  }
+  return fallback || options[0] || '';
+}
+
 function normalize(res) {
   const order = res?.order || res || {};
   const items = Array.isArray(res?.items) ? res.items : [];
@@ -240,7 +248,7 @@ function normalize(res) {
     channel: order?.channel_text || order?.channel || '商城订单',
     steps: normalizeSteps(order?.timeline || order?.steps || res?.timeline || res?.steps),
     items,
-    payChannel: res?.default_pay_channel || order?.default_pay_channel || payChannelOptions[0] || '',
+    payChannel: preferredPayChannel(payChannelOptions, payableAmount, res?.default_pay_channel || order?.default_pay_channel || ''),
     payChannelOptions,
     canPay: Boolean(order?.can_pay ?? res?.can_pay ?? payStatus !== 'PAID'),
     canConfirm: Boolean(order?.can_confirm ?? res?.can_confirm ?? false),

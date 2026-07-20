@@ -658,6 +658,14 @@ def _order_pay_channel_options(order: Order, deductions: list[OrderAssetDeductio
     return ['BALANCE', *external_channels]
 
 
+def _default_order_pay_channel(order: Order, pay_channel_options: list[str]) -> str | None:
+    if money(order.payable_amount) > 0:
+        for channel in pay_channel_options:
+            if channel in {'ALIPAY', 'WECHAT'}:
+                return channel
+    return pay_channel_options[0] if pay_channel_options else None
+
+
 def _order_title(db: Session, order: Order) -> str:
     order_type = enum_value(order.order_type)
     if order_type == OrderType.PACKAGE_ORDER.value and order.source_ref_id:
@@ -733,7 +741,7 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         'can_refund': can_refund,
         'requires_shipping': requires_shipping,
         'pay_channel_options': pay_channel_options,
-        'default_pay_channel': pay_channel_options[0] if pay_channel_options else None,
+        'default_pay_channel': _default_order_pay_channel(order, pay_channel_options),
         'created_at': iso_datetime(order.created_at),
         'updated_at': iso_datetime(order.updated_at),
         'paid_at': iso_datetime(order.paid_at),
@@ -752,7 +760,7 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         data['asset_deductions'] = [serialize_order_asset_deduction(item) for item in deductions]
         data['payment_combo'] = _payment_combo(order, deductions)
         data['pay_channel_options'] = _order_pay_channel_options(order, deductions)
-        data['default_pay_channel'] = data['pay_channel_options'][0] if data['pay_channel_options'] else None
+        data['default_pay_channel'] = _default_order_pay_channel(order, data['pay_channel_options'])
         if status == enum_value(OrderStatus.REFUND):
             data['payment_message'] = '订单已退款。' if pay_status == enum_value(PayStatus.REFUNDED) else '订单已取消。'
         else:

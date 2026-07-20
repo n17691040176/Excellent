@@ -22,9 +22,18 @@ export function pickListPayload(res) {
   return [];
 }
 
+function preferredPayChannel(options = [], cashDue = 0, fallback = '') {
+  if (Number(cashDue || 0) > 0) {
+    const externalChannel = options.find((item) => ['ALIPAY', 'WECHAT'].includes(item));
+    if (externalChannel) return externalChannel;
+  }
+  return fallback || options[0] || '';
+}
+
 export function toOrderView(item = {}, index = 0) {
   const status = item.status_text || item.status || '待支付';
   const payChannelOptions = Array.isArray(item.pay_channel_options) ? item.pay_channel_options : [];
+  const cashDue = item.cash_due ?? item.payable_amount ?? 0;
   return {
     id: item.id || `o-${index}`,
     no: item.order_no || item.no || `NO.${Date.now()}${index}`,
@@ -32,10 +41,10 @@ export function toOrderView(item = {}, index = 0) {
     time: formatDateTime(item.created_at || item.time),
     channel: item.biz_type === 'local_life' ? '本地生活' : item.channel_text || item.channel || '商城订单',
     amount: formatMoney(item.pay_amount ?? item.amount ?? 0),
-    cashDue: formatMoney(item.cash_due ?? item.payable_amount ?? 0),
+    cashDue: formatMoney(cashDue),
     status,
     paymentCombo: item.payment_combo || '待支付',
-    payChannel: item.default_pay_channel || item.pay_channel || payChannelOptions[0] || '',
+    payChannel: preferredPayChannel(payChannelOptions, cashDue, item.default_pay_channel || item.pay_channel || ''),
     payChannelOptions,
     canPay: Boolean(item.can_pay),
     canConfirm: Boolean(item.can_confirm),
