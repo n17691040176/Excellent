@@ -98,6 +98,7 @@ class AlipayH5PaymentTest(TestCase):
         self.public_key.verify(signature, message.encode('utf-8'), padding.PKCS1v15(), hashes.SHA256())
         self.assertIn('#/subpackages/order/detail?order_id=12&out_trade_no=PAYAL0012ABCDEF', payment['return_url'])
         self.assertEqual(payment['provider_payload']['biz_content']['product_code'], 'QUICK_WAP_WAP')
+        self.assertEqual(payment['provider_payload']['biz_content']['timeout_express'], '30m')
 
     def test_loads_public_key_from_x509_certificate(self):
         name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Alipay Test')])

@@ -9,7 +9,14 @@
     <view class="form-card">
       <view class="form-row"><text>收货人</text><input v-model="form.receiver_name" placeholder="请输入收货人" /></view>
       <view class="form-row"><text>手机号</text><input v-model="form.receiver_phone" type="number" placeholder="请输入手机号" /></view>
-      <picker class="region-picker" mode="region" :value="regionValue" @change="onRegionChange">
+      <picker
+        class="region-picker"
+        mode="multiSelector"
+        :range="regionRange"
+        :value="regionIndex"
+        @columnchange="onRegionColumnChange"
+        @change="onRegionChange"
+      >
         <view class="form-row picker-row">
           <text>省市区/县</text>
           <view class="picker-value" :class="{ placeholder: !hasRegion }">{{ regionText }}</view>
@@ -28,6 +35,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
+import rawRegions from 'province-city-china/dist/level.json';
 import { addressApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
 
@@ -43,19 +51,84 @@ const form = reactive({
   is_default: false
 });
 
+const regionTree = rawRegions.map((province) => {
+  const children = Array.isArray(province.children) ? province.children : [];
+  const hasCityLevel = children.some((city) => Array.isArray(city.children) && city.children.length);
+  const cities = hasCityLevel
+    ? children.map((city) => ({
+        name: city.name,
+        children: Array.isArray(city.children) && city.children.length ? city.children : [city]
+      }))
+    : [{ name: province.name, children: children.length ? children : [province] }];
+  return { name: province.name, children: cities };
+});
+
+const regionIndex = ref([0, 0, 0]);
 const hasRegion = computed(() => [form.province, form.city, form.district].every((item) => item.trim()));
-const regionValue = computed(() => (hasRegion.value ? [form.province, form.city, form.district] : []));
 const regionText = computed(() => (hasRegion.value ? [form.province, form.city, form.district].join(' / ') : '请选择省市区/县'));
+const currentProvince = computed(() => regionTree[regionIndex.value[0]] || regionTree[0]);
+const currentCities = computed(() => currentProvince.value?.children || []);
+const currentCity = computed(() => currentCities.value[regionIndex.value[1]] || currentCities.value[0]);
+const currentDistricts = computed(() => currentCity.value?.children || []);
+const regionRange = computed(() => [
+  regionTree.map((item) => item.name),
+  currentCities.value.map((item) => item.name),
+  currentDistricts.value.map((item) => item.name)
+]);
 
 function goBack() {
   uni.navigateBack();
 }
 
+function onRegionColumnChange(event) {
+  const { column, value } = event.detail;
+  const nextIndex = [...regionIndex.value];
+  nextIndex[column] = value;
+  if (column === 0) {
+    nextIndex[1] = 0;
+    nextIndex[2] = 0;
+  }
+  if (column === 1) {
+    nextIndex[2] = 0;
+  }
+  regionIndex.value = normalizeRegionIndex(nextIndex);
+}
+
 function onRegionChange(event) {
-  const [province = '', city = '', district = ''] = event.detail.value || [];
-  form.province = province;
-  form.city = city;
-  form.district = district;
+  regionIndex.value = normalizeRegionIndex(event.detail.value || regionIndex.value);
+  applySelectedRegion();
+}
+
+function normalizeRegionIndex(index) {
+  const provinceIndex = clampIndex(index[0], regionTree.length);
+  const cities = regionTree[provinceIndex]?.children || [];
+  const cityIndex = clampIndex(index[1], cities.length);
+  const districts = cities[cityIndex]?.children || [];
+  return [provinceIndex, cityIndex, clampIndex(index[2], districts.length)];
+}
+
+function clampIndex(value, length) {
+  if (!length) return 0;
+  return Math.min(Math.max(Number(value) || 0, 0), length - 1);
+}
+
+function applySelectedRegion() {
+  const [provinceIndex, cityIndex, districtIndex] = regionIndex.value;
+  const province = regionTree[provinceIndex];
+  const city = province?.children?.[cityIndex];
+  const district = city?.children?.[districtIndex];
+  form.province = province?.name || '';
+  form.city = city?.name || '';
+  form.district = district?.name || '';
+}
+
+function syncRegionIndexByForm() {
+  const provinceIndex = Math.max(regionTree.findIndex((item) => item.name === form.province), 0);
+  const cities = regionTree[provinceIndex]?.children || [];
+  const cityIndex = Math.max(cities.findIndex((item) => item.name === form.city), 0);
+  const districts = cities[cityIndex]?.children || [];
+  const districtIndex = Math.max(districts.findIndex((item) => item.name === form.district), 0);
+  regionIndex.value = normalizeRegionIndex([provinceIndex, cityIndex, districtIndex]);
 }
 
 function validate() {
@@ -88,7 +161,10 @@ onLoad(async (query) => {
   if (!id.value) return;
   const rows = pickListPayload(await addressApi.list());
   const current = rows.find((item) => Number(item.id) === Number(id.value));
-  if (current) Object.assign(form, current);
+  if (current) {
+    Object.assign(form, current);
+    syncRegionIndexByForm();
+  }
 });
 </script>
 

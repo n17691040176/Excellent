@@ -31,7 +31,7 @@ fi
 
 if ! grep -q '^PAYMENT_MOCK_EXTERNAL_PAYMENT=false' server/.env.alipay.local || \
    ! grep -q '^ALIPAY_ENABLED=true' server/.env.alipay.local; then
-    echo "错误: 请在 server/.env.alipay.local 中启用真实支付宝支付"
+    echo "错误: 请在 server/.env.alipay.local 中启用支付宝支付"
     exit 1
 fi
 

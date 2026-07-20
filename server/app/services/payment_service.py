@@ -284,6 +284,8 @@ class PaymentService:
         if not config.notify_url:
             raise ConflictError('Alipay notify url is not configured')
 
+        from app.services.order_service import UNPAID_ORDER_EXPIRE_MINUTES
+
         is_h5 = config.payment_method == 'alipay.trade.wap.pay'
         return_url = PaymentService._alipay_return_url(order, tx, config)
         biz_content = {
@@ -291,6 +293,7 @@ class PaymentService:
             'out_trade_no': tx.out_trade_no,
             'total_amount': f'{quantize_amount(tx.amount):.2f}',
             'product_code': 'QUICK_WAP_WAP' if is_h5 else 'QUICK_MSECURITY_PAY',
+            'timeout_express': f'{UNPAID_ORDER_EXPIRE_MINUTES}m',
         }
         params = {
             'app_id': config.app_id,
