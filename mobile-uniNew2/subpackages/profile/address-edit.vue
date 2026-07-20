@@ -9,9 +9,12 @@
     <view class="form-card">
       <view class="form-row"><text>收货人</text><input v-model="form.receiver_name" placeholder="请输入收货人" /></view>
       <view class="form-row"><text>手机号</text><input v-model="form.receiver_phone" type="number" placeholder="请输入手机号" /></view>
-      <view class="form-row"><text>省份</text><input v-model="form.province" placeholder="例如：江苏省" /></view>
-      <view class="form-row"><text>城市</text><input v-model="form.city" placeholder="例如：南京市" /></view>
-      <view class="form-row"><text>区县</text><input v-model="form.district" placeholder="例如：玄武区" /></view>
+      <picker class="region-picker" mode="region" :value="regionValue" @change="onRegionChange">
+        <view class="form-row picker-row">
+          <text>省市区/县</text>
+          <view class="picker-value" :class="{ placeholder: !hasRegion }">{{ regionText }}</view>
+        </view>
+      </picker>
       <view class="form-row detail-row"><text>详细地址</text><textarea v-model="form.detail_address" placeholder="街道、小区、门牌号" /></view>
       <view class="default-row" @click="form.is_default = !form.is_default">
         <text>设为默认地址</text>
@@ -23,7 +26,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { addressApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
@@ -40,8 +43,19 @@ const form = reactive({
   is_default: false
 });
 
+const hasRegion = computed(() => [form.province, form.city, form.district].every((item) => item.trim()));
+const regionValue = computed(() => (hasRegion.value ? [form.province, form.city, form.district] : []));
+const regionText = computed(() => (hasRegion.value ? [form.province, form.city, form.district].join(' / ') : '请选择省市区/县'));
+
 function goBack() {
   uni.navigateBack();
+}
+
+function onRegionChange(event) {
+  const [province = '', city = '', district = ''] = event.detail.value || [];
+  form.province = province;
+  form.city = city;
+  form.district = district;
 }
 
 function validate() {
@@ -89,6 +103,10 @@ onLoad(async (query) => {
 .form-row, .default-row { display: flex; align-items: center; gap: 24rpx; min-height: 96rpx; border-bottom: 1rpx solid var(--border-light); color: var(--text); }
 .form-row > text { width: 150rpx; flex-shrink: 0; }
 .form-row input, .form-row textarea { flex: 1; text-align: right; }
+.region-picker { display: block; }
+.picker-row { justify-content: space-between; }
+.picker-value { flex: 1; min-width: 0; color: var(--text); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-value.placeholder { color: var(--text-muted); }
 .detail-row { align-items: flex-start; padding: 24rpx 0; }
 .detail-row textarea { min-height: 120rpx; text-align: left; }
 .default-row { justify-content: space-between; border-bottom: 0; }
