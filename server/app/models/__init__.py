@@ -21,7 +21,7 @@ from app.models.local_life import (
     MerchantCommissionRule,
     MerchantStore,
 )
-from app.models.order import Order, OrderAssetDeduction, OrderItem
+from app.models.order import Order, OrderAssetDeduction, OrderItem, OrderStatusView
 from app.models.package import Package, PackageBenefit
 from app.models.page_decoration import PageDecoration
 from app.models.payment import PaymentTransaction
@@ -44,7 +44,7 @@ __all__ = [
     'CommissionFlow', 'WithdrawRequest', 'Package', 'PackageBenefit', 'Product', 'ProductCategory', 'ProductSku',
     'ProductZoneConfig', 'ProductQualification', 'UserAssetAccount', 'UserAssetLedger',
     'DailySigninRecord', 'UserPowerBank', 'UserPowerBankIncomeRecord', 'UserFavoriteProduct', 'UserProductFootprint', 'ShoppingCartItem',
-    'Order', 'OrderItem', 'OrderAssetDeduction', 'PaymentTransaction', 'UserAddress', 'Supplier',
+    'Order', 'OrderItem', 'OrderAssetDeduction', 'OrderStatusView', 'PaymentTransaction', 'UserAddress', 'Supplier',
     'SupplierEntryOrder', 'SupplierAgreement', 'SupplierReferralReward', 'AgentLevel',
     'AgentQualification', 'LocalLifeMerchant', 'MerchantStore', 'LocalLifeService',
     'LocalLifeOrder', 'MerchantCommissionRule', 'DeviceRevenueFlow', 'AdRevenueFlow',

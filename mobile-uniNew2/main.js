@@ -1,9 +1,11 @@
 import App from './App.vue'
+import AppBackButton from './components/AppBackButton.vue'
 
 // #ifndef VUE3
 import Vue from 'vue'
 import './uni.promisify.adaptor'
 Vue.config.productionTip = false
+Vue.component('AppBackButton', AppBackButton)
 App.mpType = 'app'
 const app = new Vue({
   ...App
@@ -103,6 +105,7 @@ export function createApp() {
 
   // 全局注册自定义 tabBar 组件
   app.component('CustomTabBar', CustomTabBar)
+  app.component('AppBackButton', AppBackButton)
 
   // 尝试处理App传手机号登录（异步，不阻塞）
   handleAppLogin().catch(console.error);

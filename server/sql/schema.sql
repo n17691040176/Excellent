@@ -426,6 +426,15 @@ CREATE TABLE IF NOT EXISTS orders (
     KEY idx_orders_user_id_created_at (user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS order_status_views (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    status_key VARCHAR(32) NOT NULL,
+    viewed_at DATETIME NOT NULL,
+    UNIQUE KEY uq_order_status_views_user_status (user_id, status_key),
+    KEY ix_order_status_views_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS payment_transactions (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     order_id BIGINT NOT NULL,

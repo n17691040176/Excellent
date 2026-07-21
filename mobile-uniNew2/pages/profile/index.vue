@@ -224,6 +224,12 @@ const shippedCount = ref('');
 const reviewCount = ref('');
 const refundCount = ref('');
 
+const formatOrderBadge = (value) => {
+  const count = Number(value || 0);
+  if (count <= 0) return '';
+  return count > 99 ? '99+' : String(count);
+};
+
 const orderTypes = computed(() => [
   { type: 'pending', label: '待付款', bg: 'var(--primary-bg)', path: '/pages/orders/list?status=待支付', badge: pendingCount.value },
   { type: 'ship', label: '待发货', bg: 'var(--accent-bg)', path: '/pages/orders/list?status=待发货', badge: pendingShipCount.value },
@@ -272,7 +278,7 @@ const goLogin = () => {
 
 const loadProfile = async () => {
   try {
-    const [profileRes, teamRes, assetRes, commissionRes, inviteRes, favoritesRes, cartRes, footprintsRes, shipmentsRes, ordersRes] = await Promise.allSettled([
+    const [profileRes, teamRes, assetRes, commissionRes, inviteRes, favoritesRes, cartRes, footprintsRes, shipmentsRes, unreadCountsRes] = await Promise.allSettled([
       userApi.profile(),
       userApi.teamSummary(),
       assetApi.summary(),
@@ -282,7 +288,7 @@ const loadProfile = async () => {
       commerceApi.cart(),
       commerceApi.footprints({ page: 1, page_size: 100 }),
       commerceApi.shipments(),
-      orderApi.list({ page: 1, page_size: 100 })
+      orderApi.unreadCounts()
     ]);
 
     if (profileRes.status === 'fulfilled') {
@@ -313,15 +319,13 @@ const loadProfile = async () => {
       shippingCount.value = shipments.length > 0 ? String(shipments.length) : '';
     }
 
-    if (ordersRes.status === 'fulfilled') {
-      const orders = pickListPayload(ordersRes.value);
-      const countByStatus = (status) => orders.filter(o => (o.status_text || o.status) === status).length;
-      pendingCount.value = countByStatus('待支付') > 0 ? String(countByStatus('待支付')) : '';
-      pendingShipCount.value = countByStatus('待发货') > 0 ? String(countByStatus('待发货')) : '';
-      shippedCount.value = countByStatus('已发货') > 0 ? String(countByStatus('已发货')) : '';
-      reviewCount.value = countByStatus('已完成') > 0 ? String(countByStatus('已完成')) : '';
-      const refundTotal = countByStatus('已取消') + countByStatus('已退款');
-      refundCount.value = refundTotal > 0 ? String(refundTotal) : '';
+    if (unreadCountsRes.status === 'fulfilled') {
+      const counts = unreadCountsRes.value || {};
+      pendingCount.value = formatOrderBadge(counts.pending_payment);
+      pendingShipCount.value = formatOrderBadge(counts.pending_ship);
+      shippedCount.value = formatOrderBadge(counts.shipped);
+      reviewCount.value = formatOrderBadge(counts.completed);
+      refundCount.value = formatOrderBadge(counts.refund);
     }
 
     overview.value = toProfileOverview(
@@ -591,6 +595,7 @@ onPullDownRefresh(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   box-shadow: 0 2rpx 8rpx rgba(239, 68, 68, 0.3);
 }
 

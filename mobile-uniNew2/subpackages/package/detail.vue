@@ -2,11 +2,7 @@
   <view class="detail-page">
     <!-- Header -->
     <view class="page-header">
-      <view class="back-btn" @click="goBack">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </view>
+      <AppBackButton @click="goBack" />
       <text class="header-title">商品详情</text>
       <view class="share-btn" @click="shareProduct">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">

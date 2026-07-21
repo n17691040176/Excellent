@@ -1,7 +1,7 @@
 <template>
   <view class="confirm-page">
     <view class="page-header">
-      <view class="icon-button" @click="goBack">←</view>
+      <AppBackButton @click="goBack" />
       <text class="header-title">确认订单</text>
       <view class="icon-button placeholder" />
     </view>

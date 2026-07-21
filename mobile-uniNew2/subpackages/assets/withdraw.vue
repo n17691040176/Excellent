@@ -2,7 +2,7 @@
   <view class="withdraw-page">
     <!-- Header -->
     <view class="page-header">
-      <view class="back-btn" @click="goBack">←</view>
+      <AppBackButton @click="goBack" />
       <text class="header-title">余额提现</text>
       <view class="header-spacer" />
     </view>

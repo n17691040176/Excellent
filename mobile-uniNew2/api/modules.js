@@ -103,6 +103,12 @@ export const orderApi = {
   list(params = {}) {
     return request.get('/api/v1/app/orders', { params, hideLoading: true });
   },
+  unreadCounts() {
+    return request.get('/api/v1/app/orders/unread-counts', { hideLoading: true });
+  },
+  markViewed(status = 'all') {
+    return request.post('/api/v1/app/orders/viewed', { status }, { hideLoading: true });
+  },
   detail(id) {
     return request.get(`/api/v1/app/orders/${id}`);
   },

@@ -2,7 +2,7 @@
   <view class="detail-page">
     <!-- Header -->
     <view class="page-header">
-      <view class="back-btn" @click="goBack">←</view>
+      <AppBackButton @click="goBack" />
       <text class="header-title">快递详情</text>
       <view class="header-spacer" />
     </view>

@@ -12,7 +12,7 @@ from app.core.payment_config import enabled_external_payment_channels, payment_c
 from app.models.address import UserAddress
 from app.models.asset import UserAssetLedger
 from app.models.enums import AssetType, OrderStatus, OrderType, PaymentStatus, PayStatus, ProductStatus, ZoneType
-from app.models.order import Order, OrderAssetDeduction, OrderItem
+from app.models.order import Order, OrderAssetDeduction, OrderItem, OrderStatusView
 from app.models.payment import PaymentTransaction
 from app.models.product import Product, ProductZoneConfig
 from app.models.user import User
@@ -40,6 +40,15 @@ PAY_CHANNEL_ASSET_MAP = {
 }
 
 UNPAID_ORDER_EXPIRE_MINUTES = 30
+
+ORDER_STATUS_BUCKETS = ('pending_payment', 'pending_ship', 'shipped', 'completed', 'refund')
+ORDER_STATUS_BUCKET_MAP = {
+    OrderStatus.PENDING_PAYMENT: 'pending_payment',
+    OrderStatus.PENDING_SHIP: 'pending_ship',
+    OrderStatus.SHIPPED: 'shipped',
+    OrderStatus.COMPLETED: 'completed',
+    OrderStatus.REFUND: 'refund',
+}
 
 
 class OrderService:
@@ -863,6 +872,45 @@ class OrderService:
     def list_orders(db: Session, user_id: int) -> list[Order]:
         OrderService.expire_pending_orders(db, user_id=user_id)
         return db.query(Order).filter(Order.user_id == user_id).order_by(Order.id.desc()).all()
+
+    @staticmethod
+    def order_unread_counts(db: Session, user_id: int) -> dict[str, int]:
+        orders = OrderService.list_orders(db, user_id)
+        views = db.query(OrderStatusView).filter(OrderStatusView.user_id == user_id).all()
+        viewed_at = {item.status_key: item.viewed_at for item in views}
+        counts = dict.fromkeys(ORDER_STATUS_BUCKETS, 0)
+
+        for order in orders:
+            status_key = ORDER_STATUS_BUCKET_MAP.get(order.order_status)
+            if not status_key:
+                continue
+            last_viewed_at = viewed_at.get(status_key)
+            if last_viewed_at is None or order.updated_at > last_viewed_at:
+                counts[status_key] += 1
+        return counts
+
+    @staticmethod
+    def mark_order_status_viewed(db: Session, user_id: int, status_key: str) -> dict[str, int]:
+        target_statuses = ORDER_STATUS_BUCKETS if status_key == 'all' else (status_key,)
+        if any(item not in ORDER_STATUS_BUCKETS for item in target_statuses):
+            raise ConflictError('Unsupported order status')
+
+        viewed_at = now()
+        existing = {
+            item.status_key: item
+            for item in db.query(OrderStatusView).filter(
+                OrderStatusView.user_id == user_id,
+                OrderStatusView.status_key.in_(target_statuses),
+            ).all()
+        }
+        for target_status in target_statuses:
+            marker = existing.get(target_status)
+            if marker:
+                marker.viewed_at = viewed_at
+            else:
+                db.add(OrderStatusView(user_id=user_id, status_key=target_status, viewed_at=viewed_at))
+        db.commit()
+        return OrderService.order_unread_counts(db, user_id)
 
     @staticmethod
     def get_order(db: Session, user_id: int, order_id: int) -> Order:

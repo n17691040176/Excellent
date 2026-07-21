@@ -1,7 +1,7 @@
 <template>
   <view class="address-page">
     <view class="page-header">
-      <view class="back-btn" @click="goBack">←</view>
+      <AppBackButton @click="goBack" />
       <text class="header-title">收货地址</text>
       <view class="header-action" @click="addAddress">新增</view>
     </view>

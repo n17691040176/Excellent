@@ -621,6 +621,11 @@ def _order_status_text(status: str, pay_status: str | None = None) -> str:
 
 
 def _payment_combo(order: Order, deductions: list[OrderAssetDeduction] | None = None) -> str:
+    status = enum_value(order.order_status)
+    pay_status = enum_value(order.pay_status)
+    if status == enum_value(OrderStatus.REFUND):
+        return '已退款' if pay_status == enum_value(PayStatus.REFUNDED) else '订单已取消'
+
     rows = deductions or []
     deduction_types = {str(item.asset_type) for item in rows}
     payable_amount = money(order.payable_amount)

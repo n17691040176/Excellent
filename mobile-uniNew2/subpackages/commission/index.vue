@@ -3,11 +3,7 @@
     <!-- Header -->
     <view class="page-header">
       <view class="header-content">
-        <view class="back-btn" @click="goBack">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </view>
+        <AppBackButton @click="goBack" />
         <view class="logo-mark">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>

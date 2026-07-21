@@ -1,7 +1,7 @@
 <template>
   <view class="edit-page">
     <view class="page-header">
-      <view class="back-btn" @click="goBack">←</view>
+      <AppBackButton @click="goBack" />
       <text class="header-title">{{ id ? '编辑地址' : '新增地址' }}</text>
       <view class="header-spacer" />
     </view>

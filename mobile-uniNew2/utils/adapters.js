@@ -43,7 +43,7 @@ export function toOrderView(item = {}, index = 0) {
     amount: formatMoney(item.pay_amount ?? item.amount ?? item.total_amount ?? 0),
     cashDue: formatMoney(cashDue),
     status,
-    paymentCombo: item.payment_combo || '待支付',
+    paymentCombo: item.payment_combo || (status === '已退款' ? '已退款' : status === '已取消' ? '订单已取消' : '待支付'),
     payChannel: preferredPayChannel(payChannelOptions, cashDue, item.default_pay_channel || item.pay_channel || ''),
     payChannelOptions,
     canPay: Boolean(item.can_pay),

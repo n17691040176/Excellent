@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DECIMAL, BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import DECIMAL, BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -68,6 +68,16 @@ class Order(TimestampMixin, Base):
     legacy_is_re_order_by: Mapped[int | None] = mapped_column('is_re_order_by', Integer, nullable=True)
     legacy_imported_at: Mapped[datetime | None] = mapped_column('legacy_imported_at', DateTime, nullable=True)
     legacy_source_file: Mapped[str | None] = mapped_column('legacy_source_file', String(255), nullable=True)
+
+
+class OrderStatusView(Base):
+    __tablename__ = 'order_status_views'
+    __table_args__ = (UniqueConstraint('user_id', 'status_key', name='uq_order_status_views_user_status'),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    status_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    viewed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class OrderItem(Base):

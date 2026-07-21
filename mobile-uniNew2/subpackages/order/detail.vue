@@ -1,7 +1,7 @@
 <template>
   <view class="detail-page" :class="{ 'has-actions': hasActions }">
     <view class="page-header">
-      <view class="icon-button" @click="goBack">←</view>
+      <AppBackButton @click="goBack" />
       <text class="header-title">订单详情</text>
       <view class="icon-button placeholder" />
     </view>
@@ -240,6 +240,12 @@ function findPaymentCombo(assetDeductions = [], payableAmount = 0, payStatus = '
   return '待支付';
 }
 
+function paymentLabel(status, providedLabel, assetDeductions, payableAmount, payStatus) {
+  if (status === '已退款') return '已退款';
+  if (status === '已取消') return '订单已取消';
+  return providedLabel || findPaymentCombo(assetDeductions, payableAmount, payStatus);
+}
+
 function preferredPayChannel(options = [], cashDue = 0, fallback = '') {
   if (Number(cashDue || 0) > 0) {
     const externalChannel = options.find((item) => ['ALIPAY', 'WECHAT'].includes(item));
@@ -256,20 +262,27 @@ function normalize(res = {}) {
   const totalAmount = Number(order?.total_amount ?? order?.amount ?? 0);
   const discountAmount = Number(order?.discount_amount ?? 0);
   const payStatus = order?.pay_status || 'UNPAID';
+  const status = order?.status_text || order?.order_status || order?.status || '处理中';
   const paidAmount = Number(order?.paid_amount ?? (payStatus === 'PAID' ? totalAmount : 0));
   const payChannelOptions = Array.isArray(res?.pay_channel_options)
     ? res.pay_channel_options
     : (Array.isArray(order?.pay_channel_options) ? order.pay_channel_options : []);
 
   return {
-    status: order?.status_text || order?.order_status || order?.status || '处理中',
+    status,
     no: order?.order_no || order?.no || '--',
     totalAmount: money(totalAmount),
     discountAmount: money(discountAmount),
     cashDue: money(payableAmount),
     paidAmount: money(paidAmount),
     payStatusCode: payStatus,
-    paymentCombo: res?.payment_combo || order?.payment_combo || findPaymentCombo(deductions, payableAmount, payStatus),
+    paymentCombo: paymentLabel(
+      status,
+      res?.payment_combo || order?.payment_combo,
+      deductions,
+      payableAmount,
+      payStatus
+    ),
     channel: order?.channel_text || order?.channel || '商城订单',
     createdAt: formatDateTime(order?.created_at),
     paidAt: formatDateTime(order?.paid_at),

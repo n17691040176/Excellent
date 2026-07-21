@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_roles
@@ -22,6 +23,10 @@ APP_ORDER_STATUS_MAP = {
     'canceled': OrderStatus.REFUND,
     'refund': OrderStatus.REFUND,
 }
+
+
+class MarkOrdersViewedRequest(BaseModel):
+    status: str = 'all'
 
 
 @app_router.post('')
@@ -60,6 +65,21 @@ def list_orders(
         rows = [item for item in rows if enum_value(item.order_type) == order_type]
     rows = page_slice(rows, page, page_size)
     return {'code': 0, 'message': 'success', 'data': [serialize_order(db, item) for item in rows]}
+
+
+@app_router.get('/unread-counts')
+def unread_order_counts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return {'code': 0, 'message': 'success', 'data': OrderService.order_unread_counts(db, current_user.id)}
+
+
+@app_router.post('/viewed')
+def mark_orders_viewed(
+    payload: MarkOrdersViewedRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    counts = OrderService.mark_order_status_viewed(db, current_user.id, payload.status)
+    return {'code': 0, 'message': 'success', 'data': {'unread_counts': counts}}
 
 
 @app_router.get('/{order_id}')

@@ -1,7 +1,7 @@
 <template>
   <view class="orders-page">
     <view class="page-header">
-      <view class="icon-button" @click="goBack">←</view>
+      <AppBackButton @click="goBack" />
       <view class="header-copy">
         <text class="page-title">我的订单</text>
         <text v-if="orders.length" class="page-count">当前 {{ orders.length }} 笔</text>
@@ -166,6 +166,9 @@ async function fetchOrders({ reset = false } = {}) {
     orders.value = reset ? mapped : [...orders.value, ...mapped];
     hasMore.value = rows.length >= pageSize;
     page.value = targetPage + 1;
+    if (reset) {
+      await orderApi.markViewed(statusParams[activeStatus.value] || 'all');
+    }
   } catch (error) {
     failed.value = true;
   } finally {
