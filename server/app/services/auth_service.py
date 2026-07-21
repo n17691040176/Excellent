@@ -197,15 +197,13 @@ class AuthService:
         return response
 
     @staticmethod
-    def login_by_code(db: Session, phone: str, code: str) -> tuple[str, User]:
+    def login_by_code(db: Session, phone: str, code: str, invite_code: str | None = None) -> tuple[str, User]:
         redis = get_redis_client()
         cached_code = redis.get(AuthService._login_code_key(phone))
         if not cached_code:
             raise UnauthorizedError('Verification code expired')
         if str(cached_code) != str(code):
             raise UnauthorizedError('Verification code invalid')
-
-        redis.delete(AuthService._login_code_key(phone))
 
         user = db.query(User).filter(User.phone == phone).first()
         if not user:
@@ -214,7 +212,14 @@ class AuthService:
                 phone=phone,
                 password=generate_code(length=12),
                 nickname=f'用户{phone[-4:]}',
+                invite_code=invite_code,
             )
+        elif invite_code and not user.parent_id:
+            from app.services.user_service import UserService
+
+            UserService.bind_inviter(db, user, invite_code)
+
+        redis.delete(AuthService._login_code_key(phone))
 
         return AuthService._finalize_login(db, user)
 

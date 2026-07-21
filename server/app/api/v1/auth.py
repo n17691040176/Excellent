@@ -41,7 +41,7 @@ def send_login_code(payload: SendLoginCodeRequest):
 
 @router.post('/login-by-code')
 def login_by_code(payload: CodeLoginRequest, db: Session = Depends(get_db)):
-    token, user = AuthService.login_by_code(db, payload.phone, payload.code)
+    token, user = AuthService.login_by_code(db, payload.phone, payload.code, payload.invite_code)
     return {'code': 0, 'message': 'success', 'data': {'access_token': token, 'token_type': 'bearer', 'user': user}}
 
 

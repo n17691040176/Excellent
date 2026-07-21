@@ -1,3 +1,5 @@
+from pydantic import Field
+
 from app.schemas.common import AppBaseModel
 
 
@@ -21,3 +23,7 @@ class UpdateProfileRequest(AppBaseModel):
 
 class UpdateUserStatusRequest(AppBaseModel):
     status: str
+
+
+class BindInviterRequest(AppBaseModel):
+    invite_code: str = Field(min_length=1, max_length=32)

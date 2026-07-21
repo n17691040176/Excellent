@@ -58,6 +58,9 @@ export const userApi = {
   inviteRecords(params = {}) {
     return request.get('/api/v1/app/users/invite-records', { params, hideLoading: true });
   },
+  bindInviter(inviteCode) {
+    return request.post('/api/v1/app/users/bind-inviter', { invite_code: inviteCode });
+  },
   teamSummary() {
     return request.get('/api/v1/app/users/team-summary', { hideLoading: true });
   }

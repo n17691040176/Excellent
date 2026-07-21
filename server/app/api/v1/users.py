@@ -10,7 +10,7 @@ from app.models.team import TeamMember
 from app.models.user import User
 from app.schemas.address import AddressCreateRequest, AddressUpdateRequest
 from app.schemas.asset import AdminPowerBankCreateRequest, AdminPowerBankUpdateRequest
-from app.schemas.user import UpdateProfileRequest, UpdateUserStatusRequest
+from app.schemas.user import BindInviterRequest, UpdateProfileRequest, UpdateUserStatusRequest
 from app.services.address_service import AddressService
 from app.services.asset_service import AssetService
 from app.services.commerce_service import CommerceService
@@ -42,8 +42,6 @@ def invite_code(current_user: User = Depends(get_current_user)):
 
 @app_router.get('/invite-records')
 def invite_records(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if not UserService.is_legacy_user(db, current_user):
-        return {'code': 0, 'message': 'success', 'data': {'user_id': current_user.id, 'level1': [], 'level2': [], 'items': []}}
     tree = UserService.get_invite_tree(db, current_user.id)
     tree['items'] = [
         {**item, 'level': 1, 'status': 'valid', 'status_text': 'valid'}
@@ -53,6 +51,16 @@ def invite_records(db: Session = Depends(get_db), current_user: User = Depends(g
         for item in tree.get('level2', [])
     ]
     return {'code': 0, 'message': 'success', 'data': tree}
+
+
+@app_router.post('/bind-inviter')
+def bind_inviter(
+    payload: BindInviterRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    data = UserService.bind_inviter(db, current_user, payload.invite_code)
+    return {'code': 0, 'message': 'success', 'data': data}
 
 
 @app_router.get('/team-summary')

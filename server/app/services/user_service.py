@@ -7,19 +7,124 @@ from app.api.v1.mobile_serializers import (
     serialize_favorite_product,
     serialize_footprint,
 )
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.address import UserAddress
 from app.models.asset import UserAssetAccount, UserAssetLedger, UserPowerBank
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
 from app.models.enums import GlobalRole, UserStatus
 from app.models.order import Order
-from app.models.user import User, UserLegacyProfile
+from app.models.user import InviteRecord, User, UserLegacyProfile
 from app.services.admin_permission_service import AdminPermissionService
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
+from app.utils.helpers import now
 
 
 class UserService:
+    @staticmethod
+    def bind_inviter(db: Session, current_user: User, invite_code: str) -> dict:
+        clean_code = invite_code.strip()
+        inviter = db.query(User).filter(func.upper(User.invite_code) == clean_code.upper()).first()
+        if not inviter:
+            raise NotFoundError('邀请码无效')
+        if inviter.id == current_user.id:
+            raise ConflictError('不能绑定自己为上级')
+
+        # Lock the row where supported so two concurrent scans cannot bind different inviters.
+        user = db.query(User).filter(User.id == current_user.id).with_for_update().one()
+        if user.parent_id:
+            if user.parent_id == inviter.id:
+                return UserService._serialize_invite_binding(user, inviter, already_bound=True)
+            raise ConflictError('当前账号已绑定上级，不能重复绑定')
+
+        ancestor = inviter
+        visited: set[int] = set()
+        while ancestor:
+            if ancestor.id == user.id:
+                raise ConflictError('不能绑定自己的下级为上级')
+            if ancestor.id in visited or not ancestor.parent_id:
+                break
+            visited.add(ancestor.id)
+            ancestor = db.get(User, ancestor.parent_id)
+
+        user.parent_id = inviter.id
+        user.grandparent_id = inviter.parent_id
+        bound_at = now()
+        UserService._add_invite_record(
+            db,
+            inviter_user_id=inviter.id,
+            invitee_user_id=user.id,
+            level=1,
+            invite_code=inviter.invite_code,
+            bound_at=bound_at,
+        )
+        if inviter.parent_id:
+            UserService._add_invite_record(
+                db,
+                inviter_user_id=inviter.parent_id,
+                invitee_user_id=user.id,
+                level=2,
+                invite_code=inviter.invite_code,
+                bound_at=bound_at,
+            )
+
+        # Existing direct invitees become level-two invitees of the newly bound inviter.
+        direct_invitees = db.query(User).filter(User.parent_id == user.id).all()
+        for invitee in direct_invitees:
+            invitee.grandparent_id = inviter.id
+            UserService._add_invite_record(
+                db,
+                inviter_user_id=inviter.id,
+                invitee_user_id=invitee.id,
+                level=2,
+                invite_code=inviter.invite_code,
+                bound_at=bound_at,
+            )
+
+        db.commit()
+        db.refresh(user)
+        return UserService._serialize_invite_binding(user, inviter, already_bound=False)
+
+    @staticmethod
+    def _add_invite_record(
+        db: Session,
+        *,
+        inviter_user_id: int,
+        invitee_user_id: int,
+        level: int,
+        invite_code: str,
+        bound_at,
+    ) -> None:
+        exists = db.query(InviteRecord.id).filter(
+            InviteRecord.inviter_user_id == inviter_user_id,
+            InviteRecord.invitee_user_id == invitee_user_id,
+            InviteRecord.level == level,
+        ).first()
+        if not exists:
+            db.add(
+                InviteRecord(
+                    inviter_user_id=inviter_user_id,
+                    invitee_user_id=invitee_user_id,
+                    level=level,
+                    invite_code=invite_code,
+                    bound_at=bound_at,
+                )
+            )
+
+    @staticmethod
+    def _serialize_invite_binding(user: User, inviter: User, *, already_bound: bool) -> dict:
+        return {
+            'user_id': user.id,
+            'parent_id': user.parent_id,
+            'grandparent_id': user.grandparent_id,
+            'already_bound': already_bound,
+            'inviter': {
+                'id': inviter.id,
+                'nickname': inviter.nickname,
+                'invite_code': inviter.invite_code,
+            },
+        }
+
     @staticmethod
     def _user_list_query(
         db: Session,

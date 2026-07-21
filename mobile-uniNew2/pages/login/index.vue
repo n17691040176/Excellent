@@ -21,11 +21,15 @@
       </view>
 
       <!-- Form Card -->
-      <view class="form-card">
-        <view class="form-header">
-          <text class="form-title">手机号登录</text>
-          <text class="form-subtitle">未注册的手机号将自动创建账号</text>
-        </view>
+        <view class="form-card">
+          <view class="form-header">
+            <text class="form-title">手机号登录</text>
+            <text class="form-subtitle">未注册的手机号将自动创建账号</text>
+            <view v-if="inviteCode" class="invite-notice">
+              <text>邀请关系将在登录后绑定</text>
+              <text class="invite-notice-code">{{ inviteCode }}</text>
+            </view>
+          </view>
 
         <view class="form-body">
           <!-- Phone Input -->
@@ -118,13 +122,16 @@
 
 <script setup>
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
+import { onLoad } from '@dcloudio/uni-app';
 import { authApi } from '@/api/modules';
 import { setToken, setUserCache } from '@/utils/auth';
+import { extractInviteCode } from '@/utils/invite';
 
 const submitting = ref(false);
 const sendingCode = ref(false);
 const cooldown = ref(0);
 const agreed = ref(true);
+const inviteCode = ref('');
 
 const form = reactive({
   phone: '',
@@ -221,7 +228,8 @@ const handleLogin = async () => {
   try {
     const loginRes = await authApi.loginByCode({
       phone: form.phone,
-      code: form.code
+      code: form.code,
+      invite_code: inviteCode.value || undefined
     });
 
     const token = loginRes?.token || loginRes?.access_token || '';
@@ -250,6 +258,10 @@ const handleLogin = async () => {
 const openAgreement = (type) => {
   uni.showToast({ title: `${type === 'user' ? '用户协议' : '隐私政策'}页面开发中`, icon: 'none' });
 };
+
+onLoad((options = {}) => {
+  inviteCode.value = extractInviteCode(options.invite_code || '');
+});
 
 onMounted(() => {
   // page ready
@@ -352,6 +364,25 @@ onUnmounted(() => {
 .form-header {
   text-align: center;
   margin-bottom: 48rpx;
+}
+
+.invite-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  margin-top: 24rpx;
+  padding: 16rpx 20rpx;
+  border: 1rpx solid var(--primary-border, #A7F3D0);
+  border-radius: var(--radius-md);
+  background: var(--primary-bg);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.invite-notice-code {
+  color: var(--primary-dark);
+  font-weight: var(--font-bold);
 }
 
 .form-title {

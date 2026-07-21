@@ -27,6 +27,7 @@ class SendLoginCodeRequest(AppBaseModel):
 class CodeLoginRequest(AppBaseModel):
     phone: str = Field(min_length=6, max_length=20)
     code: str = Field(min_length=4, max_length=8)
+    invite_code: str | None = Field(default=None, max_length=32)
 
 
 class ResetPasswordRequest(AppBaseModel):
