@@ -3,38 +3,48 @@
     <view class="page-header">
       <view class="header-content">
         <AppBackButton @click="goBack" />
-        <view class="logo-mark">邀</view>
         <text class="page-title">邀请好友</text>
-        <view class="header-badge">实时</view>
+        <view class="header-scan" role="button" @click="scanInvite">扫码</view>
       </view>
     </view>
 
-    <view class="invite-card">
-      <text class="card-kicker">我的专属邀请</text>
-      <text class="card-title">分享二维码，邀请好友加入</text>
-      <text class="card-subtitle">好友扫码并登录后，将自动成为你的直属下级</text>
+    <view class="invite-hero">
+      <view class="hero-heading">
+        <view class="hero-copy">
+          <text class="hero-kicker">专属邀请</text>
+          <text class="hero-title">分享给朋友</text>
+          <text class="hero-subtitle">好友扫码登录后，自动加入你的直属团队</text>
+        </view>
+        <view class="qr-mark" aria-hidden="true">
+          <view v-for="index in 9" :key="index" class="qr-dot" :class="`dot-${index}`" />
+        </view>
+      </view>
 
       <view class="code-wrap">
-        <text class="code-label">邀请码</text>
-        <text class="code-value">{{ inviteCode || '加载中' }}</text>
+        <view class="code-content">
+          <text class="code-label">我的邀请码</text>
+          <text class="code-value">{{ inviteCode || '加载中' }}</text>
+        </view>
         <button class="copy-btn" :disabled="!inviteCode" @click="copyCode">复制</button>
       </view>
 
-      <view class="action-row">
-        <button class="action-btn primary" :disabled="posterGenerating" @click="share">
-          {{ posterGenerating ? '生成中...' : '立即分享' }}
+      <button class="share-btn" :disabled="posterGenerating" @click="share">
+        {{ posterGenerating ? '正在生成...' : '生成邀请海报' }}
+      </button>
+
+      <view class="secondary-actions">
+        <button class="secondary-btn" :disabled="binding" @click="scanInvite">
+          {{ binding ? '绑定中...' : '扫一扫绑定上级' }}
         </button>
-        <button class="action-btn secondary" :disabled="binding" @click="scanInvite">
-          {{ binding ? '绑定中...' : '扫一扫绑定' }}
-        </button>
+        <view class="action-divider" />
+        <button class="secondary-btn" @click="openManualBind">输入邀请码</button>
       </view>
-      <button class="manual-btn" @click="openManualBind">无法扫码？输入邀请码</button>
     </view>
 
-    <view class="stats-card">
-      <view class="card-header">
+    <view class="content-section stats-section">
+      <view class="section-header">
         <text class="section-title">邀请数据</text>
-        <view class="update-badge">实时更新</view>
+        <text class="section-meta">实时更新</text>
       </view>
 
       <view v-if="loading" class="loading-stats">
@@ -57,6 +67,38 @@
           <text class="stat-value">{{ stats.valid }}</text>
           <text class="stat-label">有效绑定</text>
         </view>
+      </view>
+    </view>
+
+    <view class="section-gap" />
+
+    <view class="content-section records-section">
+      <view class="section-header">
+        <text class="section-title">最近邀请</text>
+        <text class="section-meta">{{ inviteRecords.length }} 人</text>
+      </view>
+
+      <view v-if="recentInvitees.length" class="record-list">
+        <view
+          v-for="item in recentInvitees"
+          :key="`${item.id}-${item.level}`"
+          class="record-item"
+        >
+          <view class="record-avatar">{{ inviteeInitial(item) }}</view>
+          <view class="record-content">
+            <text class="record-name">{{ item.nickname || '商城用户' }}</text>
+            <text class="record-phone">{{ maskPhone(item.phone) }}</text>
+          </view>
+          <text class="record-level">{{ item.level === 2 ? '二级' : '直属' }}</text>
+        </view>
+      </view>
+      <view v-else class="empty-records">
+        <view class="empty-lines" aria-hidden="true">
+          <view class="empty-line long" />
+          <view class="empty-line" />
+        </view>
+        <text class="empty-title">还没有邀请记录</text>
+        <text class="empty-subtitle">分享海报后，好友绑定结果会显示在这里</text>
       </view>
     </view>
 
@@ -140,9 +182,11 @@ const inviteCode = ref('');
 const manualInviteCode = ref('');
 const posterPath = ref('');
 const posterCode = ref('');
+const inviteRecords = ref([]);
 const stats = ref({ total: 0, valid: 0 });
 
 const inviteUrl = computed(() => buildInviteUrl(getInviteWebBaseUrl(), inviteCode.value));
+const recentInvitees = computed(() => inviteRecords.value.slice(0, 5));
 
 const loadInvite = async () => {
   loading.value = true;
@@ -162,7 +206,8 @@ const loadInvite = async () => {
       }
     }
     if (recordsRes.status === 'fulfilled') {
-      stats.value = toInviteStats(pickListPayload(recordsRes.value));
+      inviteRecords.value = pickListPayload(recordsRes.value);
+      stats.value = toInviteStats(inviteRecords.value);
     }
 
     if (codeRes.status === 'rejected' && recordsRes.status === 'rejected') {
@@ -312,6 +357,14 @@ const copyLink = async () => {
   if (!inviteUrl.value) return;
   await uni.setClipboardData({ data: inviteUrl.value });
   uni.showToast({ title: '邀请链接已复制', icon: 'none' });
+};
+
+const inviteeInitial = (item = {}) => String(item.nickname || item.phone || '友').trim().slice(0, 1);
+
+const maskPhone = (phone = '') => {
+  const value = String(phone || '');
+  if (value.length < 7) return value || '已绑定用户';
+  return `${value.slice(0, 3)}****${value.slice(-4)}`;
 };
 
 const previewPoster = () => {
@@ -782,6 +835,382 @@ onPullDownRefresh(async () => {
   border-radius: var(--radius-md);
   font-size: 27rpx;
   font-weight: 700;
+}
+
+/* Refined invite layout */
+.invite-page {
+  width: 100%;
+  max-width: 750px;
+  margin: 0 auto;
+  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+  background: #F3F5F3;
+  box-sizing: border-box;
+}
+
+.page-header {
+  position: relative;
+  z-index: 10;
+  padding: calc(20rpx + env(safe-area-inset-top)) 28rpx 20rpx;
+  border-bottom: 1rpx solid #E8ECE9;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.header-content {
+  gap: 12rpx;
+  min-height: 64rpx;
+}
+
+.page-title {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.header-scan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96rpx;
+  height: 56rpx;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #226047;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.invite-hero {
+  padding: 44rpx 32rpx 30rpx;
+  border-bottom: 1rpx solid #E6EBE7;
+  background: #FFFFFF;
+}
+
+.hero-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28rpx;
+}
+
+.hero-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.hero-kicker {
+  margin-bottom: 12rpx;
+  color: #A65D2E;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.hero-title {
+  color: #17251F;
+  font-size: 46rpx;
+  font-weight: 750;
+  line-height: 1.24;
+}
+
+.hero-subtitle {
+  max-width: 440rpx;
+  margin-top: 16rpx;
+  color: #66726C;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.qr-mark {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(3, 22rpx);
+  grid-template-rows: repeat(3, 22rpx);
+  gap: 8rpx;
+  padding: 22rpx;
+  border: 1rpx solid #D7E7DE;
+  border-radius: 16rpx;
+  background: #EEF6F1;
+}
+
+.qr-dot {
+  width: 22rpx;
+  height: 22rpx;
+  border-radius: 3rpx;
+  background: #C9DED2;
+}
+
+.qr-dot.dot-1,
+.qr-dot.dot-3,
+.qr-dot.dot-5,
+.qr-dot.dot-7,
+.qr-dot.dot-8 { background: #176444; }
+
+.code-wrap {
+  display: flex;
+  align-items: center;
+  min-height: 116rpx;
+  margin: 38rpx 0 24rpx;
+  padding: 0 20rpx 0 24rpx;
+  border: 1rpx solid #E1E7E3;
+  border-radius: 16rpx;
+  background: #F5F7F5;
+}
+
+.code-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.code-label {
+  margin: 0;
+  color: #7A857F;
+  font-size: 21rpx;
+}
+
+.code-value {
+  overflow: hidden;
+  color: #1B2A23;
+  font-size: 34rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-btn {
+  min-width: 88rpx;
+  height: 58rpx;
+  border: 1rpx solid #D7DFDA;
+  border-radius: 12rpx;
+  background: #FFFFFF;
+  color: #2E5D49;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 92rpx;
+  border-radius: 16rpx;
+  background: #176444;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: 700;
+  box-shadow: 0 8rpx 20rpx rgba(23, 100, 68, 0.16);
+}
+
+.share-btn:active { background: #104E35; }
+
+.share-btn[disabled],
+.secondary-btn[disabled] { opacity: 0.55; }
+
+.secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 76rpx;
+  margin-top: 12rpx;
+}
+
+.secondary-btn {
+  flex: 1;
+  height: 72rpx;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #4F5E56;
+  font-size: 23rpx;
+  font-weight: 600;
+}
+
+.action-divider {
+  width: 1rpx;
+  height: 28rpx;
+  background: #DDE3DF;
+}
+
+.content-section {
+  padding: 34rpx 32rpx;
+  background: #FFFFFF;
+}
+
+.stats-section { margin-top: 16rpx; }
+
+.section-gap {
+  height: 16rpx;
+  background: #F3F5F3;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 26rpx;
+}
+
+.section-title {
+  color: #1B2721;
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.section-meta {
+  color: #87918C;
+  font-size: 21rpx;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  gap: 28rpx;
+  padding: 8rpx 0 4rpx;
+  border-radius: 0;
+  background: transparent;
+}
+
+.stat-item {
+  align-items: flex-start;
+  gap: 10rpx;
+  padding-left: 8rpx;
+}
+
+.stat-value {
+  color: #17251F;
+  font-size: 46rpx;
+  line-height: 1;
+}
+
+.stat-label {
+  color: #7B8580;
+  font-size: 22rpx;
+}
+
+.stat-divider {
+  width: 1rpx;
+  height: 72rpx;
+  background: #E3E8E5;
+}
+
+.record-list { margin: 0 -4rpx; }
+
+.record-item {
+  display: flex;
+  align-items: center;
+  min-height: 108rpx;
+  border-bottom: 1rpx solid #EDF0EE;
+}
+
+.record-item:last-child { border-bottom: none; }
+
+.record-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68rpx;
+  height: 68rpx;
+  margin-right: 20rpx;
+  border-radius: 14rpx;
+  background: #EAF3EE;
+  color: #176444;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.record-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7rpx;
+}
+
+.record-name {
+  overflow: hidden;
+  color: #26332D;
+  font-size: 25rpx;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-phone {
+  color: #8A938E;
+  font-size: 21rpx;
+}
+
+.record-level {
+  padding: 7rpx 12rpx;
+  border-radius: 8rpx;
+  background: #F2F5F3;
+  color: #5F6D66;
+  font-size: 20rpx;
+}
+
+.empty-records {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24rpx 0 18rpx;
+}
+
+.empty-lines {
+  width: 88rpx;
+  margin-bottom: 22rpx;
+  padding: 18rpx 16rpx;
+  border: 1rpx solid #DCE3DF;
+  border-radius: 14rpx;
+  background: #F6F8F6;
+}
+
+.empty-line {
+  width: 70%;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: #B9C7C0;
+}
+
+.empty-line.long {
+  width: 100%;
+  margin-bottom: 12rpx;
+}
+
+.empty-title {
+  color: #45534C;
+  font-size: 24rpx;
+  font-weight: 650;
+}
+
+.empty-subtitle {
+  margin-top: 10rpx;
+  color: #909994;
+  font-size: 21rpx;
+  text-align: center;
+}
+
+.poster-modal,
+.bind-modal {
+  border-radius: 16rpx;
+  box-shadow: 0 24rpx 70rpx rgba(12, 31, 22, 0.18);
+}
+
+.modal-action,
+.bind-confirm,
+.invite-input,
+.poster-preview { border-radius: 14rpx; }
+
+@media (min-width: 760px) {
+  .invite-page {
+    min-height: 100vh;
+    box-shadow: 0 0 50px rgba(27, 43, 34, 0.08);
+  }
 }
 
 @keyframes pulse {

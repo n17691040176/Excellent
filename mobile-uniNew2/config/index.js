@@ -95,9 +95,10 @@ function getRuntimeValue(key) {
 
 function resolveBaseUrl(runtimeKey, envValue, fallback) {
 	const rawRuntimeValue = uni.getStorageSync(runtimeKey)
-	const runtimeValue = shouldIgnoreCrossContextUrl(rawRuntimeValue) || isLocalUrl(rawRuntimeValue) ? '' : rawRuntimeValue
-	const resolvedEnvValue = shouldIgnoreCrossContextUrl(envValue) || isLocalUrl(envValue) ? '' : envValue
-	const resolvedFallback = shouldIgnoreCrossContextUrl(fallback) || isLocalUrl(fallback) ? '' : fallback
+	const rejectLocalUrl = getAppEnv() === APP_ENV.PROD
+	const runtimeValue = shouldIgnoreCrossContextUrl(rawRuntimeValue) || (rejectLocalUrl && isLocalUrl(rawRuntimeValue)) ? '' : rawRuntimeValue
+	const resolvedEnvValue = shouldIgnoreCrossContextUrl(envValue) || (rejectLocalUrl && isLocalUrl(envValue)) ? '' : envValue
+	const resolvedFallback = shouldIgnoreCrossContextUrl(fallback) || (rejectLocalUrl && isLocalUrl(fallback)) ? '' : fallback
 	const resolved = normalizeBaseUrl(runtimeValue || resolvedEnvValue || resolvedFallback, resolvedFallback)
 	const source = runtimeValue ? 'runtime' : (resolvedEnvValue ? 'env' : 'default')
 	return {
