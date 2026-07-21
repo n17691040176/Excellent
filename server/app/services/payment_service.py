@@ -264,6 +264,88 @@ class PaymentService:
         return '&'.join(ordered_parts)
 
     @staticmethod
+    def _alipay_verify_api_response(raw_body: str, response_key: str, config: AlipayConfig) -> dict[str, Any]:
+        try:
+            payload = json.loads(raw_body)
+        except json.JSONDecodeError as exc:
+            raise ConflictError('Alipay query response is invalid') from exc
+
+        response = payload.get(response_key)
+        signature = str(payload.get('sign') or '').strip()
+        if not isinstance(response, dict) or not signature:
+            raise ConflictError('Alipay query response is incomplete')
+
+        marker = f'"{response_key}"'
+        key_start = raw_body.find(marker)
+        value_start = raw_body.find(':', key_start + len(marker)) if key_start >= 0 else -1
+        if value_start < 0:
+            raise ConflictError('Alipay query response payload is missing')
+        value_start += 1
+        while value_start < len(raw_body) and raw_body[value_start].isspace():
+            value_start += 1
+        try:
+            _, value_end = json.JSONDecoder().raw_decode(raw_body, value_start)
+        except json.JSONDecodeError as exc:
+            raise ConflictError('Alipay query response payload is invalid') from exc
+
+        public_key_path = config.alipay_public_cert_path if config.certificate_mode else config.public_key_path
+        if not public_key_path:
+            raise ConflictError('Alipay public key path is not configured')
+        public_key = PaymentService._load_public_key(public_key_path)
+        try:
+            public_key.verify(
+                base64.b64decode(signature, validate=True),
+                raw_body[value_start:value_end].encode(config.charset),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        except (binascii.Error, InvalidSignature, ValueError) as exc:
+            raise ForbiddenError('Alipay query response signature is invalid') from exc
+        return response
+
+    @staticmethod
+    def _alipay_query_trade(out_trade_no: str, config: AlipayConfig) -> dict[str, Any]:
+        biz_content = {'out_trade_no': out_trade_no}
+        params = {
+            'app_id': config.app_id,
+            'method': 'alipay.trade.query',
+            'format': 'JSON',
+            'charset': config.charset,
+            'sign_type': config.sign_type,
+            'timestamp': now().strftime('%Y-%m-%d %H:%M:%S'),
+            'version': '1.0',
+            'biz_content': json.dumps(biz_content, ensure_ascii=False, separators=(',', ':')),
+        }
+        if config.certificate_mode:
+            app_certificates = load_alipay_certificates(config.app_cert_path)
+            root_certificates = load_alipay_certificates(config.root_cert_path)
+            params['app_cert_sn'] = alipay_certificate_sn(app_certificates[0])
+            params['alipay_root_cert_sn'] = alipay_root_certificate_sn(root_certificates)
+        private_key = PaymentService._load_private_key(config.private_key_path)
+        params['sign'] = PaymentService._rsa_sign(private_key, PaymentService._alipay_sign_string(params))
+
+        request_body = urlencode(params).encode(config.charset)
+        request = urlrequest.Request(
+            config.gateway_url,
+            data=request_body,
+            headers={'Content-Type': f'application/x-www-form-urlencoded;charset={config.charset}'},
+            method='POST',
+        )
+        try:
+            with urlrequest.urlopen(request, timeout=payment_config.request_timeout_seconds) as response:
+                raw_body = response.read().decode(config.charset)
+        except urlerror.HTTPError as exc:
+            response_body = exc.read().decode(config.charset, errors='ignore')
+            raise ConflictError(f'Alipay query request failed: {response_body or exc.reason}') from exc
+        except urlerror.URLError as exc:
+            raise ConflictError(f'Alipay query request failed: {exc.reason}') from exc
+        return PaymentService._alipay_verify_api_response(
+            raw_body,
+            'alipay_trade_query_response',
+            config,
+        )
+
+    @staticmethod
     def _alipay_return_url(order: Order, tx: PaymentTransaction, config: AlipayConfig) -> str:
         if not config.return_url:
             return ''
@@ -440,6 +522,90 @@ class PaymentService:
         db.commit()
         db.refresh(paid_order)
         return paid_order
+
+    @staticmethod
+    def reconcile_alipay_payment(
+        db: Session,
+        order: Order,
+        out_trade_no: str | None = None,
+    ) -> dict[str, Any]:
+        normalized_trade_no = str(out_trade_no or '').strip()
+        query = (
+            db.query(PaymentTransaction)
+            .filter(
+                PaymentTransaction.order_id == order.id,
+                PaymentTransaction.channel == PaymentChannel.ALIPAY,
+            )
+        )
+        if normalized_trade_no:
+            tx = query.filter(PaymentTransaction.out_trade_no == normalized_trade_no).first()
+        else:
+            tx = query.order_by(PaymentTransaction.id.desc()).first()
+        if not tx:
+            if normalized_trade_no:
+                raise NotFoundError('Payment transaction not found')
+            return {
+                'order': order,
+                'transaction': None,
+                'provider_status': 'NO_TRANSACTION',
+            }
+        normalized_trade_no = tx.out_trade_no
+        if tx.status == PaymentStatus.PAID or order.pay_status == PayStatus.PAID:
+            return {
+                'order': order,
+                'transaction': tx,
+                'provider_status': 'TRADE_SUCCESS',
+            }
+
+        config = cast(AlipayConfig, PaymentService._provider_config(PaymentChannel.ALIPAY))
+        if payment_config.mock_external_payment:
+            return {'order': order, 'transaction': tx, 'provider_status': 'WAIT_BUYER_PAY'}
+        if not config.enabled:
+            raise ConflictError('Alipay payment is not enabled')
+
+        query_result = PaymentService._alipay_query_trade(normalized_trade_no, config)
+        code = str(query_result.get('code') or '').strip()
+        sub_code = str(query_result.get('sub_code') or '').strip()
+        if code != '10000':
+            if sub_code == 'ACQ.TRADE_NOT_EXIST':
+                return {'order': order, 'transaction': tx, 'provider_status': 'WAIT_BUYER_PAY'}
+            message = str(query_result.get('sub_msg') or query_result.get('msg') or 'unknown error')
+            raise ConflictError(f'Alipay query failed: {message}')
+
+        response_trade_no = str(query_result.get('out_trade_no') or '').strip()
+        if response_trade_no != normalized_trade_no:
+            raise ConflictError('Alipay query out_trade_no mismatch')
+        try:
+            queried_amount = Decimal(str(query_result.get('total_amount') or ''))
+        except InvalidOperation as exc:
+            raise ConflictError('Alipay query total_amount is invalid') from exc
+        if quantize_amount(queried_amount) != quantize_amount(tx.amount):
+            raise ConflictError('Alipay query amount mismatch')
+
+        provider_status = str(query_result.get('trade_status') or '').upper()
+        if provider_status in {'TRADE_SUCCESS', 'TRADE_FINISHED'}:
+            provider_trade_no = str(query_result.get('trade_no') or '').strip()
+            if not provider_trade_no:
+                raise ConflictError('Alipay query trade_no is missing')
+            order = PaymentService.confirm_paid_order(
+                db,
+                tx,
+                notify_payload={'source': 'trade_query', **query_result},
+                provider_trade_no=provider_trade_no,
+            )
+        elif provider_status == 'TRADE_CLOSED' and tx.status != PaymentStatus.PAID:
+            tx.status = PaymentStatus.FAILED
+            tx.notify_payload = {'source': 'trade_query', **query_result}
+            tx.failed_reason = provider_status
+            db.commit()
+        elif provider_status != 'WAIT_BUYER_PAY':
+            raise ConflictError(f'Alipay query returned unknown status: {provider_status or "missing status"}')
+
+        return {
+            'order': order,
+            'transaction': tx,
+            'provider_status': provider_status,
+        }
 
     @staticmethod
     def _wechat_decrypt_notify_payload(payload: dict[str, Any], config: WechatPayConfig) -> dict[str, Any]:

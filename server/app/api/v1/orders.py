@@ -6,8 +6,9 @@ from app.api.v1.mobile_serializers import enum_value, page_slice, serialize_admi
 from app.db.session import get_db
 from app.models.enums import GlobalRole, OrderStatus, OrderType, PayStatus, ZoneType
 from app.models.user import User
-from app.schemas.product import CreateOrderRequest, OrderPayRequest
+from app.schemas.product import CreateOrderRequest, OrderPaymentStatusRequest, OrderPayRequest
 from app.services.order_service import OrderService
+from app.services.payment_service import PaymentService
 
 app_router = APIRouter(prefix='/app/orders')
 admin_router = APIRouter(prefix='/admin/orders')
@@ -110,6 +111,28 @@ def pay_order(
         'data': {
             'order': serialize_order(db, result['order'], include_detail=True),
             'payment': result['payment'],
+        },
+    }
+
+
+@app_router.post('/{order_id}/payment-status')
+def sync_order_payment_status(
+    order_id: int,
+    payload: OrderPaymentStatusRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    order = OrderService.get_order(db, current_user.id, order_id)
+    result = PaymentService.reconcile_alipay_payment(db, order, payload.out_trade_no)
+    transaction = result['transaction']
+    return {
+        'code': 0,
+        'message': 'success',
+        'data': {
+            'order': serialize_order(db, result['order'], include_detail=True),
+            'payment_status': enum_value(transaction.status) if transaction else enum_value(result['order'].pay_status),
+            'provider_status': result['provider_status'],
+            'out_trade_no': transaction.out_trade_no if transaction else None,
         },
     }
 

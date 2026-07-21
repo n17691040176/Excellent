@@ -1,37 +1,50 @@
 <template>
   <view class="confirm-page">
     <view class="page-header">
-      <view class="back-btn" @click="goBack">←</view>
+      <view class="icon-button" @click="goBack">←</view>
       <text class="header-title">确认订单</text>
-      <view class="header-spacer" />
+      <view class="icon-button placeholder" />
     </view>
 
-    <view v-if="loading" class="state-card">订单信息加载中...</view>
-    <view v-else-if="failed" class="state-card">
-      <text>{{ errorMessage || '订单信息加载失败' }}</text>
-      <button class="text-btn" @click="loadData">重新加载</button>
+    <view v-if="loading" class="loading-state">
+      <view class="skeleton block" />
+      <view class="skeleton block tall" />
+      <view class="skeleton block" />
+    </view>
+    <view v-else-if="failed" class="error-state">
+      <text class="error-mark">!</text>
+      <text class="error-title">订单信息加载失败</text>
+      <text class="error-description">{{ errorMessage }}</text>
+      <button class="retry-button" @click="loadData">重新加载</button>
     </view>
     <template v-else>
+      <view class="content-stack">
       <view v-if="requiresShipping" class="section-card address-card" @click="openAddresses">
         <view class="section-head">
           <text class="section-title">收货地址</text>
-          <text class="section-link">{{ selectedAddress ? '管理地址' : '添加地址' }}</text>
+          <text class="section-arrow">›</text>
         </view>
         <template v-if="selectedAddress">
-          <text class="address-contact">{{ selectedAddress.receiver_name }} {{ selectedAddress.receiver_phone }}</text>
+          <view class="address-contact">
+            <text>{{ selectedAddress.receiver_name }}</text>
+            <text class="contact-phone">{{ selectedAddress.receiver_phone }}</text>
+          </view>
           <text class="address-detail">{{ selectedAddress.full_address || fullAddress(selectedAddress) }}</text>
         </template>
-        <text v-else class="empty-text">请先添加收货地址</text>
+        <text v-else class="empty-text">请选择收货地址</text>
       </view>
 
       <view class="section-card">
-        <text class="section-title">商品清单</text>
+        <view class="section-head">
+          <text class="section-title">商品</text>
+          <text class="section-meta">共 {{ items.length }} 种</text>
+        </view>
         <view v-for="item in items" :key="`${item.product_id}-${item.cart_item_id || ''}`" class="goods-row">
           <image v-if="item.image" class="goods-image" :src="item.image" mode="aspectFill" />
-          <view v-else class="goods-image placeholder" />
+          <view v-else class="goods-image goods-placeholder">{{ item.title?.slice(0, 1) || '商' }}</view>
           <view class="goods-info">
             <text class="goods-title">{{ item.title }}</text>
-            <text class="goods-meta">数量 {{ item.quantity }}</text>
+            <text class="goods-meta">¥{{ money(item.price) }} × {{ item.quantity }}</text>
           </view>
           <text class="goods-price">¥{{ money(item.subtotal) }}</text>
         </view>
@@ -47,29 +60,38 @@
             :class="{ active: selectedPayKey === option.key, disabled: option.available === false }"
             @click="selectPayment(option)"
           >
-            <view>
+            <view class="payment-copy">
               <text class="payment-name">{{ option.label }}</text>
               <text class="payment-desc">{{ option.desc }}</text>
             </view>
-            <text class="payment-check">{{ selectedPayKey === option.key ? '✓' : '' }}</text>
+            <view class="payment-radio" :class="{ checked: selectedPayKey === option.key }">
+              <view v-if="selectedPayKey === option.key" class="radio-dot" />
+            </view>
           </view>
         </view>
         <view v-if="selectedPayment?.purchase_mode !== 'CASH_ONLY'" class="points-row">
-          <text>积分抵扣</text>
-          <input v-model="pointsAmount" class="points-input" type="digit" placeholder="0" @blur="refreshPreview" />
+          <view>
+            <text class="points-label">积分抵扣</text>
+            <text class="points-balance">可用 {{ money(assetSummary.POINTS || 0) }}</text>
+          </view>
+          <view class="points-control">
+            <input v-model="pointsAmount" class="points-input" type="digit" placeholder="0" @blur="refreshPreview" />
+            <text>积分</text>
+          </view>
         </view>
       </view>
 
       <view class="section-card amount-card">
+        <text class="section-title">金额明细</text>
         <view class="amount-row"><text>商品总额</text><text>¥{{ money(totalAmount) }}</text></view>
-        <view class="amount-row"><text>资产抵扣</text><text>-¥{{ money(preview.discount_amount) }}</text></view>
+        <view v-if="Number(preview.discount_amount || 0) > 0" class="amount-row discount"><text>资产抵扣</text><text>-¥{{ money(preview.discount_amount) }}</text></view>
         <view class="amount-row strong"><text>应付金额</text><text>¥{{ money(preview.cash_due) }}</text></view>
       </view>
+      </view>
 
-      <view class="submit-space" />
       <view class="submit-bar">
         <view class="submit-total">
-          <text>应付：</text>
+          <text class="submit-label">合计</text>
           <text class="submit-price">¥{{ money(preview.cash_due) }}</text>
         </view>
         <button class="submit-btn" :disabled="submitting" @click="submitOrder">
@@ -360,44 +382,287 @@ onShow(() => {
 </script>
 
 <style scoped>
-@import '@/styles/elegant.css';
+@import '@/styles/common.css';
 
-.confirm-page { min-height: 100vh; background: var(--bg); padding-bottom: 140rpx; }
-.page-header { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 32rpx; padding-top: calc(24rpx + env(safe-area-inset-top)); background: var(--card); border-bottom: 1rpx solid var(--border-light); }
-.back-btn, .header-spacer { width: 64rpx; }
-.header-title { font-size: 32rpx; font-weight: 700; color: var(--text); }
-.state-card, .section-card { margin: 24rpx; padding: 28rpx; background: var(--card); border-radius: var(--radius-xl); border: 1rpx solid var(--border-light); }
-.state-card { text-align: center; color: var(--text-muted); }
-.text-btn { margin-top: 20rpx; color: var(--primary); background: transparent; }
-.section-head, .amount-row, .points-row { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
-.section-title { display: block; margin-bottom: 22rpx; font-size: 28rpx; font-weight: 700; color: var(--text); }
-.section-head .section-title { margin-bottom: 0; }
-.section-link { color: var(--primary); font-size: 24rpx; }
-.address-contact { display: block; margin-top: 20rpx; font-weight: 700; color: var(--text); }
-.address-detail, .empty-text { display: block; margin-top: 10rpx; color: var(--text-muted); line-height: 1.6; }
-.goods-row { display: flex; align-items: center; gap: 20rpx; padding: 18rpx 0; border-bottom: 1rpx solid var(--border-light); }
-.goods-row:last-child { border-bottom: 0; }
-.goods-image { width: 96rpx; height: 96rpx; border-radius: var(--radius-lg); background: var(--bg); }
-.goods-info { flex: 1; min-width: 0; }
-.goods-title { display: block; color: var(--text); font-weight: 600; }
-.goods-meta { display: block; margin-top: 10rpx; color: var(--text-muted); font-size: 24rpx; }
-.goods-price { color: var(--error); font-weight: 700; }
-.payment-list { display: grid; gap: 16rpx; }
-.payment-item { display: flex; justify-content: space-between; align-items: center; padding: 20rpx; border: 1rpx solid var(--border-light); border-radius: var(--radius-lg); }
-.payment-item.active { border-color: var(--primary); background: var(--primary-bg); }
-.payment-item.disabled { opacity: 0.55; }
-.payment-name, .payment-desc { display: block; }
-.payment-name { color: var(--text); font-weight: 600; }
-.payment-desc { margin-top: 8rpx; color: var(--text-muted); font-size: 22rpx; }
-.payment-check { color: var(--primary); font-weight: 700; }
-.points-row { margin-top: 20rpx; padding-top: 20rpx; border-top: 1rpx solid var(--border-light); }
-.points-input { width: 200rpx; text-align: right; }
-.amount-card { display: grid; gap: 18rpx; }
-.amount-row { color: var(--text-muted); }
-.amount-row.strong { color: var(--text); font-weight: 700; }
-.submit-space { height: 120rpx; }
-.submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 24rpx; padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom)); background: var(--card); border-top: 1rpx solid var(--border-light); z-index: 50; }
-.submit-total { color: var(--text-muted); }
-.submit-price { color: var(--error); font-size: 34rpx; font-weight: 800; }
-.submit-btn { min-width: 240rpx; margin: 0; color: white; background: var(--primary); border-radius: 999rpx; }
+.confirm-page {
+  min-height: 100vh;
+  padding-bottom: calc(144rpx + env(safe-area-inset-bottom));
+  background: #F6F7F8;
+}
+
+.page-header {
+  display: grid;
+  grid-template-columns: 64rpx 1fr 64rpx;
+  align-items: center;
+  min-height: 88rpx;
+  padding: env(safe-area-inset-top) 24rpx 0;
+  background: #FFFFFF;
+  border-bottom: 1rpx solid #ECEEF0;
+  box-sizing: content-box;
+}
+
+.icon-button {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #27272A;
+  font-size: 38rpx;
+}
+
+.icon-button.placeholder { visibility: hidden; }
+
+.header-title {
+  color: #18181B;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.content-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding: 20rpx;
+}
+
+.section-card {
+  padding: 28rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #E5E7EB;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
+.section-head,
+.amount-row,
+.points-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.section-head { margin-bottom: 22rpx; }
+
+.section-title {
+  display: block;
+  color: #18181B;
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.section-meta { color: #85858D; font-size: 23rpx; }
+.section-arrow { color: #85858D; font-size: 38rpx; line-height: 1; }
+
+.address-contact {
+  display: flex;
+  align-items: baseline;
+  gap: 16rpx;
+  color: #27272A;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.contact-phone { color: #71717A; font-size: 25rpx; font-weight: 400; }
+
+.address-detail,
+.empty-text {
+  display: block;
+  margin-top: 10rpx;
+  color: #71717A;
+  font-size: 25rpx;
+  line-height: 1.55;
+}
+
+.goods-row {
+  display: grid;
+  grid-template-columns: 104rpx minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18rpx;
+  padding: 20rpx 0;
+  border-top: 1rpx solid #ECEEF0;
+}
+
+.section-head + .goods-row { padding-top: 0; border-top: 0; }
+.goods-row:last-child { padding-bottom: 0; }
+
+.goods-image {
+  width: 104rpx;
+  height: 104rpx;
+  background: #F0F2F3;
+  border-radius: 12rpx;
+}
+
+.goods-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B7280;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.goods-info { min-width: 0; }
+
+.goods-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #27272A;
+  font-size: 27rpx;
+  font-weight: 600;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.goods-meta { display: block; margin-top: 8rpx; color: #85858D; font-size: 23rpx; }
+.goods-price { align-self: start; color: #27272A; font-size: 26rpx; font-weight: 700; }
+.section-card > .section-title { margin-bottom: 20rpx; }
+
+.payment-list { border-top: 1rpx solid #ECEEF0; }
+
+.payment-item {
+  min-height: 96rpx;
+  padding: 18rpx 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  border-bottom: 1rpx solid #ECEEF0;
+  box-sizing: border-box;
+}
+
+.payment-item.disabled { opacity: 0.48; }
+.payment-copy { min-width: 0; display: flex; flex-direction: column; gap: 5rpx; }
+.payment-name { color: #27272A; font-size: 27rpx; font-weight: 600; }
+.payment-desc { color: #85858D; font-size: 22rpx; }
+
+.payment-radio {
+  width: 36rpx;
+  height: 36rpx;
+  flex: 0 0 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid #C4C4C8;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.payment-radio.checked { border-color: #07845D; }
+.radio-dot { width: 20rpx; height: 20rpx; background: #07845D; border-radius: 50%; }
+.points-row { min-height: 88rpx; padding-top: 16rpx; }
+.points-label, .points-balance { display: block; }
+.points-label { color: #27272A; font-size: 26rpx; font-weight: 600; }
+.points-balance { margin-top: 4rpx; color: #85858D; font-size: 21rpx; }
+.points-control { display: flex; align-items: center; gap: 8rpx; color: #71717A; font-size: 23rpx; }
+
+.points-input {
+  width: 156rpx;
+  height: 64rpx;
+  padding: 0 14rpx;
+  color: #27272A;
+  background: #F5F6F7;
+  border: 1rpx solid #E4E4E7;
+  border-radius: 10rpx;
+  text-align: right;
+  box-sizing: border-box;
+}
+
+.amount-card { display: flex; flex-direction: column; }
+.amount-row { min-height: 64rpx; color: #71717A; font-size: 25rpx; }
+.amount-row > text:last-child { color: #27272A; }
+.amount-row.discount > text:last-child { color: #047857; }
+
+.amount-row.strong {
+  min-height: 80rpx;
+  margin-top: 8rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #E5E7EB;
+  color: #18181B;
+  font-weight: 700;
+}
+
+.amount-row.strong > text:last-child { color: #D55312; font-size: 34rpx; font-weight: 800; }
+
+.submit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  min-height: 108rpx;
+  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  background: rgba(255, 255, 255, 0.97);
+  border-top: 1rpx solid #E5E7EB;
+  box-sizing: content-box;
+}
+
+.submit-total { display: flex; align-items: baseline; gap: 10rpx; }
+.submit-label { color: #71717A; font-size: 23rpx; }
+.submit-price { color: #D55312; font-size: 36rpx; font-weight: 800; }
+
+.submit-btn,
+.retry-button {
+  height: 76rpx;
+  margin: 0;
+  padding: 0 34rpx;
+  color: #FFFFFF;
+  background: #07845D;
+  border-radius: 12rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.submit-btn { min-width: 224rpx; }
+.submit-btn::after, .retry-button::after { border: 0; }
+.submit-btn[disabled] { opacity: 0.55; }
+
+.loading-state { padding: 20rpx; }
+.skeleton { background: #E9EBED; border-radius: 16rpx; animation: pulse 1.4s ease-in-out infinite; }
+.skeleton.block { height: 180rpx; margin-bottom: 20rpx; }
+.skeleton.block.tall { height: 320rpx; }
+
+.error-state {
+  min-height: 70vh;
+  padding: 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.error-mark {
+  width: 72rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #A33A34;
+  background: #FBE9E7;
+  border-radius: 50%;
+  font-size: 38rpx;
+  font-weight: 800;
+}
+
+.error-title { margin-top: 24rpx; color: #27272A; font-size: 30rpx; font-weight: 700; }
+.error-description { margin-top: 10rpx; color: #71717A; font-size: 25rpx; }
+.retry-button { margin-top: 28rpx; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
 </style>

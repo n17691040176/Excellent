@@ -120,6 +120,11 @@ export const orderApi = {
   },
   pay(id, data) {
     return request.post(`/api/v1/app/orders/${id}/pay`, data);
+  },
+  syncPayment(id, outTradeNo = '') {
+    return request.post(`/api/v1/app/orders/${id}/payment-status`, {
+      out_trade_no: outTradeNo
+    }, { hideLoading: true });
   }
 };
 

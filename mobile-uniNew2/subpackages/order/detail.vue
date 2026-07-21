@@ -1,138 +1,141 @@
 <template>
-  <view class="detail-page">
-    <!-- Header -->
+  <view class="detail-page" :class="{ 'has-actions': hasActions }">
     <view class="page-header">
-      <view class="back-btn" @click="goBack">←</view>
+      <view class="icon-button" @click="goBack">←</view>
       <text class="header-title">订单详情</text>
-      <view class="header-spacer" />
+      <view class="icon-button placeholder" />
     </view>
 
-    <!-- Loading -->
     <view v-if="loading" class="loading-state">
-      <view class="skeleton skeleton-header" />
-      <view class="skeleton skeleton-line" />
-      <view class="skeleton skeleton-line short" />
+      <view class="skeleton status-skeleton" />
+      <view class="skeleton content-skeleton" />
+      <view class="skeleton content-skeleton short" />
     </view>
 
-    <!-- Error -->
     <view v-else-if="failed" class="error-state">
-      <text class="error-icon">⚠</text>
-      <text class="error-text">订单详情加载失败</text>
-      <view class="retry-btn" @click="loadDetail">点击重试</view>
+      <text class="error-mark">!</text>
+      <text class="error-title">无法加载订单</text>
+      <text class="error-description">{{ errorMessage }}</text>
+      <button class="retry-button" @click="loadDetail()">重新加载</button>
     </view>
 
     <template v-else>
-      <!-- Status Header -->
-      <view class="status-header">
-        <view class="status-icon">{{ statusIcon }}</view>
-        <view class="status-info">
-          <text class="status-text">{{ detail.status }}</text>
-          <text class="status-hint">{{ statusHint }}</text>
+      <view class="status-panel" :class="statusTone">
+        <view class="status-symbol">{{ statusIcon }}</view>
+        <view class="status-copy">
+          <text class="status-title">{{ detail.status }}</text>
+          <text class="status-description">{{ statusHint }}</text>
         </view>
       </view>
 
-      <view v-if="detail.requiresShipping" class="info-card">
-        <text class="section-title">收货与物流</text>
-        <template v-if="detail.shippingAddress">
-          <view class="info-row">
-            <text class="info-label">收货人</text>
-            <text class="info-value">{{ detail.shippingAddress.receiver_name }} {{ detail.shippingAddress.receiver_phone }}</text>
+      <view v-if="returnedFromPayment" class="payment-result" :class="paymentResultTone">
+        <view v-if="syncing" class="sync-spinner" />
+        <text class="payment-result-text">{{ paymentResultMessage }}</text>
+      </view>
+
+      <view class="content-stack">
+        <view v-if="detail.requiresShipping" class="section-card address-section">
+          <view class="section-heading">
+            <text class="section-title">收货信息</text>
+            <text v-if="detail.shipment?.tracking_no" class="section-link">查看物流</text>
+          </view>
+          <template v-if="detail.shippingAddress">
+            <view class="contact-line">
+              <text class="contact-name">{{ detail.shippingAddress.receiver_name }}</text>
+              <text class="contact-phone">{{ detail.shippingAddress.receiver_phone }}</text>
+            </view>
+            <text class="address-text">{{ detail.shippingAddress.full_address }}</text>
+          </template>
+          <text v-else class="empty-line">暂未记录收货地址</text>
+          <view v-if="detail.shipment?.tracking_no" class="logistics-line">
+            <text>{{ detail.shipment.carrier_name || '物流公司' }}</text>
+            <text>{{ detail.shipment.tracking_no }}</text>
+          </view>
+        </view>
+
+        <view v-if="detail.items.length" class="section-card">
+          <view class="section-heading">
+            <text class="section-title">商品</text>
+            <text class="section-meta">共 {{ itemQuantity }} 件</text>
+          </view>
+          <view v-for="item in detail.items" :key="item.id" class="goods-row">
+            <image v-if="item.image" class="goods-image" :src="item.image" mode="aspectFill" />
+            <view v-else class="goods-image goods-placeholder">{{ item.product_name?.slice(0, 1) || '商' }}</view>
+            <view class="goods-info">
+              <text class="goods-title">{{ item.product_name }}</text>
+              <text v-if="item.sku_name" class="goods-spec">{{ item.sku_name }}</text>
+              <text class="goods-quantity">¥{{ money(item.unit_price) }} × {{ item.quantity }}</text>
+            </view>
+            <text class="goods-subtotal">¥{{ money(item.total_amount) }}</text>
+          </view>
+        </view>
+
+        <view class="section-card amount-section">
+          <text class="section-title">金额明细</text>
+          <view class="amount-row">
+            <text>商品总额</text>
+            <text>¥{{ detail.totalAmount }}</text>
+          </view>
+          <view v-if="Number(detail.discountAmount) > 0" class="amount-row discount">
+            <text>资产抵扣</text>
+            <text>-¥{{ detail.discountAmount }}</text>
+          </view>
+          <view class="amount-row total">
+            <text>{{ detail.canPay ? '待支付' : '实付金额' }}</text>
+            <text class="total-price">¥{{ detail.canPay ? detail.cashDue : detail.paidAmount }}</text>
+          </view>
+          <view class="payment-method">
+            <text>支付方式</text>
+            <text>{{ detail.paymentCombo }}</text>
+          </view>
+        </view>
+
+        <view class="section-card order-section">
+          <text class="section-title">订单信息</text>
+          <view class="info-row copyable" @click="copyOrderNo">
+            <text>订单编号</text>
+            <view class="info-value-wrap">
+              <text class="info-value order-no">{{ detail.no }}</text>
+              <text class="copy-text">复制</text>
+            </view>
           </view>
           <view class="info-row">
-            <text class="info-label">收货地址</text>
-            <text class="info-value">{{ detail.shippingAddress.full_address }}</text>
+            <text>订单类型</text>
+            <text class="info-value">{{ detail.channel }}</text>
           </view>
-        </template>
-        <view v-if="detail.shipment?.tracking_no" class="info-row">
-          <text class="info-label">物流信息</text>
-          <text class="info-value">{{ detail.shipment.carrier_name || '物流公司' }} {{ detail.shipment.tracking_no }}</text>
-        </view>
-        <text v-else-if="detail.status === '待发货'" class="payment-note">商家备货中，发货后将显示真实物流单号。</text>
-      </view>
-
-      <!-- Order Info Card -->
-      <view class="info-card">
-        <view class="card-header">
-          <text class="card-tag">订单中心</text>
-        </view>
-        <view class="info-row">
-          <text class="info-label">订单编号</text>
-          <text class="info-value">{{ detail.no }}</text>
-        </view>
-        <view class="info-row">
-          <text class="info-label">支付组合</text>
-          <text class="info-value">{{ detail.paymentCombo }}</text>
-        </view>
-        <view class="info-row highlight">
-          <text class="info-label">订单总额</text>
-          <text class="info-value price">¥{{ detail.amount }}</text>
-        </view>
-      </view>
-
-      <!-- Payment Info Card -->
-      <view class="info-card">
-        <text class="section-title">支付信息</text>
-        <view class="info-row">
-          <text class="info-label">商品总额</text>
-          <text class="info-value">¥{{ detail.totalAmount }}</text>
-        </view>
-        <view class="info-row">
-          <text class="info-label">资产抵扣</text>
-          <text class="info-value">-¥{{ detail.discountAmount }}</text>
-        </view>
-        <view class="info-row strong">
-          <text class="info-label">待支付金额</text>
-          <text class="info-value price">¥{{ detail.cashDue }}</text>
-        </view>
-        <view v-if="detail.paymentMessage" class="payment-note">{{ detail.paymentMessage }}</view>
-      </view>
-
-      <!-- Items Card -->
-      <view v-if="detail.items.length" class="items-card">
-        <text class="section-title">订单商品</text>
-        <view v-for="item in detail.items" :key="item.id" class="order-item">
-          <view class="item-image">
-            <view class="image-placeholder" />
+          <view class="info-row">
+            <text>创建时间</text>
+            <text class="info-value">{{ detail.createdAt }}</text>
           </view>
-          <view class="item-info">
-            <text class="item-title">{{ item.product_name }}</text>
-            <text class="item-meta">数量 {{ item.quantity }} / 单价 ¥{{ item.unit_price }}</text>
-            <text class="item-subtotal">小计 ¥{{ item.total_amount }}</text>
+          <view v-if="detail.paidAt !== '--'" class="info-row">
+            <text>支付时间</text>
+            <text class="info-value">{{ detail.paidAt }}</text>
           </view>
         </view>
-      </view>
 
-      <!-- Timeline Card -->
-      <view v-if="detail.steps.length" class="timeline-card">
-        <text class="section-title">进度轨迹</text>
-        <view class="timeline">
-          <view
-            v-for="(item, idx) in detail.steps"
-            :key="`${item.title}-${item.time}`"
-            class="timeline-item"
-          >
-            <view class="timeline-dot" :class="{ active: item.active, last: idx === detail.steps.length - 1 }" />
-            <view class="timeline-content">
-              <text class="timeline-title">{{ item.title }}</text>
-              <text class="timeline-time">{{ item.time }}</text>
+        <view v-if="detail.steps.length" class="section-card timeline-section">
+          <text class="section-title">订单进度</text>
+          <view class="timeline">
+            <view v-for="(step, index) in detail.steps" :key="`${step.title}-${index}`" class="timeline-row">
+              <view class="timeline-rail">
+                <view class="timeline-dot" :class="{ active: step.active }" />
+                <view v-if="index < detail.steps.length - 1" class="timeline-line" />
+              </view>
+              <view class="timeline-copy">
+                <text class="timeline-title" :class="{ active: step.active }">{{ step.title }}</text>
+                <text class="timeline-time">{{ step.time }}</text>
+              </view>
             </view>
           </view>
         </view>
       </view>
 
-      <!-- Actions -->
-      <view class="action-section">
-        <button v-if="detail.canPay" class="action-btn primary" @click="payOrder">
-          {{ paying ? '支付中...' : '继续支付' }}
-        </button>
-        <button v-if="detail.canConfirm" class="action-btn secondary" @click="confirmOrder">
-          确认收货
-        </button>
-        <button v-if="detail.canCancel" class="action-btn secondary" @click="cancelOrder">
-          取消订单
-        </button>
-        <button v-if="detail.canRefund" class="action-btn secondary" @click="refundOrder">
-          申请退款
+      <view v-if="hasActions" class="action-bar">
+        <button v-if="detail.canCancel" class="action-button secondary" @click="cancelOrder">取消订单</button>
+        <button v-if="detail.canRefund" class="action-button secondary" @click="refundOrder">申请退款</button>
+        <button v-if="detail.canConfirm" class="action-button primary" @click="confirmOrder">确认收货</button>
+        <button v-if="detail.canPay" class="action-button primary" :disabled="paying" @click="payOrder">
+          {{ paying ? '处理中...' : '继续支付' }}
         </button>
       </view>
     </template>
@@ -143,25 +146,32 @@
 import { computed, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { orderApi } from '@/api/modules';
+import { formatDateTime, formatMoney } from '@/utils/format';
 import { requestPayment as requestPlatformPayment } from '@/utils/payment';
 import { trackPageView } from '@/utils/track';
 
-const loading = ref(false);
+const loading = ref(true);
 const failed = ref(false);
 const paying = ref(false);
+const syncing = ref(false);
 const id = ref('');
+const outTradeNo = ref('');
+const errorMessage = ref('订单不存在或网络暂时不可用');
+const paymentResultMessage = ref('正在确认支付宝支付结果...');
+const paymentResultTone = ref('pending');
 
 const detail = ref({
   status: '处理中',
   no: '--',
-  amount: '0.00',
   totalAmount: '0.00',
   discountAmount: '0.00',
   cashDue: '0.00',
-  payStatus: '未支付',
+  paidAmount: '0.00',
+  payStatusCode: 'UNPAID',
   paymentCombo: '--',
-  paymentMessage: '',
   channel: '商城订单',
+  createdAt: '--',
+  paidAt: '--',
   steps: [],
   items: [],
   canPay: false,
@@ -175,42 +185,58 @@ const detail = ref({
   payChannelOptions: []
 });
 
-const statusIcon = computed(() => {
-  if (detail.value.payStatus === '已支付') return '◆';
-  return '◇';
+const returnedFromPayment = computed(() => Boolean(outTradeNo.value));
+const hasActions = computed(() => (
+  detail.value.canPay || detail.value.canConfirm || detail.value.canCancel || detail.value.canRefund
+));
+const itemQuantity = computed(() => detail.value.items.reduce((total, item) => total + Number(item.quantity || 0), 0));
+
+const statusTone = computed(() => {
+  if (detail.value.status === '待支付') return 'warning';
+  if (detail.value.status === '已发货') return 'info';
+  if (['已取消', '已退款'].includes(detail.value.status)) return 'muted';
+  return 'success';
 });
 
+const statusIcon = computed(() => ({
+  待支付: '¥',
+  待发货: '✓',
+  已发货: '→',
+  已完成: '✓',
+  已取消: '×',
+  已退款: '↩'
+}[detail.value.status] || '·'));
+
 const statusHint = computed(() => ({
-  '待支付': '请尽快完成支付',
-  '待发货': '订单已支付，商家正在备货',
-  '已发货': '商品已发出，请留意物流信息',
-  '已完成': '订单已完成',
-  '已取消': '订单已取消',
-  '已退款': '订单已退款'
+  待支付: '请在订单关闭前完成支付',
+  待发货: '支付成功，商家正在备货',
+  已发货: '商品已发出，请留意物流更新',
+  已完成: '订单已完成',
+  已取消: '订单已取消',
+  已退款: '款项已原路退回'
 }[detail.value.status] || '订单状态已更新'));
 
-function normalizeSteps(timeline) {
-  if (Array.isArray(timeline) && timeline.length) {
-    return timeline.map((item, idx) => ({
-      title: item.title || item.name || `节点 ${idx + 1}`,
-      time: item.time || item.created_at || '--',
-      active: item.active ?? true
-    }));
-  }
-  return [
-    { title: '订单创建', time: '--', active: true },
-    { title: '处理中', time: '--', active: false }
-  ];
+function money(value) {
+  return formatMoney(value, { withThousands: false });
+}
+
+function normalizeSteps(timeline = []) {
+  if (!Array.isArray(timeline)) return [];
+  return timeline.map((item, index) => ({
+    title: item.title || item.name || `进度 ${index + 1}`,
+    time: formatDateTime(item.time || item.created_at),
+    active: item.active ?? true
+  }));
 }
 
 function findPaymentCombo(assetDeductions = [], payableAmount = 0, payStatus = '') {
   const types = new Set((assetDeductions || []).map((item) => item.asset_type));
   if (types.has('BALANCE') && types.has('POINTS')) return '余额 + 积分';
   if (types.has('VOUCHER') && types.has('POINTS')) return '消费金 + 积分';
-  if (types.has('POINTS') && Number(payableAmount || 0) > 0) return '外部支付 + 积分';
+  if (types.has('POINTS') && Number(payableAmount || 0) > 0) return '支付宝 + 积分';
   if (types.has('BALANCE')) return '余额支付';
   if (types.has('VOUCHER')) return '消费金支付';
-  if (payStatus === 'PAID' && Number(payableAmount || 0) === 0) return '已完成支付';
+  if (payStatus === 'PAID') return '支付宝';
   return '待支付';
 }
 
@@ -222,30 +248,31 @@ function preferredPayChannel(options = [], cashDue = 0, fallback = '') {
   return fallback || options[0] || '';
 }
 
-function normalize(res) {
+function normalize(res = {}) {
   const order = res?.order || res || {};
   const items = Array.isArray(res?.items) ? res.items : [];
   const deductions = Array.isArray(res?.asset_deductions) ? res.asset_deductions : [];
-  const payableAmount = Number(order?.payable_amount ?? order?.amount ?? 0);
-  const totalAmount = Number(order?.total_amount ?? payableAmount);
+  const payableAmount = Number(order?.payable_amount ?? order?.cash_due ?? 0);
+  const totalAmount = Number(order?.total_amount ?? order?.amount ?? 0);
   const discountAmount = Number(order?.discount_amount ?? 0);
   const payStatus = order?.pay_status || 'UNPAID';
-  const orderStatus = order?.status_text || order?.order_status || order?.status || '处理中';
+  const paidAmount = Number(order?.paid_amount ?? (payStatus === 'PAID' ? totalAmount : 0));
   const payChannelOptions = Array.isArray(res?.pay_channel_options)
     ? res.pay_channel_options
     : (Array.isArray(order?.pay_channel_options) ? order.pay_channel_options : []);
 
   return {
-    status: orderStatus,
+    status: order?.status_text || order?.order_status || order?.status || '处理中',
     no: order?.order_no || order?.no || '--',
-    amount: totalAmount.toFixed(2),
-    totalAmount: totalAmount.toFixed(2),
-    discountAmount: discountAmount.toFixed(2),
-    cashDue: payableAmount.toFixed(2),
-    payStatus: payStatus === 'PAID' ? '已支付' : payStatus === 'REFUNDED' ? '已退款' : '未支付',
+    totalAmount: money(totalAmount),
+    discountAmount: money(discountAmount),
+    cashDue: money(payableAmount),
+    paidAmount: money(paidAmount),
+    payStatusCode: payStatus,
     paymentCombo: res?.payment_combo || order?.payment_combo || findPaymentCombo(deductions, payableAmount, payStatus),
-    paymentMessage: res?.payment_message || (payableAmount > 0 ? '支付单已生成，请完成支付，订单状态以服务器异步通知为准。' : '订单已完成支付。'),
     channel: order?.channel_text || order?.channel || '商城订单',
+    createdAt: formatDateTime(order?.created_at),
+    paidAt: formatDateTime(order?.paid_at),
     steps: normalizeSteps(order?.timeline || order?.steps || res?.timeline || res?.steps),
     items,
     payChannel: preferredPayChannel(payChannelOptions, payableAmount, res?.default_pay_channel || order?.default_pay_channel || ''),
@@ -260,23 +287,100 @@ function normalize(res) {
   };
 }
 
-const loadDetail = async () => {
-  if (!id.value) return;
-  loading.value = true;
+async function loadDetail({ silent = false } = {}) {
+  if (!id.value) {
+    failed.value = true;
+    errorMessage.value = '缺少订单编号，请返回订单列表重试';
+    loading.value = false;
+    return false;
+  }
+  if (!silent) loading.value = true;
   failed.value = false;
   try {
-    const res = await orderApi.detail(id.value);
-    detail.value = normalize(res || {});
+    detail.value = normalize(await orderApi.detail(id.value));
+    return true;
   } catch (error) {
     failed.value = true;
+    errorMessage.value = error?.message || '订单不存在或网络暂时不可用';
+    return false;
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
-};
+}
 
-const goBack = () => uni.navigateBack();
+function wait(duration) {
+  return new Promise((resolve) => setTimeout(resolve, duration));
+}
+
+async function syncReturnedPayment() {
+  if (!id.value || !outTradeNo.value) return false;
+  syncing.value = true;
+  paymentResultTone.value = 'pending';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const result = await orderApi.syncPayment(id.value, outTradeNo.value);
+      detail.value = normalize(result?.order || {});
+      if (result?.payment_status === 'PAID' || detail.value.payStatusCode === 'PAID') {
+        paymentResultMessage.value = '支付成功，订单状态已更新';
+        paymentResultTone.value = 'success';
+        syncing.value = false;
+        return true;
+      }
+      if (result?.provider_status === 'TRADE_CLOSED') {
+        paymentResultMessage.value = '该笔支付已关闭，可重新发起支付';
+        paymentResultTone.value = 'warning';
+        syncing.value = false;
+        return true;
+      }
+    } catch (error) {
+      if (attempt === 2) {
+        paymentResultMessage.value = '支付结果暂未同步，请稍后刷新订单';
+        paymentResultTone.value = 'warning';
+      }
+    }
+    if (attempt < 2) await wait(1200);
+  }
+  syncing.value = false;
+  return true;
+}
+
+async function initialize() {
+  loading.value = true;
+  const synced = await syncReturnedPayment();
+  if (!synced) {
+    const loaded = await loadDetail({ silent: true });
+    if (loaded && detail.value.canPay) {
+      try {
+        const result = await orderApi.syncPayment(id.value);
+        if (result?.provider_status !== 'NO_TRANSACTION') {
+          detail.value = normalize(result?.order || {});
+        }
+        if (result?.payment_status === 'PAID') {
+          uni.showToast({ title: '支付状态已更新', icon: 'success' });
+        }
+      } catch (error) {
+        // The order remains usable even when the provider status check is temporarily unavailable.
+      }
+    }
+  }
+  loading.value = false;
+}
+
+function goBack() {
+  if (returnedFromPayment.value) {
+    uni.reLaunch({ url: '/pages/orders/list' });
+    return;
+  }
+  uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/orders/list' }) });
+}
+
+function copyOrderNo() {
+  if (!detail.value.no || detail.value.no === '--') return;
+  uni.setClipboardData({ data: detail.value.no });
+}
 
 async function payOrder() {
+  if (paying.value) return;
   paying.value = true;
   try {
     const payChannel = detail.value.payChannel || detail.value.payChannelOptions?.[0];
@@ -284,30 +388,21 @@ async function payOrder() {
       uni.showToast({ title: '当前订单暂无可用支付方式', icon: 'none' });
       return;
     }
-    const result = await orderApi.pay(id.value, {
-      pay_channel: payChannel,
-      auto_complete: true
-    });
+    const result = await orderApi.pay(id.value, { pay_channel: payChannel, auto_complete: true });
     const payment = result?.payment;
     if (payment?.status === 'PAID') {
       uni.showToast({ title: '支付完成', icon: 'success' });
-      await loadDetail();
+      await loadDetail({ silent: true });
       return;
     }
-    try {
-      const platformResult = await requestPlatformPayment(payment);
-      uni.showToast({
-        title: platformResult?.mocked ? '支付单已创建' : '支付已提交',
-        icon: platformResult?.mocked ? 'none' : 'success'
-      });
-    } catch (error) {
-      const errMsg = String(error?.errMsg || error?.message || '');
-      uni.showToast({
-        title: errMsg.includes('cancel') ? '已取消支付' : '支付失败',
-        icon: 'none'
-      });
+    const platformResult = await requestPlatformPayment(payment);
+    if (!platformResult?.redirected && payment?.out_trade_no) {
+      outTradeNo.value = payment.out_trade_no;
+      await syncReturnedPayment();
     }
-    await loadDetail();
+  } catch (error) {
+    const message = String(error?.errMsg || error?.message || '');
+    uni.showToast({ title: message.includes('cancel') ? '已取消支付' : '支付未完成', icon: 'none' });
   } finally {
     paying.value = false;
   }
@@ -315,438 +410,562 @@ async function payOrder() {
 
 async function confirmOrder() {
   await orderApi.confirm(id.value);
-  uni.showToast({ title: '订单已完成', icon: 'success' });
-  await loadDetail();
+  uni.showToast({ title: '已确认收货', icon: 'success' });
+  await loadDetail({ silent: true });
 }
 
 function cancelOrder() {
   uni.showModal({
     title: '取消订单',
-    content: '取消后将恢复库存并退回已抵扣资产，是否继续？',
+    content: '取消后库存和已抵扣资产将自动退回。',
     success: async ({ confirm }) => {
       if (!confirm) return;
       await orderApi.cancel(id.value);
       uni.showToast({ title: '订单已取消', icon: 'success' });
-      await loadDetail();
+      await loadDetail({ silent: true });
     }
   });
 }
 
 function refundOrder() {
   uni.showModal({
-    title: '订单退款',
-    content: '确认申请退款吗？退款后将恢复库存并退回资产。',
+    title: '申请退款',
+    content: '退款后库存和已抵扣资产将自动退回。',
     success: async ({ confirm }) => {
       if (!confirm) return;
       await orderApi.refund(id.value);
-      uni.showToast({ title: '订单已退款', icon: 'success' });
-      await loadDetail();
+      uni.showToast({ title: '退款已提交', icon: 'success' });
+      await loadDetail({ silent: true });
     }
   });
 }
 
 onLoad((query) => {
-  id.value = query?.id || '';
-  trackPageView('order_detail_view', { id: id.value });
-  loadDetail();
+  id.value = query?.id || query?.order_id || '';
+  outTradeNo.value = query?.out_trade_no || '';
+  trackPageView('order_detail_view', { id: id.value, payment_return: Boolean(outTradeNo.value) });
+  initialize();
 });
 </script>
 
 <style scoped>
-@import '@/styles/elegant.css';
+@import '@/styles/common.css';
 
 .detail-page {
   min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 48rpx;
+  background: #F6F7F8;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
 }
 
-/* Header */
+.detail-page.has-actions {
+  padding-bottom: calc(144rpx + env(safe-area-inset-bottom));
+}
+
 .page-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 64rpx 1fr 64rpx;
   align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 32rpx;
-  padding-top: calc(24rpx + env(safe-area-inset-top));
-  background: var(--card);
-  border-bottom: 1rpx solid var(--border-light);
+  min-height: 88rpx;
+  padding: env(safe-area-inset-top) 24rpx 0;
+  background: #FFFFFF;
+  border-bottom: 1rpx solid #ECEEF0;
+  box-sizing: content-box;
 }
 
-.back-btn, .header-spacer {
+.icon-button {
   width: 64rpx;
   height: 64rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32rpx;
-  color: var(--text);
+  color: #27272A;
+  font-size: 38rpx;
+}
+
+.icon-button.placeholder {
+  visibility: hidden;
 }
 
 .header-title {
+  text-align: center;
+  color: #18181B;
   font-size: 32rpx;
   font-weight: 700;
-  color: var(--text);
 }
 
-/* Status Header */
-.status-header {
+.status-panel {
   display: flex;
   align-items: center;
   gap: 24rpx;
-  padding: 40rpx 32rpx;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  min-height: 176rpx;
+  padding: 32rpx 40rpx;
+  color: #FFFFFF;
+  box-sizing: border-box;
 }
 
-.status-icon {
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+.status-panel.success { background: #07845D; }
+.status-panel.warning { background: #C26116; }
+.status-panel.info { background: #2563A8; }
+.status-panel.muted { background: #60646C; }
+
+.status-symbol {
+  width: 76rpx;
+  height: 76rpx;
+  flex: 0 0 76rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 48rpx;
-  color: white;
+  border: 2rpx solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  font-size: 38rpx;
+  font-weight: 700;
 }
 
-.status-info {
+.status-copy {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8rpx;
 }
 
-.status-text {
-  font-size: 36rpx;
+.status-title {
+  font-size: 38rpx;
   font-weight: 700;
-  color: white;
 }
 
-.status-hint {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.8);
+.status-description {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 25rpx;
 }
 
-/* Info Cards */
-.info-card {
-  margin: 24rpx;
-  padding: 32rpx;
-  background: var(--card);
-  border-radius: var(--radius-xl);
+.payment-result {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  min-height: 72rpx;
+  padding: 16rpx 28rpx;
+  border-bottom: 1rpx solid transparent;
+  box-sizing: border-box;
 }
 
-.card-header {
-  margin-bottom: 24rpx;
-}
+.payment-result.pending { color: #1D4E89; background: #EAF3FF; border-color: #D5E7FC; }
+.payment-result.success { color: #076045; background: #E8F8F1; border-color: #CBECDD; }
+.payment-result.warning { color: #8A4310; background: #FFF3E8; border-color: #F3DDC9; }
 
-.card-tag {
-  display: inline-flex;
-  padding: 8rpx 20rpx;
-  background: var(--primary-bg);
-  color: var(--primary);
-  font-size: 22rpx;
+.payment-result-text {
+  font-size: 25rpx;
   font-weight: 600;
-  border-radius: 24rpx;
+}
+
+.sync-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  flex: 0 0 24rpx;
+  border: 3rpx solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.content-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding: 20rpx;
+}
+
+.section-card {
+  padding: 28rpx;
+  background: #FFFFFF;
+  border: 1rpx solid #E8EAED;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
 }
 
 .section-title {
-  font-size: 30rpx;
+  display: block;
+  color: #18181B;
+  font-size: 29rpx;
   font-weight: 700;
-  color: var(--text);
-  margin-bottom: 24rpx;
+}
+
+.section-meta,
+.section-link {
+  color: #71717A;
+  font-size: 23rpx;
+}
+
+.section-link {
+  color: #047857;
+}
+
+.contact-line {
+  display: flex;
+  align-items: baseline;
+  gap: 16rpx;
+}
+
+.contact-name {
+  color: #18181B;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.contact-phone,
+.address-text,
+.empty-line {
+  color: #71717A;
+  font-size: 25rpx;
+}
+
+.address-text,
+.empty-line {
+  display: block;
+  margin-top: 12rpx;
+  line-height: 1.55;
+}
+
+.logistics-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-top: 22rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #ECEEF0;
+  color: #3F3F46;
+  font-size: 24rpx;
+}
+
+.goods-row {
+  display: grid;
+  grid-template-columns: 104rpx minmax(0, 1fr) auto;
+  gap: 18rpx;
+  align-items: center;
+  padding: 20rpx 0;
+  border-top: 1rpx solid #ECEEF0;
+}
+
+.section-heading + .goods-row {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.goods-row:last-child {
+  padding-bottom: 0;
+}
+
+.goods-image {
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 12rpx;
+  background: #F0F2F3;
+}
+
+.goods-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B7280;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.goods-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.goods-title {
+  color: #27272A;
+  font-size: 27rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.goods-spec,
+.goods-quantity {
+  color: #85858D;
+  font-size: 23rpx;
+}
+
+.goods-subtotal {
+  align-self: start;
+  color: #27272A;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.amount-section > .section-title,
+.order-section > .section-title,
+.timeline-section > .section-title {
+  margin-bottom: 20rpx;
+}
+
+.amount-row,
+.payment-method,
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  min-height: 64rpx;
+  color: #71717A;
+  font-size: 25rpx;
+}
+
+.amount-row > text:last-child,
+.payment-method > text:last-child {
+  color: #27272A;
+}
+
+.amount-row.discount > text:last-child {
+  color: #047857;
+}
+
+.amount-row.total {
+  min-height: 80rpx;
+  margin-top: 10rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #E5E7EB;
+  color: #18181B;
+  font-weight: 700;
+}
+
+.total-price {
+  color: #D55312 !important;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.payment-method {
+  margin-top: 6rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #F0F1F2;
 }
 
 .info-row {
+  border-top: 1rpx solid #F0F1F2;
+}
+
+.order-section > .section-title + .info-row {
+  border-top: 0;
+}
+
+.info-value-wrap {
+  min-width: 0;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid var(--border-light);
-}
-
-.info-row:last-child {
-  border-bottom: none;
-}
-
-.info-label {
-  font-size: 26rpx;
-  color: var(--text-muted);
+  justify-content: flex-end;
+  gap: 12rpx;
 }
 
 .info-value {
-  font-size: 26rpx;
-  color: var(--text);
-  font-weight: 500;
+  max-width: 70%;
+  color: #3F3F46;
+  text-align: right;
+  word-break: break-all;
 }
 
-.info-value.price {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: var(--secondary);
+.order-no {
+  max-width: 440rpx;
+  font-size: 23rpx;
 }
 
-.info-row.highlight {
-  background: var(--bg);
-  margin: 16rpx -16rpx;
-  padding: 20rpx 16rpx;
-  border-radius: var(--radius-md);
-  border: none;
-}
-
-.info-row.strong {
-  background: var(--primary-bg);
-  margin: 16rpx -16rpx;
-  padding: 20rpx 16rpx;
-  border-radius: var(--radius-md);
-  border: none;
-}
-
-.payment-note {
-  margin-top: 20rpx;
-  padding: 20rpx;
-  background: var(--bg);
-  border-radius: var(--radius-md);
-  font-size: 22rpx;
-  color: var(--text-muted);
-  line-height: 1.6;
-}
-
-/* Items Card */
-.items-card {
-  margin: 0 24rpx;
-  padding: 32rpx;
-  background: var(--card);
-  border-radius: var(--radius-xl);
-  margin-bottom: 24rpx;
-}
-
-.order-item {
-  display: flex;
-  gap: 20rpx;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid var(--border-light);
-}
-
-.order-item:last-child {
-  border-bottom: none;
-}
-
-.item-image {
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: var(--radius-md);
-  overflow: hidden;
+.copy-text {
   flex-shrink: 0;
-}
-
-.image-placeholder {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, var(--primary-bg), var(--primary));
-}
-
-.item-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.item-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1.3;
-}
-
-.item-meta {
+  color: #047857;
   font-size: 22rpx;
-  color: var(--text-muted);
 }
 
-.item-subtotal {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: var(--secondary);
+.timeline-row {
+  display: grid;
+  grid-template-columns: 24rpx minmax(0, 1fr);
+  gap: 18rpx;
+  min-height: 88rpx;
 }
 
-/* Timeline Card */
-.timeline-card {
-  margin: 0 24rpx;
-  padding: 32rpx;
-  background: var(--card);
-  border-radius: var(--radius-xl);
-  margin-bottom: 24rpx;
-}
-
-.timeline {
+.timeline-rail {
   display: flex;
   flex-direction: column;
-}
-
-.timeline-item {
-  display: flex;
-  gap: 20rpx;
-  position: relative;
+  align-items: center;
 }
 
 .timeline-dot {
-  width: 20rpx;
-  height: 20rpx;
+  width: 16rpx;
+  height: 16rpx;
+  flex: 0 0 16rpx;
+  margin-top: 8rpx;
+  background: #D4D4D8;
   border-radius: 50%;
-  background: var(--border);
-  flex-shrink: 0;
-  margin-top: 6rpx;
-  z-index: 1;
 }
 
 .timeline-dot.active {
-  background: var(--primary);
-  box-shadow: 0 0 0 6rpx var(--primary-bg);
+  background: #07845D;
+  box-shadow: 0 0 0 5rpx #E3F4ED;
 }
 
-.timeline-dot.last {
-  background: var(--border-light);
-}
-
-.timeline-item:not(:last-child)::before {
-  content: '';
-  position: absolute;
-  left: 9rpx;
-  top: 26rpx;
+.timeline-line {
   width: 2rpx;
-  height: calc(100% + 20rpx);
-  background: var(--border-light);
+  flex: 1;
+  margin-top: 8rpx;
+  background: #E4E4E7;
 }
 
-.timeline-content {
+.timeline-copy {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
-  padding-bottom: 32rpx;
+  padding-bottom: 24rpx;
 }
 
 .timeline-title {
-  font-size: 28rpx;
+  color: #71717A;
+  font-size: 26rpx;
   font-weight: 600;
-  color: var(--text);
 }
 
-.timeline-item:not(:has(+ .timeline-item)) .timeline-title,
-.timeline-dot:not(.active) + .timeline-content .timeline-title {
-  color: var(--text-muted);
+.timeline-title.active {
+  color: #27272A;
 }
 
 .timeline-time {
+  color: #8B8B93;
   font-size: 22rpx;
-  color: var(--text-muted);
 }
 
-/* Loading State */
+.action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  min-height: 108rpx;
+  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1rpx solid #E5E7EB;
+  box-sizing: content-box;
+}
+
+.action-button {
+  min-width: 176rpx;
+  height: 76rpx;
+  margin: 0;
+  padding: 0 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.action-button::after,
+.retry-button::after {
+  border: 0;
+}
+
+.action-button.primary {
+  color: #FFFFFF;
+  background: #07845D;
+}
+
+.action-button.secondary {
+  color: #3F3F46;
+  background: #FFFFFF;
+  border: 1rpx solid #D4D4D8;
+}
+
+.action-button[disabled] {
+  opacity: 0.55;
+}
+
 .loading-state {
   padding: 24rpx;
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--border-light) 25%, var(--bg) 50%, var(--border-light) 75%);
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s infinite;
-  border-radius: var(--radius-md);
+  background: #E9EBED;
+  border-radius: 16rpx;
+  animation: pulse 1.4s ease-in-out infinite;
 }
 
-.skeleton-header {
-  height: 160rpx;
-  border-radius: var(--radius-xl);
-}
+.status-skeleton { height: 176rpx; }
+.content-skeleton { height: 240rpx; margin-top: 20rpx; }
+.content-skeleton.short { height: 160rpx; }
 
-.skeleton-line {
-  height: 100rpx;
-  margin-top: 24rpx;
-  border-radius: var(--radius-xl);
-}
-
-.skeleton-line.short {
-  width: 60%;
-}
-
-@keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* Error State */
 .error-state {
+  min-height: 70vh;
+  padding: 48rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 120rpx 32rpx;
+  text-align: center;
 }
 
-.error-icon {
-  font-size: 80rpx;
-  color: var(--error);
-  margin-bottom: 24rpx;
-}
-
-.error-text {
-  font-size: 28rpx;
-  color: var(--text-muted);
-  margin-bottom: 32rpx;
-}
-
-.retry-btn {
-  padding: 16rpx 40rpx;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: white;
-  font-size: 26rpx;
-  font-weight: 600;
-  border-radius: 40rpx;
-}
-
-/* Action Section */
-.action-section {
-  display: flex;
-  gap: 24rpx;
-  padding: 32rpx 24rpx;
-}
-
-.action-btn {
-  flex: 1;
-  height: 96rpx;
-  border-radius: 48rpx;
-  font-size: 30rpx;
-  font-weight: 700;
+.error-mark {
+  width: 72rpx;
+  height: 72rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  color: #A33A34;
+  background: #FBE9E7;
+  border-radius: 50%;
+  font-size: 38rpx;
+  font-weight: 800;
 }
 
-.action-btn.primary {
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: white;
-  box-shadow: 0 8rpx 24rpx rgba(16, 185, 129, 0.25);
+.error-title {
+  margin-top: 24rpx;
+  color: #27272A;
+  font-size: 30rpx;
+  font-weight: 700;
 }
 
-.action-btn.secondary {
-  background: var(--bg);
-  color: var(--text);
-  border: 2rpx solid var(--border);
+.error-description {
+  margin-top: 10rpx;
+  color: #71717A;
+  font-size: 25rpx;
 }
 
-/* ===== Reduced Motion ===== */
+.retry-button {
+  height: 72rpx;
+  margin-top: 28rpx;
+  padding: 0 32rpx;
+  color: #FFFFFF;
+  background: #07845D;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .sync-spinner,
   .skeleton {
     animation: none;
-    background: var(--border-light);
-  }
-
-  .action-btn {
-    transition: none;
-  }
-
-  .action-btn:active {
-    transform: none;
   }
 }
 </style>

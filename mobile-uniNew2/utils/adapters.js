@@ -40,7 +40,7 @@ export function toOrderView(item = {}, index = 0) {
     title: item.title || item.package_name || item.service_name || '未命名订单',
     time: formatDateTime(item.created_at || item.time),
     channel: item.biz_type === 'local_life' ? '本地生活' : item.channel_text || item.channel || '商城订单',
-    amount: formatMoney(item.pay_amount ?? item.amount ?? 0),
+    amount: formatMoney(item.pay_amount ?? item.amount ?? item.total_amount ?? 0),
     cashDue: formatMoney(cashDue),
     status,
     paymentCombo: item.payment_combo || '待支付',

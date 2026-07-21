@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC
 from decimal import Decimal
 from typing import Any
 
@@ -34,7 +35,13 @@ def money(value: Any) -> float:
 
 
 def iso_datetime(value: Any) -> str | None:
-    return value.isoformat() if value else None
+    if not value:
+        return None
+    if isinstance(value, str):
+        return value
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
 
 
 TAG_RE = re.compile(r'<[^>]+>')
@@ -756,7 +763,7 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
             OrderAssetDeduction.order_id == order.id
         ).order_by(OrderAssetDeduction.id.asc()).all()
         data['order'] = data.copy()
-        data['items'] = [serialize_order_item(item) for item in items]
+        data['items'] = [serialize_order_item(item, db) for item in items]
         data['asset_deductions'] = [serialize_order_asset_deduction(item) for item in deductions]
         data['payment_combo'] = _payment_combo(order, deductions)
         data['pay_channel_options'] = _order_pay_channel_options(order, deductions)
@@ -795,8 +802,8 @@ def _order_timeline(order: Order) -> list[dict[str, Any]]:
     return steps
 
 
-def serialize_order_item(item: OrderItem) -> dict[str, Any]:
-    return {
+def serialize_order_item(item: OrderItem, db: Session | None = None) -> dict[str, Any]:
+    data = {
         'id': item.id,
         'order_id': item.order_id,
         'product_id': item.product_id,
@@ -808,6 +815,14 @@ def serialize_order_item(item: OrderItem) -> dict[str, Any]:
         'total_amount': money(item.total_amount),
         'created_at': iso_datetime(item.created_at),
     }
+    if db:
+        product = db.get(Product, item.product_id)
+        data['image'] = (
+            _normalize_media_url(product.main_image) or _normalize_media_url(product.cover)
+            if product
+            else None
+        )
+    return data
 
 
 def serialize_order_asset_deduction(item: OrderAssetDeduction) -> dict[str, Any]:
@@ -986,7 +1001,7 @@ def serialize_shipment(db: Session, order: Order, include_detail: bool = False) 
         'can_confirm': status == 'shipping',
     }
     if include_detail:
-        data['items'] = [serialize_order_item(item) for item in items]
+        data['items'] = [serialize_order_item(item, db) for item in items]
     return data
 
 

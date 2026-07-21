@@ -1,4 +1,5 @@
 import base64
+import json
 import tempfile
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -99,6 +100,78 @@ class AlipayH5PaymentTest(TestCase):
         self.assertIn('#/subpackages/order/detail?order_id=12&out_trade_no=PAYAL0012ABCDEF', payment['return_url'])
         self.assertEqual(payment['provider_payload']['biz_content']['product_code'], 'QUICK_WAP_WAP')
         self.assertEqual(payment['provider_payload']['biz_content']['timeout_express'], '30m')
+
+    def test_verifies_signed_trade_query_response(self):
+        response = {
+            'code': '10000',
+            'msg': 'Success',
+            'out_trade_no': 'PAYAL0012ABCDEF',
+            'trade_no': '20260720000000000001',
+            'trade_status': 'TRADE_SUCCESS',
+            'total_amount': '9.90',
+        }
+        response_body = json.dumps(response, ensure_ascii=False, separators=(',', ':'))
+        signature = PaymentService._rsa_sign(self.private_key, response_body)
+        raw_body = f'{{"alipay_trade_query_response":{response_body},"sign":"{signature}"}}'
+
+        result = PaymentService._alipay_verify_api_response(
+            raw_body,
+            'alipay_trade_query_response',
+            self.config,
+        )
+
+        self.assertEqual(result, response)
+
+    def test_reconciles_successful_trade_query(self):
+        tx = self.build_transaction()
+        order = self.build_order()
+        paid_order = SimpleNamespace(**vars(order), order_status='PENDING_SHIP')
+        query_result = {
+            'code': '10000',
+            'msg': 'Success',
+            'out_trade_no': tx.out_trade_no,
+            'trade_no': '20260720000000000001',
+            'trade_status': 'TRADE_SUCCESS',
+            'total_amount': '9.90',
+        }
+        db = MagicMock()
+        db.query.return_value.filter.return_value.filter.return_value.first.return_value = tx
+
+        with (
+            patch.object(payment_module, 'payment_config', PaymentConfig(mock_external_payment=False, alipay=self.config)),
+            patch.object(PaymentService, '_alipay_query_trade', return_value=query_result),
+            patch.object(PaymentService, 'confirm_paid_order', return_value=paid_order) as confirm_paid,
+        ):
+            result = PaymentService.reconcile_alipay_payment(db, order, tx.out_trade_no)
+
+        self.assertIs(result['order'], paid_order)
+        self.assertEqual(result['provider_status'], 'TRADE_SUCCESS')
+        confirm_paid.assert_called_once_with(
+            db,
+            tx,
+            notify_payload={'source': 'trade_query', **query_result},
+            provider_trade_no='20260720000000000001',
+        )
+
+    def test_rejects_trade_query_amount_mismatch(self):
+        tx = self.build_transaction()
+        order = self.build_order()
+        query_result = {
+            'code': '10000',
+            'out_trade_no': tx.out_trade_no,
+            'trade_no': '20260720000000000001',
+            'trade_status': 'TRADE_SUCCESS',
+            'total_amount': '10.00',
+        }
+        db = MagicMock()
+        db.query.return_value.filter.return_value.filter.return_value.first.return_value = tx
+
+        with (
+            patch.object(payment_module, 'payment_config', PaymentConfig(mock_external_payment=False, alipay=self.config)),
+            patch.object(PaymentService, '_alipay_query_trade', return_value=query_result),
+            self.assertRaisesRegex(ConflictError, 'amount mismatch'),
+        ):
+            PaymentService.reconcile_alipay_payment(db, order, tx.out_trade_no)
 
     def test_loads_public_key_from_x509_certificate(self):
         name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Alipay Test')])

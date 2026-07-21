@@ -32,6 +32,10 @@ class OrderPayRequest(AppBaseModel):
     auto_complete: bool = True
 
 
+class OrderPaymentStatusRequest(AppBaseModel):
+    out_trade_no: str | None = None
+
+
 class ProductZoneConfigUpdateRequest(AppBaseModel):
     package_required: bool = False
     package_id: int | None = None
