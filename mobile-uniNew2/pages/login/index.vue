@@ -25,10 +25,6 @@
           <view class="form-header">
             <text class="form-title">手机号登录</text>
             <text class="form-subtitle">未注册的手机号将自动创建账号</text>
-            <view v-if="inviteCode" class="invite-notice">
-              <text>邀请关系将在登录后绑定</text>
-              <text class="invite-notice-code">{{ inviteCode }}</text>
-            </view>
           </view>
 
         <view class="form-body">
@@ -82,6 +78,23 @@
             <text v-if="codeError" class="error-text">{{ codeError }}</text>
           </view>
 
+          <view class="input-group">
+            <view class="input-label">
+              <text class="label-text">邀请码（选填）</text>
+            </view>
+            <view class="input-wrap" :class="{ 'input-error': inviteCodeError }">
+              <input
+                v-model="form.inviteCode"
+                class="form-input invite-code-input"
+                type="text"
+                maxlength="32"
+                placeholder="扫码进入时会自动填写"
+                @input="inviteCodeError = ''"
+              />
+            </view>
+            <text v-if="inviteCodeError" class="error-text">{{ inviteCodeError }}</text>
+          </view>
+
           <!-- Login Button -->
           <button
             class="login-btn"
@@ -131,15 +144,16 @@ const submitting = ref(false);
 const sendingCode = ref(false);
 const cooldown = ref(0);
 const agreed = ref(true);
-const inviteCode = ref('');
 
 const form = reactive({
   phone: '',
-  code: ''
+  code: '',
+  inviteCode: ''
 });
 
 const phoneError = ref('');
 const codeError = ref('');
+const inviteCodeError = ref('');
 
 let countdownTimer = null;
 
@@ -174,6 +188,25 @@ const validatePhone = () => {
     return false;
   }
   phoneError.value = '';
+  return true;
+};
+
+const validateInviteCode = () => {
+  const value = String(form.inviteCode || '').trim();
+  if (!value) {
+    form.inviteCode = '';
+    inviteCodeError.value = '';
+    return true;
+  }
+
+  const code = extractInviteCode(value);
+  if (!code) {
+    inviteCodeError.value = '请输入有效的邀请码';
+    return false;
+  }
+
+  form.inviteCode = code;
+  inviteCodeError.value = '';
   return true;
 };
 
@@ -219,6 +252,7 @@ const handleLogin = async () => {
     codeError.value = '请输入验证码';
     return;
   }
+  if (!validateInviteCode()) return;
   if (!agreed.value) {
     uni.showToast({ title: '请先同意用户协议', icon: 'none' });
     return;
@@ -229,7 +263,7 @@ const handleLogin = async () => {
     const loginRes = await authApi.loginByCode({
       phone: form.phone,
       code: form.code,
-      invite_code: inviteCode.value || undefined
+      invite_code: form.inviteCode || undefined
     });
 
     const token = loginRes?.token || loginRes?.access_token || '';
@@ -260,7 +294,7 @@ const openAgreement = (type) => {
 };
 
 onLoad((options = {}) => {
-  inviteCode.value = extractInviteCode(options.invite_code || '');
+  form.inviteCode = extractInviteCode(options.invite_code || '');
 });
 
 onMounted(() => {
@@ -279,7 +313,7 @@ onUnmounted(() => {
   min-height: 100vh;
   background: var(--bg);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 /* ===== Background ===== */
@@ -366,25 +400,6 @@ onUnmounted(() => {
   margin-bottom: 48rpx;
 }
 
-.invite-notice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  margin-top: 24rpx;
-  padding: 16rpx 20rpx;
-  border: 1rpx solid var(--primary-border, #A7F3D0);
-  border-radius: var(--radius-md);
-  background: var(--primary-bg);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-.invite-notice-code {
-  color: var(--primary-dark);
-  font-weight: var(--font-bold);
-}
-
 .form-title {
   font-size: var(--text-xl);
   font-weight: var(--font-bold);
@@ -453,6 +468,10 @@ onUnmounted(() => {
   height: 100%;
   font-size: var(--text-lg);
   color: var(--text);
+}
+
+.invite-code-input {
+  text-transform: uppercase;
 }
 
 .form-input::placeholder {

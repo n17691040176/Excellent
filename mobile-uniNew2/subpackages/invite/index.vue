@@ -4,7 +4,12 @@
       <view class="header-content">
         <AppBackButton @click="goBack" />
         <text class="page-title">邀请好友</text>
-        <view class="header-scan" role="button" @click="scanInvite">扫码</view>
+        <view
+          class="header-scan"
+          :class="{ disabled: scanning || binding }"
+          role="button"
+          @click="scanInvite"
+        >扫码</view>
       </view>
     </view>
 
@@ -33,8 +38,8 @@
       </button>
 
       <view class="secondary-actions">
-        <button class="secondary-btn" :disabled="binding" @click="scanInvite">
-          {{ binding ? '绑定中...' : '扫一扫绑定上级' }}
+        <button class="secondary-btn" :disabled="binding || scanning" @click="scanInvite">
+          {{ scanning ? '识别中...' : (binding ? '绑定中...' : '扫一扫绑定上级') }}
         </button>
         <view class="action-divider" />
         <button class="secondary-btn" @click="openManualBind">输入邀请码</button>
@@ -165,6 +170,7 @@ import QRCode from 'qrcode';
 import { userApi } from '@/api/modules';
 import { getInviteWebBaseUrl } from '@/config';
 import { pickListPayload, toInviteStats } from '@/utils/adapters';
+import { scanQrCodeFromImage } from '@/utils/h5-qr-scanner';
 import { buildInviteUrl, extractInviteCode } from '@/utils/invite';
 import { trackPageView } from '@/utils/track';
 
@@ -175,6 +181,7 @@ const POSTER_CANVAS_ID = 'invitePosterCanvas';
 const loading = ref(false);
 const failed = ref(false);
 const binding = ref(false);
+const scanning = ref(false);
 const posterGenerating = ref(false);
 const posterVisible = ref(false);
 const manualBindVisible = ref(false);
@@ -256,6 +263,82 @@ function drawQrCode(context, value, x, y, size) {
   }
 }
 
+function drawH5Poster() {
+  const scale = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = POSTER_WIDTH * scale;
+  canvas.height = POSTER_HEIGHT * scale;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('浏览器不支持海报画布');
+  context.scale(scale, scale);
+
+  context.fillStyle = '#F4FBF7';
+  context.fillRect(0, 0, POSTER_WIDTH, POSTER_HEIGHT);
+  context.fillStyle = '#0F6B46';
+  context.fillRect(0, 0, POSTER_WIDTH, 238);
+  context.fillStyle = '#F2A65A';
+  context.fillRect(0, 228, POSTER_WIDTH, 10);
+
+  context.textAlign = 'center';
+  context.fillStyle = '#FFFFFF';
+  context.font = '600 34px sans-serif';
+  context.fillText('卓越商城', POSTER_WIDTH / 2, 72);
+  context.font = '700 48px sans-serif';
+  context.fillText('好物一起分享', POSTER_WIDTH / 2, 140);
+  context.font = '24px sans-serif';
+  context.fillText('扫码加入，开启品质生活', POSTER_WIDTH / 2, 190);
+
+  context.beginPath();
+  context.moveTo(72, 274);
+  context.lineTo(528, 274);
+  context.quadraticCurveTo(546, 274, 546, 292);
+  context.lineTo(546, 726);
+  context.quadraticCurveTo(546, 744, 528, 744);
+  context.lineTo(72, 744);
+  context.quadraticCurveTo(54, 744, 54, 726);
+  context.lineTo(54, 292);
+  context.quadraticCurveTo(54, 274, 72, 274);
+  context.closePath();
+  context.fillStyle = '#FFFFFF';
+  context.fill();
+
+  const qr = QRCode.create(inviteUrl.value, { errorCorrectionLevel: 'M' });
+  const moduleCount = qr.modules.size;
+  const qrSize = 300;
+  const cellSize = Math.floor(qrSize / moduleCount);
+  const actualSize = cellSize * moduleCount;
+  const offsetX = 150 + Math.floor((qrSize - actualSize) / 2);
+  const offsetY = 316 + Math.floor((qrSize - actualSize) / 2);
+  context.fillStyle = '#FFFFFF';
+  context.fillRect(122, 288, 356, 356);
+  context.fillStyle = '#13251D';
+  for (let row = 0; row < moduleCount; row += 1) {
+    for (let column = 0; column < moduleCount; column += 1) {
+      if (qr.modules.get(row, column)) {
+        context.fillRect(offsetX + column * cellSize, offsetY + row * cellSize, cellSize, cellSize);
+      }
+    }
+  }
+
+  context.textAlign = 'center';
+  context.fillStyle = '#173D2D';
+  context.font = '600 28px sans-serif';
+  context.fillText('长按识别或使用扫一扫', POSTER_WIDTH / 2, 670);
+  context.fillStyle = '#678075';
+  context.font = '21px sans-serif';
+  context.fillText('邀请码', 247, 713);
+  context.textAlign = 'left';
+  context.fillStyle = '#0F6B46';
+  context.font = '600 24px sans-serif';
+  context.fillText(inviteCode.value, 303, 713);
+
+  context.textAlign = 'center';
+  context.fillStyle = '#73867D';
+  context.font = '20px sans-serif';
+  context.fillText('卓越商城 · 品质好物 优享生活', POSTER_WIDTH / 2, 795);
+  return canvas.toDataURL('image/png', 1);
+}
+
 function drawPoster() {
   return new Promise((resolve) => {
     const context = uni.createCanvasContext(POSTER_CANVAS_ID);
@@ -318,6 +401,11 @@ async function generatePoster() {
   if (!inviteUrl.value) {
     throw new Error('邀请链接未就绪');
   }
+  if (typeof document !== 'undefined') {
+    posterPath.value = drawH5Poster();
+    posterCode.value = inviteCode.value;
+    return;
+  }
   await nextTick();
   await drawPoster();
   posterPath.value = await exportPoster();
@@ -340,6 +428,7 @@ const share = async () => {
   try {
     await generatePoster();
   } catch (error) {
+    console.error('[invite] poster generation failed:', error);
     posterVisible.value = false;
     uni.showToast({ title: '海报生成失败，请稍后重试', icon: 'none' });
   } finally {
@@ -376,6 +465,11 @@ const savePoster = () => {
   if (!posterPath.value) return;
 
   if (typeof document !== 'undefined') {
+    if (/MicroMessenger/i.test(navigator.userAgent || '')) {
+      previewPoster();
+      uni.showToast({ title: '请长按图片保存', icon: 'none' });
+      return;
+    }
     const anchor = document.createElement('a');
     anchor.href = posterPath.value;
     anchor.download = `卓越商城邀请海报-${inviteCode.value}.png`;
@@ -432,9 +526,21 @@ async function bindByCode(value) {
   }
 }
 
-const scanInvite = () => {
-  if (typeof window !== 'undefined') {
-    openManualBind();
+const scanInvite = async () => {
+  if (scanning.value || binding.value) return;
+
+  if (typeof document !== 'undefined') {
+    scanning.value = true;
+    try {
+      const result = await scanQrCodeFromImage();
+      await bindByCode(result);
+    } catch (error) {
+      if (error?.code !== 'SCAN_CANCELLED') {
+        uni.showToast({ title: error?.message || '扫码失败，请重试', icon: 'none' });
+      }
+    } finally {
+      scanning.value = false;
+    }
     return;
   }
 
@@ -502,6 +608,8 @@ onPullDownRefresh(async () => {
 }
 
 .header-content { gap: 16rpx; }
+
+.header-scan.disabled { opacity: 0.5; }
 
 .logo-mark {
   display: flex;

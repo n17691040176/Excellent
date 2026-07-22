@@ -22,6 +22,7 @@
     "@dcloudio/uni-components": "3.0.0-3080720230703001",
     "@dcloudio/uni-h5": "3.0.0-3080720230703001",
     "@dcloudio/uni-mp-weixin": "3.0.0-3080720230703001",
+    "@zxing/browser": "^0.1.5",
     "province-city-china": "^8.5.8",
     "qrcode": "^1.5.4",
     "vue": "^3.2.45",

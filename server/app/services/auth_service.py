@@ -4,10 +4,11 @@ from random import choices
 from string import digits
 from typing import cast
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.exceptions import ConflictError, UnauthorizedError
+from app.core.exceptions import ConflictError, NotFoundError, UnauthorizedError
 from app.core.redis import get_redis_client
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.commission import UserCommission
@@ -55,7 +56,13 @@ class AuthService:
         nickname: str,
         invite_code: str | None = None,
     ) -> User:
-        parent = db.query(User).filter(User.invite_code == invite_code).first() if invite_code else None
+        clean_invite_code = str(invite_code or '').strip()
+        parent = None
+        if clean_invite_code:
+            parent = db.query(User).filter(func.upper(User.invite_code) == clean_invite_code.upper()).first()
+            if not parent:
+                raise NotFoundError('邀请码无效')
+
         user = User(
             phone=phone,
             password_hash=hash_password(password),
@@ -75,7 +82,7 @@ class AuthService:
                     inviter_user_id=parent.id,
                     invitee_user_id=user.id,
                     level=1,
-                    invite_code=invite_code or '',
+                    invite_code=parent.invite_code,
                     bound_at=now(),
                 )
             )
@@ -85,7 +92,7 @@ class AuthService:
                         inviter_user_id=parent.parent_id,
                         invitee_user_id=user.id,
                         level=2,
-                        invite_code=invite_code or '',
+                        invite_code=parent.invite_code,
                         bound_at=now(),
                     )
                 )

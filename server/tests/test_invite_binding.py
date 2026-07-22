@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
 from app.api.v1 import users as users_api
-from app.core.exceptions import ConflictError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.db.base import Base
 from app.models.enums import BusinessIdentity, GlobalRole, UserStatus
 from app.models.user import InviteRecord, User
+from app.services.auth_service import AuthService
 
 UserService = users_api.UserService
 
@@ -92,3 +93,42 @@ def test_self_and_descendant_binding_are_rejected(db: Session):
         UserService.bind_inviter(db, user, user.invite_code)
     with pytest.raises(ConflictError, match='不能绑定自己的下级'):
         UserService.bind_inviter(db, user, child.invite_code)
+
+
+def test_registration_binds_optional_invite_code_case_insensitively(db: Session, monkeypatch):
+    grandparent = create_user(db, '1')
+    inviter = create_user(db, '2', parent_id=grandparent.id)
+    db.commit()
+    monkeypatch.setattr('app.services.auth_service.init_user_assets', lambda _db, _user_id: None)
+
+    invitee = AuthService._create_user(
+        db,
+        phone='13900000003',
+        password='test-password',
+        nickname='新用户',
+        invite_code=inviter.invite_code.lower(),
+    )
+    db.commit()
+
+    assert invitee.parent_id == inviter.id
+    assert invitee.grandparent_id == grandparent.id
+    assert {
+        (record.inviter_user_id, record.invitee_user_id, record.level, record.invite_code)
+        for record in db.query(InviteRecord).filter(InviteRecord.invitee_user_id == invitee.id).all()
+    } == {
+        (inviter.id, invitee.id, 1, inviter.invite_code),
+        (grandparent.id, invitee.id, 2, inviter.invite_code),
+    }
+
+
+def test_registration_rejects_an_invalid_optional_invite_code(db: Session):
+    with pytest.raises(NotFoundError, match='邀请码无效'):
+        AuthService._create_user(
+            db,
+            phone='13900000004',
+            password='test-password',
+            nickname='新用户',
+            invite_code='NOT-FOUND',
+        )
+
+    assert db.query(User).filter(User.phone == '13900000004').first() is None

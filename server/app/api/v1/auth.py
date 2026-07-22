@@ -119,7 +119,9 @@ def app_login(payload: AppLoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.phone == phone).first()
 
     if user:
-        # 已存在用户，直接登录
+        # 已存在但尚未绑定上级的用户，也可通过邀请二维码补绑。
+        if payload.invite_code and not user.parent_id:
+            UserService.bind_inviter(db, user, payload.invite_code)
         token, user = AuthService.finalize_login(db, user)
         return {
             'code': 0,
