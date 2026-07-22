@@ -345,6 +345,10 @@ async function syncReturnedPayment() {
         syncing.value = false;
         return true;
       }
+      if (result?.provider_status === 'WAIT_BUYER_PAY') {
+        paymentResultMessage.value = '支付宝支付结果暂未确认，请稍后刷新订单';
+        paymentResultTone.value = 'warning';
+      }
     } catch (error) {
       if (attempt === 2) {
         paymentResultMessage.value = '支付结果暂未同步，请稍后刷新订单';
@@ -354,7 +358,9 @@ async function syncReturnedPayment() {
     if (attempt < 2) await wait(1200);
   }
   syncing.value = false;
-  return true;
+  // Always let initialize() load the order after a failed sync. Otherwise the
+  // page stays on its placeholder state (amount/order number shown as --).
+  return false;
 }
 
 async function initialize() {

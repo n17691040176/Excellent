@@ -8,7 +8,11 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
-from app.core.payment_config import enabled_external_payment_channels, payment_config
+from app.core.payment_config import (
+    UNPAID_ORDER_EXPIRE_MINUTES,
+    enabled_external_payment_channels,
+    payment_config,
+)
 from app.models.address import UserAddress
 from app.models.asset import UserAssetLedger
 from app.models.enums import AssetType, OrderStatus, OrderType, PaymentStatus, PayStatus, ProductStatus, ZoneType
@@ -38,8 +42,6 @@ PAY_CHANNEL_ASSET_MAP = {
     'BALANCE': AssetType.BALANCE,
     'VOUCHER': AssetType.VOUCHER,
 }
-
-UNPAID_ORDER_EXPIRE_MINUTES = 30
 
 ORDER_STATUS_BUCKETS = ('pending_payment', 'pending_ship', 'shipped', 'completed', 'refund')
 ORDER_STATUS_BUCKET_MAP = {

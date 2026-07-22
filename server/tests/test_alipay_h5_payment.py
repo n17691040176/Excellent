@@ -153,6 +153,28 @@ class AlipayH5PaymentTest(TestCase):
             provider_trade_no='20260720000000000001',
         )
 
+    def test_reconciles_latest_transaction_when_return_trade_no_does_not_match(self):
+        tx = self.build_transaction()
+        order = self.build_order()
+        db = MagicMock()
+        base_query = db.query.return_value.filter.return_value
+        base_query.filter.return_value.first.return_value = None
+        base_query.filter.return_value.order_by.return_value.first.return_value = tx
+
+        with patch.object(
+            payment_module,
+            'payment_config',
+            PaymentConfig(mock_external_payment=True, alipay=self.config),
+        ):
+            result = PaymentService.reconcile_alipay_payment(
+                db,
+                order,
+                'ALIPAY_RETURN_VALUE_WITHOUT_LOCAL_TRANSACTION',
+            )
+
+        self.assertIs(result['transaction'], tx)
+        self.assertEqual(result['provider_status'], 'WAIT_BUYER_PAY')
+
     def test_rejects_trade_query_amount_mismatch(self):
         tx = self.build_transaction()
         order = self.build_order()

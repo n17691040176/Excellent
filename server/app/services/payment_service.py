@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.payment_config import (
+    UNPAID_ORDER_EXPIRE_MINUTES,
     AlipayConfig,
     WechatPayConfig,
     alipay_certificate_sn,
@@ -366,8 +367,6 @@ class PaymentService:
         if not config.notify_url:
             raise ConflictError('Alipay notify url is not configured')
 
-        from app.services.order_service import UNPAID_ORDER_EXPIRE_MINUTES
-
         is_h5 = config.payment_method == 'alipay.trade.wap.pay'
         return_url = PaymentService._alipay_return_url(order, tx, config)
         biz_content = {
@@ -539,6 +538,20 @@ class PaymentService:
         )
         if normalized_trade_no:
             tx = query.filter(PaymentTransaction.out_trade_no == normalized_trade_no).first()
+            # Alipay may return a slightly different query string after the
+            # browser leaves its hosted payment page. The authenticated order
+            # is still the source of truth, so fall back to its latest active
+            # Alipay transaction instead of failing before provider reconciliation.
+            if not tx:
+                tx = (
+                    query.filter(
+                        PaymentTransaction.status.in_(
+                            (PaymentStatus.PENDING, PaymentStatus.PAID)
+                        )
+                    )
+                    .order_by(PaymentTransaction.id.desc())
+                    .first()
+                )
         else:
             tx = query.order_by(PaymentTransaction.id.desc()).first()
         if not tx:

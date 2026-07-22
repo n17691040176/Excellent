@@ -8,6 +8,8 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
 
+UNPAID_ORDER_EXPIRE_MINUTES = 30
+
 
 def _settings_value(name: str) -> str | None:
     try:

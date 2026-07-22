@@ -133,7 +133,7 @@ export const orderApi = {
   syncPayment(id, outTradeNo = '') {
     return request.post(`/api/v1/app/orders/${id}/payment-status`, {
       out_trade_no: outTradeNo
-    }, { hideLoading: true });
+    }, { hideLoading: true, silentError: true });
   }
 };
 

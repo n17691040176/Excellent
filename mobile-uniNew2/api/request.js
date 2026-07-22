@@ -35,6 +35,7 @@ function request(options = {}) {
     params,
     header = {},
     hideLoading: shouldHideLoading = false,
+    silentError = false,
     loadingText,
     errorMessage,
     timeout = 60000,
@@ -73,13 +74,15 @@ function request(options = {}) {
         }
 
         if (statusCode >= 400) {
-          showError(
-            {
-              code: statusCode,
-              message: payload.message || getErrorMessageByCode(statusCode, '服务异常')
-            },
-            errorMessage || '服务异常'
-          );
+          if (!silentError) {
+            showError(
+              {
+                code: statusCode,
+                message: payload.message || getErrorMessageByCode(statusCode, '服务异常')
+              },
+              errorMessage || '服务异常'
+            );
+          }
           reject(payload);
           return;
         }
@@ -99,7 +102,7 @@ function request(options = {}) {
         resolve(payload.data);
       },
       fail: (err) => {
-        showError(err, errorMessage || '网络异常');
+        if (!silentError) showError(err, errorMessage || '网络异常');
         reject(err);
       },
       complete: () => {
