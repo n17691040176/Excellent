@@ -122,18 +122,17 @@ class PaymentService:
         raise ConflictError('Payment private key format is invalid') from last_error
 
     @staticmethod
-    def _load_public_key(path: str):
-        last_error: Exception | None = None
-        for candidate in PaymentService._key_candidates(path, ('PUBLIC KEY', 'RSA PUBLIC KEY')):
-            try:
-                return serialization.load_pem_public_key(candidate)
-            except ValueError as exc:
-                last_error = exc
-            try:
-                return x509.load_pem_x509_certificate(candidate).public_key()
-            except ValueError as exc:
-                last_error = exc
-        raise ConflictError('Payment public key format is invalid') from last_error
+    def _load_certificate_public_key(path: str):
+        certificate_path = Path(path)
+        if not certificate_path.is_file():
+            raise ConflictError(f'Payment certificate not found: {path}')
+        try:
+            certificates = x509.load_pem_x509_certificates(certificate_path.read_bytes())
+        except ValueError as exc:
+            raise ConflictError('Payment certificate format is invalid') from exc
+        if not certificates:
+            raise ConflictError('Payment certificate is empty')
+        return certificates[0].public_key()
 
     @staticmethod
     def _rsa_sign(private_key, message: str) -> str:
@@ -289,10 +288,9 @@ class PaymentService:
         except json.JSONDecodeError as exc:
             raise ConflictError('Alipay query response payload is invalid') from exc
 
-        public_key_path = config.alipay_public_cert_path if config.certificate_mode else config.public_key_path
-        if not public_key_path:
-            raise ConflictError('Alipay public key path is not configured')
-        public_key = PaymentService._load_public_key(public_key_path)
+        if not config.alipay_public_cert_path:
+            raise ConflictError('Alipay public certificate path is not configured')
+        public_key = PaymentService._load_certificate_public_key(config.alipay_public_cert_path)
         try:
             public_key.verify(
                 base64.b64decode(signature, validate=True),
@@ -317,11 +315,10 @@ class PaymentService:
             'version': '1.0',
             'biz_content': json.dumps(biz_content, ensure_ascii=False, separators=(',', ':')),
         }
-        if config.certificate_mode:
-            app_certificates = load_alipay_certificates(config.app_cert_path)
-            root_certificates = load_alipay_certificates(config.root_cert_path)
-            params['app_cert_sn'] = alipay_certificate_sn(app_certificates[0])
-            params['alipay_root_cert_sn'] = alipay_root_certificate_sn(root_certificates)
+        app_certificates = load_alipay_certificates(config.app_cert_path)
+        root_certificates = load_alipay_certificates(config.root_cert_path)
+        params['app_cert_sn'] = alipay_certificate_sn(app_certificates[0])
+        params['alipay_root_cert_sn'] = alipay_root_certificate_sn(root_certificates)
         private_key = PaymentService._load_private_key(config.private_key_path)
         params['sign'] = PaymentService._rsa_sign(private_key, PaymentService._alipay_sign_string(params))
 
@@ -366,6 +363,8 @@ class PaymentService:
             raise ConflictError('Alipay private key path is not configured')
         if not config.notify_url:
             raise ConflictError('Alipay notify url is not configured')
+        if not config.app_cert_path or not config.alipay_public_cert_path or not config.root_cert_path:
+            raise ConflictError('Alipay certificate paths are not configured')
 
         is_h5 = config.payment_method == 'alipay.trade.wap.pay'
         return_url = PaymentService._alipay_return_url(order, config)
@@ -387,11 +386,10 @@ class PaymentService:
             'notify_url': config.notify_url,
             'biz_content': json.dumps(biz_content, ensure_ascii=False, separators=(',', ':')),
         }
-        if config.certificate_mode:
-            app_certificates = load_alipay_certificates(config.app_cert_path)
-            root_certificates = load_alipay_certificates(config.root_cert_path)
-            params['app_cert_sn'] = alipay_certificate_sn(app_certificates[0])
-            params['alipay_root_cert_sn'] = alipay_root_certificate_sn(root_certificates)
+        app_certificates = load_alipay_certificates(config.app_cert_path)
+        root_certificates = load_alipay_certificates(config.root_cert_path)
+        params['app_cert_sn'] = alipay_certificate_sn(app_certificates[0])
+        params['alipay_root_cert_sn'] = alipay_root_certificate_sn(root_certificates)
         if return_url:
             params['return_url'] = return_url
         unsigned = PaymentService._alipay_sign_string(params)
@@ -690,14 +688,13 @@ class PaymentService:
 
     @staticmethod
     def _alipay_verify_signature(payload: dict[str, Any], config: AlipayConfig) -> None:
-        public_key_path = config.alipay_public_cert_path if config.certificate_mode else config.public_key_path
-        if not public_key_path:
-            raise ConflictError('Alipay public key path is not configured')
+        if not config.alipay_public_cert_path:
+            raise ConflictError('Alipay public certificate path is not configured')
         if 'sign' not in payload:
             raise ConflictError('Alipay payload is missing sign')
         if str(payload.get('sign_type') or '').upper() != 'RSA2':
             raise ForbiddenError('Alipay sign_type is invalid')
-        public_key = PaymentService._load_public_key(public_key_path)
+        public_key = PaymentService._load_certificate_public_key(config.alipay_public_cert_path)
         unsigned_payload = {
             key: value
             for key, value in payload.items()

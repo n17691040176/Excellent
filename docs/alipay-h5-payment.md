@@ -7,7 +7,7 @@ native App capability.
 ## Backend configuration
 
 Set these variables in the server environment. Do not commit private keys or
-the Alipay public key to Git.
+Alipay certificates to Git. Certificate mode is the only supported mode.
 
 ```dotenv
 APP_ENV=production
@@ -19,7 +19,6 @@ ALIPAY_PRIVATE_KEY_PATH=/run/secrets/alipay-merchant-private-key.pem
 ALIPAY_APP_CERT_PATH=/run/secrets/alipay-app-cert.crt
 ALIPAY_PUBLIC_CERT_PATH=/run/secrets/alipay-public-cert.crt
 ALIPAY_ROOT_CERT_PATH=/run/secrets/alipay-root-cert.crt
-ALIPAY_PUBLIC_KEY_PATH=
 ALIPAY_NOTIFY_URL=https://your-domain.example/api/v1/payments/alipay/notify
 ALIPAY_RETURN_URL=https://your-domain.example/#/subpackages/order/detail
 ALIPAY_GATEWAY_URL=https://openapi.alipay.com/gateway.do
@@ -54,11 +53,15 @@ ALIPAY_GATEWAY_URL=https://openapi-sandbox.dl.alipaydev.com/gateway.do
 6. If the signed return is unavailable, the order page falls back to
    `alipay.trade.query` and reloads the current order state.
 
-In certificate mode, `ALIPAY_PUBLIC_CERT_PATH` must contain the Alipay platform
-public certificate downloaded for the same sandbox/production environment. It
+`ALIPAY_PUBLIC_CERT_PATH` must contain the Alipay platform public certificate
+downloaded for the same sandbox/production environment. It
 must not contain the merchant application certificate or a stale certificate
 from another Alipay application. After replacing a mounted certificate,
 recreate the backend container so the running process reloads it.
+
+Keep one Alipay runtime configuration file. Set `ALIPAY_ENV_FILE` in the root
+`.env` to that file and let Compose load it through `env_file`; do not append a
+second sandbox or production block to the root `.env`.
 
 ## Unpaid orders
 

@@ -23,25 +23,29 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-if [ ! -f "server/.env.alipay.local" ]; then
-    echo "错误: server/.env.alipay.local 不存在!"
-    echo "请先填写支付宝配置模板: server/.env.alipay.example"
+read_env_value() {
+    sed -n "s/^$1=//p" .env | tail -n 1
+}
+
+ALIPAY_CONFIG_FILE="${ALIPAY_ENV_FILE:-$(read_env_value ALIPAY_ENV_FILE)}"
+ALIPAY_CONFIG_FILE="${ALIPAY_CONFIG_FILE:-/www/wwwroot/excellent/server/.env.alipay.local}"
+
+if [ ! -f "$ALIPAY_CONFIG_FILE" ]; then
+    echo "错误: 支付宝配置文件不存在: $ALIPAY_CONFIG_FILE"
+    echo "请检查根 .env 中的 ALIPAY_ENV_FILE"
     exit 1
 fi
 
-if ! grep -q '^PAYMENT_MOCK_EXTERNAL_PAYMENT=false' server/.env.alipay.local || \
-   ! grep -q '^ALIPAY_ENABLED=true' server/.env.alipay.local; then
-    echo "错误: 请在 server/.env.alipay.local 中启用支付宝支付"
+if ! grep -q '^PAYMENT_MOCK_EXTERNAL_PAYMENT=false' "$ALIPAY_CONFIG_FILE" || \
+   ! grep -q '^ALIPAY_ENABLED=true' "$ALIPAY_CONFIG_FILE"; then
+    echo "错误: 请在 $ALIPAY_CONFIG_FILE 中启用支付宝支付"
     exit 1
 fi
 
+PAYMENT_SECRETS_DIR="${PAYMENT_SECRETS_DIR:-$(read_env_value PAYMENT_SECRETS_DIR)}"
 PAYMENT_SECRETS_DIR="${PAYMENT_SECRETS_DIR:-/www/wwwroot/excellent/secrets}"
 alipay_files=(alipay-merchant-private-key.pem)
-if grep -Eq '^ALIPAY_(APP|PUBLIC|ROOT)_CERT_PATH=.+' server/.env.alipay.local; then
-    alipay_files+=(alipay-app-cert.crt alipay-public-cert.crt alipay-root-cert.crt)
-else
-    alipay_files+=(alipay-public-key.pem)
-fi
+alipay_files+=(alipay-app-cert.crt alipay-public-cert.crt alipay-root-cert.crt)
 for key_file in "${alipay_files[@]}"; do
     if [ ! -f "$PAYMENT_SECRETS_DIR/$key_file" ]; then
         echo "错误: 缺少支付宝密钥或证书文件 $PAYMENT_SECRETS_DIR/$key_file"

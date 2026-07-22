@@ -22,13 +22,33 @@ from app.services.payment_service import PaymentService
 
 
 class AlipayH5PaymentTest(TestCase):
+    @staticmethod
+    def build_certificate(private_key, common_name: str, serial_number: int | None = None):
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+        now_utc = datetime.now(UTC)
+        return (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(private_key.public_key())
+            .serial_number(serial_number or x509.random_serial_number())
+            .not_valid_before(now_utc - timedelta(days=1))
+            .not_valid_after(now_utc + timedelta(days=1))
+            .sign(private_key, hashes.SHA256())
+        )
+
     def setUp(self):
         self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.public_key = self.private_key.public_key()
+        self.alipay_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.alipay_public_key = self.alipay_private_key.public_key()
+        self.root_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
         self.private_path = root / 'merchant-private.pem'
-        self.public_path = root / 'alipay-public.pem'
+        self.app_cert_path = root / 'app-cert.crt'
+        self.alipay_cert_path = root / 'alipay-public-cert.crt'
+        self.root_cert_path = root / 'alipay-root-cert.crt'
         self.private_path.write_bytes(
             self.private_key.private_bytes(
                 serialization.Encoding.PEM,
@@ -36,17 +56,19 @@ class AlipayH5PaymentTest(TestCase):
                 serialization.NoEncryption(),
             )
         )
-        self.public_path.write_bytes(
-            self.public_key.public_bytes(
-                serialization.Encoding.PEM,
-                serialization.PublicFormat.SubjectPublicKeyInfo,
-            )
-        )
+        self.app_certificate = self.build_certificate(self.private_key, 'Merchant App', 123456789)
+        self.alipay_certificate = self.build_certificate(self.alipay_private_key, 'Alipay Platform', 234567890)
+        self.root_certificate = self.build_certificate(self.root_private_key, 'Alipay Root', 345678901)
+        self.app_cert_path.write_bytes(self.app_certificate.public_bytes(serialization.Encoding.PEM))
+        self.alipay_cert_path.write_bytes(self.alipay_certificate.public_bytes(serialization.Encoding.PEM))
+        self.root_cert_path.write_bytes(self.root_certificate.public_bytes(serialization.Encoding.PEM))
         self.config = AlipayConfig(
             enabled=True,
             app_id='2026000000000000',
             private_key_path=str(self.private_path),
-            public_key_path=str(self.public_path),
+            app_cert_path=str(self.app_cert_path),
+            alipay_public_cert_path=str(self.alipay_cert_path),
+            root_cert_path=str(self.root_cert_path),
             notify_url='https://pay.example.com/api/v1/payments/alipay/notify',
             return_url='https://pay.example.com/#/subpackages/order/detail',
             gateway_url='https://openapi.alipay.com/gateway.do',
@@ -112,7 +134,7 @@ class AlipayH5PaymentTest(TestCase):
             'total_amount': '9.90',
         }
         response_body = json.dumps(response, ensure_ascii=False, separators=(',', ':'))
-        signature = PaymentService._rsa_sign(self.private_key, response_body)
+        signature = PaymentService._rsa_sign(self.alipay_private_key, response_body)
         raw_body = f'{{"alipay_trade_query_response":{response_body},"sign":"{signature}"}}'
 
         result = PaymentService._alipay_verify_api_response(
@@ -214,7 +236,7 @@ class AlipayH5PaymentTest(TestCase):
             'version': '1.0',
         }
         payload['sign'] = PaymentService._rsa_sign(
-            self.private_key,
+            self.alipay_private_key,
             PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
         )
         db = MagicMock()
@@ -257,65 +279,42 @@ class AlipayH5PaymentTest(TestCase):
             PaymentService.reconcile_alipay_return(db, self.build_order(), payload)
         confirm_paid.assert_not_called()
 
-    def test_loads_public_key_from_x509_certificate(self):
-        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Alipay Test')])
-        now_utc = datetime.now(UTC)
-        certificate = (
-            x509.CertificateBuilder()
-            .subject_name(name)
-            .issuer_name(name)
-            .public_key(self.public_key)
-            .serial_number(x509.random_serial_number())
-            .not_valid_before(now_utc - timedelta(days=1))
-            .not_valid_after(now_utc + timedelta(days=1))
-            .sign(self.private_key, hashes.SHA256())
-        )
-        certificate_path = Path(self.temp_dir.name) / 'alipay-public-cert.pem'
-        certificate_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    def test_loads_public_key_only_from_x509_certificate(self):
+        loaded_key = PaymentService._load_certificate_public_key(str(self.alipay_cert_path))
 
-        loaded_key = PaymentService._load_public_key(str(certificate_path))
+        self.assertEqual(loaded_key.public_numbers(), self.alipay_public_key.public_numbers())
 
-        self.assertEqual(loaded_key.public_numbers(), self.public_key.public_numbers())
+    def test_rejects_raw_public_key_as_alipay_certificate(self):
+        public_key_path = Path(self.temp_dir.name) / 'raw-alipay-public-key.pem'
+        public_key_path.write_bytes(
+            self.alipay_public_key.public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
 
-    def test_builds_certificate_mode_request_with_certificate_serial_numbers(self):
-        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Alipay Test')])
-        now_utc = datetime.now(UTC)
-        app_certificate = (
-            x509.CertificateBuilder()
-            .subject_name(name)
-            .issuer_name(name)
-            .public_key(self.public_key)
-            .serial_number(123456789)
-            .not_valid_before(now_utc - timedelta(days=1))
-            .not_valid_after(now_utc + timedelta(days=1))
-            .sign(self.private_key, hashes.SHA256())
-        )
-        app_cert_path = Path(self.temp_dir.name) / 'app-cert.crt'
-        root_cert_path = Path(self.temp_dir.name) / 'root-cert.crt'
-        app_cert_path.write_bytes(app_certificate.public_bytes(serialization.Encoding.PEM))
-        root_cert_path.write_bytes(app_certificate.public_bytes(serialization.Encoding.PEM))
-        cert_config = AlipayConfig(
-            **{
-                **self.config.__dict__,
-                'app_cert_path': str(app_cert_path),
-                'alipay_public_cert_path': str(app_cert_path),
-                'root_cert_path': str(root_cert_path),
-            }
-        )
+        with self.assertRaisesRegex(ConflictError, 'certificate format is invalid'):
+            PaymentService._load_certificate_public_key(str(public_key_path))
+
+    def test_builds_request_with_certificate_serial_numbers(self):
 
         payment = PaymentService._alipay_build_request_payment(
             self.build_order(),
             self.build_transaction(),
-            cert_config,
+            self.config,
         )
 
-        params = dict(payment['payment_form']['params'], charset=cert_config.charset)
-        expected_sn = md5(
-            f'{app_certificate.issuer.rfc4514_string()}{app_certificate.serial_number}'.encode(),
+        params = dict(payment['payment_form']['params'], charset=self.config.charset)
+        expected_app_sn = md5(
+            f'{self.app_certificate.issuer.rfc4514_string()}{self.app_certificate.serial_number}'.encode(),
             usedforsecurity=False,
         ).hexdigest()
-        self.assertEqual(params['app_cert_sn'], expected_sn)
-        self.assertEqual(params['alipay_root_cert_sn'], expected_sn)
+        expected_root_sn = md5(
+            f'{self.root_certificate.issuer.rfc4514_string()}{self.root_certificate.serial_number}'.encode(),
+            usedforsecurity=False,
+        ).hexdigest()
+        self.assertEqual(params['app_cert_sn'], expected_app_sn)
+        self.assertEqual(params['alipay_root_cert_sn'], expected_root_sn)
         signature = base64.b64decode(params.pop('sign'))
         message = PaymentService._alipay_sign_string(params)
         self.public_key.verify(signature, message.encode(), padding.PKCS1v15(), hashes.SHA256())
@@ -333,7 +332,7 @@ class AlipayH5PaymentTest(TestCase):
             'sign_type': 'RSA2',
         }
         payload['sign'] = PaymentService._rsa_sign(
-            self.private_key,
+            self.alipay_private_key,
             PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
         )
         db = MagicMock()
@@ -350,7 +349,7 @@ class AlipayH5PaymentTest(TestCase):
 
         payload['total_amount'] = '9.91'
         payload['sign'] = PaymentService._rsa_sign(
-            self.private_key,
+            self.alipay_private_key,
             PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
         )
         with (
@@ -381,10 +380,18 @@ class AlipayH5PaymentTest(TestCase):
 
     def test_rejects_invalid_alipay_key_material(self):
         self.private_path.write_text('not a private key', encoding='utf-8')
-        self.public_path.write_text('not a public key', encoding='utf-8')
 
         with self.assertRaisesRegex(RuntimeError, 'valid unencrypted PEM private key'):
             validate_payment_config(
                 'production',
                 PaymentConfig(mock_external_payment=False, alipay=self.config),
+            )
+
+    def test_requires_alipay_certificate_paths(self):
+        config = AlipayConfig(**{**self.config.__dict__, 'alipay_public_cert_path': ''})
+
+        with self.assertRaisesRegex(RuntimeError, 'ALIPAY_PUBLIC_CERT_PATH is required'):
+            validate_payment_config(
+                'production',
+                PaymentConfig(mock_external_payment=False, alipay=config),
             )

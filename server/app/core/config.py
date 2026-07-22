@@ -72,7 +72,9 @@ class Settings(BaseSettings):
     alipay_enabled: bool | None = None
     alipay_app_id: str | None = None
     alipay_private_key_path: str | None = None
-    alipay_public_key_path: str | None = None
+    alipay_app_cert_path: str | None = None
+    alipay_public_cert_path: str | None = None
+    alipay_root_cert_path: str | None = None
     alipay_notify_url: str | None = None
     alipay_return_url: str | None = None
     alipay_gateway_url: str | None = None
