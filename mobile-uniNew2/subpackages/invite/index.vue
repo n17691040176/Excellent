@@ -436,17 +436,56 @@ const share = async () => {
   }
 };
 
-const copyCode = async () => {
-  if (!inviteCode.value) return;
-  await uni.setClipboardData({ data: inviteCode.value });
-  uni.showToast({ title: '邀请码已复制', icon: 'none' });
-};
+function copyTextInBrowser(value) {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    return navigator.clipboard.writeText(value);
+  }
 
-const copyLink = async () => {
-  if (!inviteUrl.value) return;
-  await uni.setClipboardData({ data: inviteUrl.value });
-  uni.showToast({ title: '邀请链接已复制', icon: 'none' });
-};
+  return new Promise((resolve, reject) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, value.length);
+
+    try {
+      if (!document.execCommand('copy')) throw new Error('浏览器拒绝访问剪贴板');
+      resolve();
+    } catch (error) {
+      reject(error);
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  });
+}
+
+function copyText(value) {
+  if (typeof document !== 'undefined') return copyTextInBrowser(value);
+
+  return new Promise((resolve, reject) => {
+    uni.setClipboardData({ data: value, success: resolve, fail: reject });
+  });
+}
+
+async function copyWithFeedback(value, successTitle) {
+  if (!value) return;
+  try {
+    await copyText(value);
+    uni.showToast({ title: successTitle, icon: 'none' });
+  } catch (error) {
+    console.error('[invite] copy failed:', error);
+    uni.showToast({ title: '复制失败，请稍后重试', icon: 'none' });
+  }
+}
+
+const copyCode = () => copyWithFeedback(inviteCode.value, '邀请码已复制');
+const copyLink = () => copyWithFeedback(inviteUrl.value, '邀请链接已复制');
 
 const inviteeInitial = (item = {}) => String(item.nickname || item.phone || '友').trim().slice(0, 1);
 
@@ -461,6 +500,26 @@ const previewPoster = () => {
   uni.previewImage({ urls: [posterPath.value], current: posterPath.value });
 };
 
+function downloadPosterInBrowser() {
+  const [header, encodedData] = posterPath.value.split(',');
+  const mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/png';
+  const binary = window.atob(encodedData);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `卓越商城邀请海报-${inviteCode.value}.png`;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 const savePoster = () => {
   if (!posterPath.value) return;
 
@@ -470,11 +529,13 @@ const savePoster = () => {
       uni.showToast({ title: '请长按图片保存', icon: 'none' });
       return;
     }
-    const anchor = document.createElement('a');
-    anchor.href = posterPath.value;
-    anchor.download = `卓越商城邀请海报-${inviteCode.value}.png`;
-    anchor.click();
-    uni.showToast({ title: '海报已下载', icon: 'none' });
+    try {
+      downloadPosterInBrowser();
+      uni.showToast({ title: '海报已保存到本地', icon: 'success' });
+    } catch (error) {
+      console.error('[invite] poster download failed:', error);
+      uni.showToast({ title: '保存失败，请稍后重试', icon: 'none' });
+    }
     return;
   }
 
@@ -906,15 +967,22 @@ onPullDownRefresh(async () => {
 .poster-actions { margin-top: 24rpx; }
 
 .modal-action {
+  display: flex;
   flex: 1;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
   height: 76rpx;
+  margin: 0;
+  padding: 0 12rpx;
   border: 1rpx solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text-secondary);
   font-size: 24rpx;
   font-weight: 600;
+  line-height: 1.2;
+  box-sizing: border-box;
 }
 
 .primary-action,
