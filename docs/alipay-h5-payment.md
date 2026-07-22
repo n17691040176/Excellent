@@ -16,7 +16,10 @@ PAYMENT_MOCK_EXTERNAL_PAYMENT=false
 ALIPAY_ENABLED=true
 ALIPAY_APP_ID=your_app_id
 ALIPAY_PRIVATE_KEY_PATH=/run/secrets/alipay-merchant-private-key.pem
-ALIPAY_PUBLIC_KEY_PATH=/run/secrets/alipay-public-key.pem
+ALIPAY_APP_CERT_PATH=/run/secrets/alipay-app-cert.crt
+ALIPAY_PUBLIC_CERT_PATH=/run/secrets/alipay-public-cert.crt
+ALIPAY_ROOT_CERT_PATH=/run/secrets/alipay-root-cert.crt
+ALIPAY_PUBLIC_KEY_PATH=
 ALIPAY_NOTIFY_URL=https://your-domain.example/api/v1/payments/alipay/notify
 ALIPAY_RETURN_URL=https://your-domain.example/#/subpackages/order/detail
 ALIPAY_GATEWAY_URL=https://openapi.alipay.com/gateway.do
@@ -44,9 +47,18 @@ ALIPAY_GATEWAY_URL=https://openapi-sandbox.dl.alipaydev.com/gateway.do
 4. Alipay calls `ALIPAY_NOTIFY_URL`. The backend verifies RSA2, APP-ID,
    seller ID when configured, amount, status, and transaction number before
    marking the order paid.
-5. Alipay redirects the browser to `ALIPAY_RETURN_URL`. This is only a page
-   return; the H5 page must reload the order from the backend instead of
-   trusting the return query parameters.
+5. Alipay redirects the browser to `ALIPAY_RETURN_URL`. H5 sends the complete
+   signed Alipay return fields to the backend. The backend verifies RSA2,
+   APP-ID, seller ID when configured, amount, and the exact local transaction
+   before reconciling the order. It never trusts unsigned return fields.
+6. If the signed return is unavailable, the order page falls back to
+   `alipay.trade.query` and reloads the current order state.
+
+In certificate mode, `ALIPAY_PUBLIC_CERT_PATH` must contain the Alipay platform
+public certificate downloaded for the same sandbox/production environment. It
+must not contain the merchant application certificate or a stale certificate
+from another Alipay application. After replacing a mounted certificate,
+recreate the backend container so the running process reloads it.
 
 ## Unpaid orders
 

@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import NameOID
 
-from app.core.exceptions import ConflictError
+from app.core.exceptions import ConflictError, ForbiddenError
 from app.core.payment_config import AlipayConfig, PaymentConfig, validate_payment_config
 from app.models.enums import OrderType, PaymentChannel, PaymentStatus, PayStatus
 from app.services import payment_service as payment_module
@@ -97,7 +97,8 @@ class AlipayH5PaymentTest(TestCase):
         message = PaymentService._alipay_sign_string(params)
         self.assertIn('sign_type=RSA2', message)
         self.public_key.verify(signature, message.encode('utf-8'), padding.PKCS1v15(), hashes.SHA256())
-        self.assertIn('#/subpackages/order/detail?order_id=12&out_trade_no=PAYAL0012ABCDEF', payment['return_url'])
+        self.assertIn('#/subpackages/order/detail?order_id=12', payment['return_url'])
+        self.assertNotIn('out_trade_no=', payment['return_url'])
         self.assertEqual(payment['provider_payload']['biz_content']['product_code'], 'QUICK_WAP_WAP')
         self.assertEqual(payment['provider_payload']['biz_content']['timeout_express'], '30m')
 
@@ -194,6 +195,67 @@ class AlipayH5PaymentTest(TestCase):
             self.assertRaisesRegex(ConflictError, 'amount mismatch'),
         ):
             PaymentService.reconcile_alipay_payment(db, order, tx.out_trade_no)
+
+    def test_reconciles_valid_signed_return(self):
+        tx = self.build_transaction()
+        order = self.build_order()
+        paid_order = SimpleNamespace(**vars(order), order_status='PENDING_SHIP')
+        payload = {
+            'app_id': self.config.app_id,
+            'auth_app_id': self.config.app_id,
+            'seller_id': self.config.seller_id,
+            'method': 'alipay.trade.wap.pay.return',
+            'out_trade_no': tx.out_trade_no,
+            'total_amount': '9.90',
+            'trade_no': '20260722000000000001',
+            'charset': 'utf-8',
+            'sign_type': 'RSA2',
+            'timestamp': '2026-07-22 13:53:19',
+            'version': '1.0',
+        }
+        payload['sign'] = PaymentService._rsa_sign(
+            self.private_key,
+            PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = tx
+
+        with (
+            patch.object(payment_module, 'payment_config', PaymentConfig(mock_external_payment=False, alipay=self.config)),
+            patch.object(PaymentService, 'confirm_paid_order', return_value=paid_order) as confirm_paid,
+        ):
+            result = PaymentService.reconcile_alipay_return(db, order, payload)
+
+        self.assertIs(result['order'], paid_order)
+        self.assertEqual(result['provider_status'], 'TRADE_SUCCESS')
+        confirm_paid.assert_called_once_with(
+            db,
+            tx,
+            notify_payload={'source': 'signed_return', **payload},
+            provider_trade_no='20260722000000000001',
+        )
+
+    def test_rejects_invalid_signed_return(self):
+        tx = self.build_transaction()
+        payload = {
+            'app_id': self.config.app_id,
+            'seller_id': self.config.seller_id,
+            'method': 'alipay.trade.wap.pay.return',
+            'out_trade_no': tx.out_trade_no,
+            'total_amount': '9.90',
+            'trade_no': '20260722000000000001',
+            'sign_type': 'RSA2',
+            'sign': base64.b64encode(b'invalid-signature').decode(),
+        }
+        db = MagicMock()
+
+        with (
+            patch.object(payment_module, 'payment_config', PaymentConfig(mock_external_payment=False, alipay=self.config)),
+            patch.object(PaymentService, 'confirm_paid_order') as confirm_paid,
+            self.assertRaises(ForbiddenError),
+        ):
+            PaymentService.reconcile_alipay_return(db, self.build_order(), payload)
+        confirm_paid.assert_not_called()
 
     def test_loads_public_key_from_x509_certificate(self):
         name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Alipay Test')])

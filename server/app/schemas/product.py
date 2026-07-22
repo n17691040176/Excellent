@@ -34,6 +34,7 @@ class OrderPayRequest(AppBaseModel):
 
 class OrderPaymentStatusRequest(AppBaseModel):
     out_trade_no: str | None = None
+    return_params: dict[str, str] | None = None
 
 
 class ProductZoneConfigUpdateRequest(AppBaseModel):

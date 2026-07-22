@@ -36,9 +36,15 @@ if ! grep -q '^PAYMENT_MOCK_EXTERNAL_PAYMENT=false' server/.env.alipay.local || 
 fi
 
 PAYMENT_SECRETS_DIR="${PAYMENT_SECRETS_DIR:-/www/wwwroot/excellent/secrets}"
-for key_file in alipay-merchant-private-key.pem alipay-public-key.pem; do
+alipay_files=(alipay-merchant-private-key.pem)
+if grep -Eq '^ALIPAY_(APP|PUBLIC|ROOT)_CERT_PATH=.+' server/.env.alipay.local; then
+    alipay_files+=(alipay-app-cert.crt alipay-public-cert.crt alipay-root-cert.crt)
+else
+    alipay_files+=(alipay-public-key.pem)
+fi
+for key_file in "${alipay_files[@]}"; do
     if [ ! -f "$PAYMENT_SECRETS_DIR/$key_file" ]; then
-        echo "错误: 缺少支付宝密钥文件 $PAYMENT_SECRETS_DIR/$key_file"
+        echo "错误: 缺少支付宝密钥或证书文件 $PAYMENT_SECRETS_DIR/$key_file"
         exit 1
     fi
 done

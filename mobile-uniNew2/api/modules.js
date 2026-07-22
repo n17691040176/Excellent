@@ -130,10 +130,13 @@ export const orderApi = {
   pay(id, data) {
     return request.post(`/api/v1/app/orders/${id}/pay`, data);
   },
-  syncPayment(id, outTradeNo = '') {
-    return request.post(`/api/v1/app/orders/${id}/payment-status`, {
-      out_trade_no: outTradeNo
-    }, { hideLoading: true, silentError: true });
+  syncPayment(id, outTradeNo = '', returnParams = null) {
+    const payload = { out_trade_no: outTradeNo };
+    if (returnParams) payload.return_params = returnParams;
+    return request.post(`/api/v1/app/orders/${id}/payment-status`, payload, {
+      hideLoading: true,
+      silentError: true
+    });
   }
 };
 

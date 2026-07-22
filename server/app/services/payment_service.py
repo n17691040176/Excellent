@@ -347,11 +347,11 @@ class PaymentService:
         )
 
     @staticmethod
-    def _alipay_return_url(order: Order, tx: PaymentTransaction, config: AlipayConfig) -> str:
+    def _alipay_return_url(order: Order, config: AlipayConfig) -> str:
         if not config.return_url:
             return ''
         base_url, separator, fragment = config.return_url.partition('#')
-        query = urlencode({'order_id': order.id, 'out_trade_no': tx.out_trade_no})
+        query = urlencode({'order_id': order.id})
         if separator:
             joiner = '&' if '?' in fragment else '?'
             return f'{base_url}#{fragment}{joiner}{query}'
@@ -368,7 +368,7 @@ class PaymentService:
             raise ConflictError('Alipay notify url is not configured')
 
         is_h5 = config.payment_method == 'alipay.trade.wap.pay'
-        return_url = PaymentService._alipay_return_url(order, tx, config)
+        return_url = PaymentService._alipay_return_url(order, config)
         biz_content = {
             'subject': PaymentService._subject(order),
             'out_trade_no': tx.out_trade_no,
@@ -621,6 +621,54 @@ class PaymentService:
         }
 
     @staticmethod
+    def reconcile_alipay_return(
+        db: Session,
+        order: Order,
+        payload: dict[str, str],
+    ) -> dict[str, Any]:
+        config = cast(AlipayConfig, PaymentService._provider_config(PaymentChannel.ALIPAY))
+        if payment_config.mock_external_payment:
+            raise ConflictError('Signed Alipay return is unavailable in mock payment mode')
+        if not config.enabled:
+            raise ConflictError('Alipay payment is not enabled')
+
+        PaymentService._alipay_verify_signature(payload, config)
+        if str(payload.get('method') or '').strip() != 'alipay.trade.wap.pay.return':
+            raise ConflictError('Alipay return method mismatch')
+
+        out_trade_no = str(payload.get('out_trade_no') or '').strip()
+        if not out_trade_no:
+            raise NotFoundError('Payment transaction not found')
+        tx = (
+            db.query(PaymentTransaction)
+            .filter(
+                PaymentTransaction.order_id == order.id,
+                PaymentTransaction.channel == PaymentChannel.ALIPAY,
+                PaymentTransaction.out_trade_no == out_trade_no,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not tx:
+            raise NotFoundError('Payment transaction not found')
+
+        PaymentService._validate_alipay_transaction_payload(payload, config, tx, source='return')
+        provider_trade_no = str(payload.get('trade_no') or '').strip()
+        if not provider_trade_no:
+            raise ConflictError('Alipay return trade_no is missing')
+        paid_order = PaymentService.confirm_paid_order(
+            db,
+            tx,
+            notify_payload={'source': 'signed_return', **payload},
+            provider_trade_no=provider_trade_no,
+        )
+        return {
+            'order': paid_order,
+            'transaction': tx,
+            'provider_status': 'TRADE_SUCCESS',
+        }
+
+    @staticmethod
     def _wechat_decrypt_notify_payload(payload: dict[str, Any], config: WechatPayConfig) -> dict[str, Any]:
         resource = payload.get('resource')
         if not isinstance(resource, dict):
@@ -641,14 +689,14 @@ class PaymentService:
         return json.loads(plain_bytes.decode('utf-8'))
 
     @staticmethod
-    def _alipay_verify_notify(payload: dict[str, Any], config: AlipayConfig) -> None:
+    def _alipay_verify_signature(payload: dict[str, Any], config: AlipayConfig) -> None:
         public_key_path = config.alipay_public_cert_path if config.certificate_mode else config.public_key_path
         if not public_key_path:
             raise ConflictError('Alipay public key path is not configured')
         if 'sign' not in payload:
-            raise ConflictError('Alipay notify payload is missing sign')
+            raise ConflictError('Alipay payload is missing sign')
         if str(payload.get('sign_type') or '').upper() != 'RSA2':
-            raise ForbiddenError('Alipay notify sign_type is invalid')
+            raise ForbiddenError('Alipay sign_type is invalid')
         public_key = PaymentService._load_public_key(public_key_path)
         unsigned_payload = {
             key: value
@@ -665,31 +713,33 @@ class PaymentService:
                 hashes.SHA256(),
             )
         except (binascii.Error, InvalidSignature, ValueError) as exc:
-            raise ForbiddenError('Alipay notify signature is invalid') from exc
+            raise ForbiddenError('Alipay signature is invalid') from exc
 
     @staticmethod
-    def _validate_alipay_notify(
+    def _validate_alipay_transaction_payload(
         payload: dict[str, Any],
         config: AlipayConfig,
         tx: PaymentTransaction,
+        *,
+        source: str,
     ) -> None:
         app_id = str(payload.get('app_id') or '').strip()
         if not app_id or app_id != config.app_id:
-            raise ConflictError('Alipay notify app_id mismatch')
+            raise ConflictError(f'Alipay {source} app_id mismatch')
         if tx.provider_app_id and tx.provider_app_id != app_id:
-            raise ConflictError('Alipay notify transaction app_id mismatch')
+            raise ConflictError(f'Alipay {source} transaction app_id mismatch')
 
         total_amount = str(payload.get('total_amount') or '').strip()
         try:
             notified_amount = Decimal(total_amount)
         except InvalidOperation as exc:
-            raise ConflictError('Alipay notify total_amount is invalid') from exc
+            raise ConflictError(f'Alipay {source} total_amount is invalid') from exc
         if quantize_amount(notified_amount) != quantize_amount(tx.amount):
-            raise ConflictError('Alipay notify amount mismatch')
+            raise ConflictError(f'Alipay {source} amount mismatch')
 
         seller_id = str(payload.get('seller_id') or '').strip()
         if config.seller_id and seller_id != config.seller_id:
-            raise ConflictError('Alipay notify seller_id mismatch')
+            raise ConflictError(f'Alipay {source} seller_id mismatch')
 
     @staticmethod
     def handle_notify(db: Session, channel: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -703,7 +753,7 @@ class PaymentService:
             alipay_config = cast(AlipayConfig, PaymentService._provider_config(pay_channel))
             if not alipay_config.enabled:
                 raise ConflictError('Alipay payment is not enabled')
-            PaymentService._alipay_verify_notify(payload, alipay_config)
+            PaymentService._alipay_verify_signature(payload, alipay_config)
 
         out_trade_no = str(
             normalized_payload.get('out_trade_no')
@@ -726,7 +776,7 @@ class PaymentService:
         if tx.channel != pay_channel:
             raise ConflictError('Payment channel mismatch')
         if pay_channel == PaymentChannel.ALIPAY and not payment_config.mock_external_payment:
-            PaymentService._validate_alipay_notify(payload, alipay_config, tx)
+            PaymentService._validate_alipay_transaction_payload(payload, alipay_config, tx, source='notify')
 
         status = str(
             normalized_payload.get('trade_state')

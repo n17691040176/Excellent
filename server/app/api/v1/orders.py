@@ -143,7 +143,10 @@ def sync_order_payment_status(
     current_user: User = Depends(get_current_user),
 ):
     order = OrderService.get_order(db, current_user.id, order_id)
-    result = PaymentService.reconcile_alipay_payment(db, order, payload.out_trade_no)
+    if payload.return_params:
+        result = PaymentService.reconcile_alipay_return(db, order, payload.return_params)
+    else:
+        result = PaymentService.reconcile_alipay_payment(db, order, payload.out_trade_no)
     transaction = result['transaction']
     return {
         'code': 0,

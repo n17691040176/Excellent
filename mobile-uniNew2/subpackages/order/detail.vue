@@ -156,6 +156,7 @@ const paying = ref(false);
 const syncing = ref(false);
 const id = ref('');
 const outTradeNo = ref('');
+const alipayReturnParams = ref(null);
 const errorMessage = ref('订单不存在或网络暂时不可用');
 const paymentResultMessage = ref('正在确认支付宝支付结果...');
 const paymentResultTone = ref('pending');
@@ -331,7 +332,7 @@ async function syncReturnedPayment() {
   paymentResultTone.value = 'pending';
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const result = await orderApi.syncPayment(id.value, outTradeNo.value);
+      const result = await orderApi.syncPayment(id.value, outTradeNo.value, alipayReturnParams.value);
       detail.value = normalize(result?.order || {});
       if (result?.payment_status === 'PAID' || detail.value.payStatusCode === 'PAID') {
         paymentResultMessage.value = '支付成功，订单状态已更新';
@@ -459,9 +460,35 @@ function refundOrder() {
   });
 }
 
+const ALIPAY_RETURN_FIELDS = [
+  'charset',
+  'out_trade_no',
+  'method',
+  'total_amount',
+  'sign',
+  'trade_no',
+  'auth_app_id',
+  'version',
+  'app_id',
+  'sign_type',
+  'seller_id',
+  'timestamp'
+];
+
+function extractAlipayReturnParams(query = {}) {
+  const params = {};
+  ALIPAY_RETURN_FIELDS.forEach((field) => {
+    const rawValue = query[field];
+    const value = Array.isArray(rawValue) ? rawValue[rawValue.length - 1] : rawValue;
+    if (value !== undefined && value !== null && value !== '') params[field] = String(value);
+  });
+  return params.sign && params.out_trade_no ? params : null;
+}
+
 onLoad((query) => {
   id.value = query?.id || query?.order_id || '';
-  outTradeNo.value = query?.out_trade_no || '';
+  alipayReturnParams.value = extractAlipayReturnParams(query);
+  outTradeNo.value = alipayReturnParams.value?.out_trade_no || query?.out_trade_no || '';
   trackPageView('order_detail_view', { id: id.value, payment_return: Boolean(outTradeNo.value) });
   initialize();
 });
