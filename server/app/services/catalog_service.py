@@ -274,13 +274,6 @@ class ProductService:
         '一件代发',
     ]
     IMPORT_TEMPLATE_HEADERS += [
-        '是否需套餐资格',
-        '套餐ID',
-        '复购折扣率',
-        '兑换券最低抵扣比例',
-        '兑换券最高抵扣比例',
-        '购物返AI券比例',
-        'AI券最大抵扣比例',
         '余额支付',
         '支付宝支付',
         '微信支付',
@@ -341,13 +334,6 @@ class ProductService:
         '本地商家': ProductOwnerType.LOCAL_MERCHANT,
     }
     IMPORT_FIELD_ALIASES.update({
-        'package_required': ['是否需套餐资格', 'package_required'],
-        'package_id': ['套餐ID', 'package_id'],
-        'repurchase_discount_rate': ['复购折扣率', 'repurchase_discount_rate'],
-        'voucher_deduct_min_rate': ['兑换券最低抵扣比例', 'voucher_deduct_min_rate'],
-        'voucher_deduct_max_rate': ['兑换券最高抵扣比例', 'voucher_deduct_max_rate'],
-        'ai_coupon_reward_rate': ['购物返AI券比例', 'ai_coupon_reward_rate'],
-        'ai_coupon_max_deduct_rate': ['AI券最大抵扣比例', 'ai_coupon_max_deduct_rate'],
         'points_purchase_enabled': ['积分支付', 'points_purchase_enabled'],
         'balance_purchase_enabled': ['余额支付', 'balance_purchase_enabled'],
         'alipay_purchase_enabled': ['支付宝支付', 'alipay_purchase_enabled'],
@@ -375,13 +361,6 @@ class ProductService:
     def zone_config_defaults(zone_type: ZoneType) -> dict:
         if zone_type == ZoneType.REPURCHASE:
             return {
-                'package_required': True,
-                'package_id': None,
-                'repurchase_discount_rate': 60.0,
-                'voucher_deduct_min_rate': None,
-                'voucher_deduct_max_rate': None,
-                'ai_coupon_reward_rate': None,
-                'ai_coupon_max_deduct_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
                 'alipay_purchase_enabled': True,
@@ -406,13 +385,6 @@ class ProductService:
             }
         if zone_type == ZoneType.SELF_OPERATED:
             return {
-                'package_required': False,
-                'package_id': None,
-                'repurchase_discount_rate': None,
-                'voucher_deduct_min_rate': 50.0,
-                'voucher_deduct_max_rate': 70.0,
-                'ai_coupon_reward_rate': 20.0,
-                'ai_coupon_max_deduct_rate': 20.0,
                 'points_purchase_enabled': False,
                 'balance_purchase_enabled': True,
                 'alipay_purchase_enabled': True,
@@ -437,13 +409,6 @@ class ProductService:
             }
         if zone_type == ZoneType.HOT_SALE:
             return {
-                'package_required': False,
-                'package_id': None,
-                'repurchase_discount_rate': None,
-                'voucher_deduct_min_rate': None,
-                'voucher_deduct_max_rate': None,
-                'ai_coupon_reward_rate': None,
-                'ai_coupon_max_deduct_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
                 'alipay_purchase_enabled': True,
@@ -467,13 +432,6 @@ class ProductService:
                 'custom_commission_level3_amount': 0.0,
             }
         return {
-            'package_required': False,
-            'package_id': None,
-            'repurchase_discount_rate': None,
-            'voucher_deduct_min_rate': None,
-            'voucher_deduct_max_rate': None,
-            'ai_coupon_reward_rate': None,
-            'ai_coupon_max_deduct_rate': None,
             'points_purchase_enabled': True,
             'balance_purchase_enabled': True,
             'alipay_purchase_enabled': True,
@@ -764,22 +722,11 @@ class ProductService:
         headline = '默认规则'
 
         if zone_type == ZoneType.REPURCHASE.value:
-            headline = '复购资格与支付规则'
-            badges.append('需套餐资格' if snapshot.get('package_required') else '无需套餐资格')
-            if snapshot.get('repurchase_discount_rate') is not None:
-                badges.append(f"复购折扣 {snapshot['repurchase_discount_rate']:g}%")
-            description = '影响复购专区的资格校验、折扣和支付方式。'
+            headline = '复购商品规则'
+            description = '配置复购区商品的专属分润和支付方式。'
         elif zone_type == ZoneType.SELF_OPERATED.value:
-            headline = '券抵扣与 AI 券规则'
-            if snapshot.get('voucher_deduct_min_rate') is not None and snapshot.get('voucher_deduct_max_rate') is not None:
-                badges.append(
-                    f"兑换券 {snapshot['voucher_deduct_min_rate']:g}-{snapshot['voucher_deduct_max_rate']:g}%"
-                )
-            if snapshot.get('ai_coupon_reward_rate') is not None:
-                badges.append(f"购物返 AI 券 {snapshot['ai_coupon_reward_rate']:g}%")
-            if snapshot.get('ai_coupon_max_deduct_rate') is not None:
-                badges.append(f"AI 券最高抵扣 {snapshot['ai_coupon_max_deduct_rate']:g}%")
-            description = '影响自营商城的券类抵扣、返券比例和转化玩法。'
+            headline = '自营商品规则'
+            description = '配置自营商城商品的专属分润和支付方式。'
         elif zone_type == ZoneType.HOT_SALE.value:
             headline = '限购与闪购规则'
             if snapshot.get('flash_sale_enabled'):
@@ -1183,17 +1130,8 @@ class ProductService:
             '1',
             '0',
             '1',
-            '2001',
-            '65',
-            '',
-            '',
-            '',
-            '',
             '1',
             '0',
-            '0',
-            '1',
-            '1',
             '0',
             '',
             '',
@@ -1222,18 +1160,9 @@ class ProductService:
             '0',
             '1',
             '1',
-            '0',
-            '',
-            '',
-            '55',
-            '70',
-            '20',
-            '20',
-            '0',
-            '0',
-            '0',
             '1',
             '1',
+            '0',
             '0',
             '',
             '',
@@ -1302,13 +1231,6 @@ class ProductService:
     @staticmethod
     def _zone_config_payload_from_import_row(zone_type: ZoneType, row: dict[str, Any]) -> dict[str, Any] | None:
         payload = {
-            'package_required': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'package_required')),
-            'package_id': ProductService._parse_import_int(ProductService._extract_import_value(row, 'package_id'), 'package_id'),
-            'repurchase_discount_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'repurchase_discount_rate'), 'repurchase_discount_rate'),
-            'voucher_deduct_min_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'voucher_deduct_min_rate'), 'voucher_deduct_min_rate'),
-            'voucher_deduct_max_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'voucher_deduct_max_rate'), 'voucher_deduct_max_rate'),
-            'ai_coupon_reward_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'ai_coupon_reward_rate'), 'ai_coupon_reward_rate'),
-            'ai_coupon_max_deduct_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'ai_coupon_max_deduct_rate'), 'ai_coupon_max_deduct_rate'),
             'points_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'points_purchase_enabled')),
             'balance_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'balance_purchase_enabled')),
             'alipay_purchase_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'alipay_purchase_enabled')),
@@ -1448,23 +1370,6 @@ class ProductService:
 
     @staticmethod
     def _validate_zone_config_payload(product: Product, payload: dict) -> None:
-        rate_fields = [
-            'repurchase_discount_rate',
-            'voucher_deduct_min_rate',
-            'voucher_deduct_max_rate',
-            'ai_coupon_reward_rate',
-            'ai_coupon_max_deduct_rate',
-        ]
-        for field in rate_fields:
-            value = payload.get(field)
-            if value is not None and (value < 0 or value > 100):
-                raise ConflictError(f'{field} must be between 0 and 100')
-
-        min_rate = payload.get('voucher_deduct_min_rate')
-        max_rate = payload.get('voucher_deduct_max_rate')
-        if min_rate is not None and max_rate is not None and min_rate > max_rate:
-            raise ConflictError('voucher_deduct_min_rate cannot exceed voucher_deduct_max_rate')
-
         per_user_limit = payload.get('per_user_limit')
         if per_user_limit is not None and per_user_limit <= 0:
             raise ConflictError('per_user_limit must be greater than 0')
@@ -1489,8 +1394,6 @@ class ProductService:
 
         if product.zone_type == ZoneType.REPURCHASE and payload.get('flash_sale_enabled'):
             raise ConflictError('Repurchase zone does not support flash sale')
-        if product.zone_type == ZoneType.HOT_SALE and payload.get('package_required'):
-            raise ConflictError('Hot-sale zone does not support package qualification')
         if not any((
             payload.get('points_only_enabled'),
             payload.get('points_cash_enabled'),
@@ -1509,7 +1412,7 @@ class ProductService:
             raise ConflictError('Balance payment must enable at least one balance purchase mode')
 
     @staticmethod
-    def update_zone_config_for_admin(db: Session, product_id: int, current_user: User, payload: dict) -> ProductZoneConfig:
+    def update_zone_config_for_admin(db: Session, product_id: int, current_user: User, payload: dict) -> dict:
         product = ProductService._ensure_product_visible_for_admin(db, product_id, current_user)
         ProductService._validate_zone_config_payload(product, payload)
         config = db.query(ProductZoneConfig).filter(ProductZoneConfig.product_id == product.id).first()
@@ -1525,4 +1428,4 @@ class ProductService:
         config.zone_type = product.zone_type
         db.commit()
         db.refresh(config)
-        return config
+        return ProductService._zone_config_snapshot(db, product)

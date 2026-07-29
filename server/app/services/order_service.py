@@ -27,7 +27,7 @@ from app.services.commission_service import CommissionService
 from app.services.region_dividend_service import RegionDividendService
 from app.utils.helpers import generate_order_no, now, quantize_amount
 
-INTERNAL_PAY_CHANNELS = {'BALANCE', 'VOUCHER', 'POINTS'}
+INTERNAL_PAY_CHANNELS = {'BALANCE', 'POINTS'}
 EXTERNAL_PAY_CHANNELS = {'WECHAT', 'ALIPAY'}
 SUPPORTED_PAY_CHANNELS = INTERNAL_PAY_CHANNELS | EXTERNAL_PAY_CHANNELS
 
@@ -40,7 +40,6 @@ ZONE_ORDER_TYPE_MAP = {
 
 PAY_CHANNEL_ASSET_MAP = {
     'BALANCE': AssetType.BALANCE,
-    'VOUCHER': AssetType.VOUCHER,
 }
 
 ORDER_STATUS_BUCKETS = ('pending_payment', 'pending_ship', 'shipped', 'completed', 'refund')
@@ -351,11 +350,6 @@ class OrderService:
     def _zone_config_defaults(zone_type: ZoneType) -> dict:
         if zone_type == ZoneType.REPURCHASE:
             return {
-                'package_required': True,
-                'voucher_deduct_min_rate': None,
-                'voucher_deduct_max_rate': None,
-                'ai_coupon_max_deduct_rate': None,
-                'ai_coupon_reward_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
                 'alipay_purchase_enabled': True,
@@ -370,11 +364,6 @@ class OrderService:
             }
         if zone_type == ZoneType.SELF_OPERATED:
             return {
-                'package_required': False,
-                'voucher_deduct_min_rate': Decimal('50'),
-                'voucher_deduct_max_rate': Decimal('70'),
-                'ai_coupon_max_deduct_rate': Decimal('20'),
-                'ai_coupon_reward_rate': Decimal('20'),
                 'points_purchase_enabled': False,
                 'balance_purchase_enabled': True,
                 'alipay_purchase_enabled': True,
@@ -389,11 +378,6 @@ class OrderService:
             }
         if zone_type == ZoneType.HOT_SALE:
             return {
-                'package_required': False,
-                'voucher_deduct_min_rate': None,
-                'voucher_deduct_max_rate': None,
-                'ai_coupon_max_deduct_rate': None,
-                'ai_coupon_reward_rate': None,
                 'points_purchase_enabled': True,
                 'balance_purchase_enabled': True,
                 'alipay_purchase_enabled': True,
@@ -407,11 +391,6 @@ class OrderService:
                 'per_user_limit': 1,
             }
         return {
-            'package_required': False,
-            'voucher_deduct_min_rate': None,
-            'voucher_deduct_max_rate': None,
-            'ai_coupon_max_deduct_rate': None,
-            'ai_coupon_reward_rate': None,
             'points_purchase_enabled': True,
             'balance_purchase_enabled': True,
             'alipay_purchase_enabled': True,
@@ -438,10 +417,8 @@ class OrderService:
         values = [getattr(config, field) for config in configs if config and getattr(config, field) is not None]
         if not values:
             return defaults.get(field)
-        if field in {'voucher_deduct_max_rate', 'ai_coupon_max_deduct_rate', 'per_user_limit'}:
+        if field == 'per_user_limit':
             return min(values)
-        if field in {'voucher_deduct_min_rate', 'ai_coupon_reward_rate'}:
-            return max(values)
         return any(bool(value) for value in values)
 
     @staticmethod
@@ -449,19 +426,6 @@ class OrderService:
         expected = ZONE_ORDER_TYPE_MAP.get(zone_type)
         if expected and order_type != expected:
             raise ConflictError(f'Order type must match zone {zone_type.value}')
-
-    @staticmethod
-    def _require_package_qualification(db: Session, current_user: User, configs: list[ProductZoneConfig | None]) -> None:
-        package_ids = [config.package_id for config in configs if config and config.package_required and config.package_id]
-        query = db.query(func.count(Order.id)).filter(
-            Order.user_id == current_user.id,
-            Order.order_type == OrderType.PACKAGE_ORDER,
-            Order.pay_status == PayStatus.PAID,
-        )
-        if package_ids:
-            query = query.filter(Order.source_ref_id.in_(package_ids))
-        if (query.scalar() or 0) <= 0:
-            raise ConflictError('Repurchase zone requires package qualification')
 
     @staticmethod
     def _validate_hot_sale_limit(
@@ -483,31 +447,6 @@ class OrderService:
         ).scalar() or 0
         if int(purchased) + quantity > per_user_limit:
             raise ConflictError('Hot sale product purchase limit exceeded')
-
-    @staticmethod
-    def _reward_self_operated_ai_coupon(db: Session, order: Order) -> None:
-        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
-        if not items:
-            return
-
-        total_reward = Decimal('0')
-        for item in items:
-            config = OrderService._get_zone_config(db, item.product_id, ZoneType.SELF_OPERATED)
-            rate = config.ai_coupon_reward_rate if config and config.ai_coupon_reward_rate is not None else Decimal('20')
-            reward_amount = quantize_amount(Decimal(str(item.total_amount)) * Decimal(str(rate)) / Decimal('100'))
-            total_reward += reward_amount
-
-        total_reward = quantize_amount(total_reward)
-        if total_reward > 0:
-            AssetService.add_amount(
-                db,
-                order.user_id,
-                AssetType.AI_COUPON,
-                total_reward,
-                'SELF_OPERATED_REWARD',
-                source_id=order.id,
-                source_no=order.order_no,
-            )
 
     @staticmethod
     def _resolve_pay_channel(channel: str | None) -> str:
@@ -616,8 +555,6 @@ class OrderService:
         allowed_assets = {AssetType.POINTS}
         if pay_channel == 'BALANCE':
             allowed_assets.add(AssetType.BALANCE)
-        if pay_channel == 'VOUCHER':
-            allowed_assets.add(AssetType.VOUCHER)
         if pay_channel == 'POINTS':
             allowed_assets = {AssetType.POINTS}
 
@@ -629,9 +566,6 @@ class OrderService:
             raise ConflictError('Internal payment channel must provide deduction amount')
         if pay_channel == 'POINTS' and deductions_by_type.get(AssetType.POINTS, Decimal('0')) <= 0:
             raise ConflictError('Points payment amount is required')
-
-        if pay_channel == 'VOUCHER' and zone_type != ZoneType.SELF_OPERATED:
-            raise ConflictError('Voucher payment only supports self-operated zone')
 
         if pay_channel in EXTERNAL_PAY_CHANNELS and pay_channel not in enabled_external_payment_channels():
             if pay_channel == 'WECHAT':
@@ -653,10 +587,6 @@ class OrderService:
             raise ConflictError('Points deduction exceeds order total')
         if points_amount > 0 and not all(bool(OrderService._config_value(config, zone_type, 'points_purchase_enabled')) for config in configs):
             raise ConflictError('Points payment is disabled for current product')
-
-        voucher_amount = deductions_by_type.get(AssetType.VOUCHER, Decimal('0'))
-        if pay_channel == 'VOUCHER' and voucher_amount <= 0:
-            raise ConflictError('Voucher payment amount is required')
 
         total_deduction = sum(deductions_by_type.values(), Decimal('0.00'))
         if total_deduction > total_amount:
@@ -779,12 +709,6 @@ class OrderService:
             raise ConflictError('Zone type does not match products')
 
         OrderService._validate_order_type(actual_zone_type, order_type)
-
-        configs = [item['config'] for item in products_data]
-        if actual_zone_type == ZoneType.REPURCHASE:
-            package_required = bool(OrderService._resolve_config_value(configs, actual_zone_type, 'package_required'))
-            if package_required:
-                OrderService._require_package_qualification(db, current_user, configs)
 
         if actual_zone_type == ZoneType.HOT_SALE:
             for item in products_data:
@@ -963,9 +887,6 @@ class OrderService:
             from app.services.catalog_service import PackageService
 
             PackageService.handle_paid_package_order(db, order)
-
-        if order.zone_type == ZoneType.SELF_OPERATED:
-            OrderService._reward_self_operated_ai_coupon(db, order)
 
         db.commit()
         db.refresh(order)

@@ -429,38 +429,6 @@
         </div>
 
         <el-form label-position="top" :model="zoneConfigForm">
-          <el-form-item label="是否要求套餐资格">
-            <el-switch v-model="zoneConfigForm.package_required" :disabled="zoneConfigForm.zone_type === 'HOT_SALE'" />
-          </el-form-item>
-          <el-form-item v-if="zoneConfigForm.package_required" label="绑定套餐 ID">
-            <el-input-number v-model="zoneConfigForm.package_id" :min="1" :step="1" controls-position="right" />
-          </el-form-item>
-
-          <template v-if="zoneConfigForm.zone_type === 'REPURCHASE'">
-            <el-form-item label="复购折扣率（%）">
-              <el-input-number v-model="zoneConfigForm.repurchase_discount_rate" :min="0" :max="100" :step="0.5" :precision="2" controls-position="right" />
-            </el-form-item>
-          </template>
-
-          <template v-if="zoneConfigForm.zone_type === 'SELF_OPERATED'">
-            <div class="form-split">
-              <el-form-item label="兑换券最低抵扣比例（%）">
-                <el-input-number v-model="zoneConfigForm.voucher_deduct_min_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
-              </el-form-item>
-              <el-form-item label="兑换券最高抵扣比例（%）">
-                <el-input-number v-model="zoneConfigForm.voucher_deduct_max_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
-              </el-form-item>
-            </div>
-            <div class="form-split">
-              <el-form-item label="购物返 AI 券比例（%）">
-                <el-input-number v-model="zoneConfigForm.ai_coupon_reward_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
-              </el-form-item>
-              <el-form-item label="AI 券最大抵扣比例（%）">
-                <el-input-number v-model="zoneConfigForm.ai_coupon_max_deduct_rate" :min="0" :max="100" :step="1" :precision="2" controls-position="right" />
-              </el-form-item>
-            </div>
-          </template>
-
           <template v-if="zoneConfigForm.zone_type === 'HOT_SALE'">
             <div class="form-split">
               <el-form-item label="限购件数">
@@ -678,13 +646,6 @@ function createDefaultZoneConfig() {
     product_id: null,
     zone_type: 'SELF_OPERATED',
     configured: false,
-    package_required: false,
-    package_id: null,
-    repurchase_discount_rate: null,
-    voucher_deduct_min_rate: null,
-    voucher_deduct_max_rate: null,
-    ai_coupon_reward_rate: null,
-    ai_coupon_max_deduct_rate: null,
     points_purchase_enabled: false,
     balance_purchase_enabled: true,
     alipay_purchase_enabled: true,
@@ -785,8 +746,8 @@ const zoneConfigTitle = computed(() => {
 })
 const zoneDescription = computed(() => {
   return {
-    REPURCHASE: '复购区以套餐资格、复购折扣和支付方式为核心。',
-    SELF_OPERATED: '自营商城以兑换券和 AI 券规则为核心。',
+    REPURCHASE: '配置复购区商品的专属分润和支付方式。',
+    SELF_OPERATED: '配置自营商城商品的专属分润和支付方式。',
     HOT_SALE: '爆款区以限购、闪购和活动支付方式为核心。',
     LOCAL_LIFE: '本地生活以分佣和设备收益联动为核心。'
   }[zoneConfigForm.value.zone_type] || ''
@@ -922,16 +883,7 @@ function buildZoneSummary(config = {}) {
   } else {
     commissionBadges.push('未配置分润')
   }
-  if (config.zone_type === 'REPURCHASE') {
-    businessBadges.push(config.package_required ? '需套餐资格' : '无需套餐资格')
-    if (config.repurchase_discount_rate != null) businessBadges.push(`复购折扣 ${Number(config.repurchase_discount_rate).toFixed(2).replace(/\.00$/, '')}%`)
-  } else if (config.zone_type === 'SELF_OPERATED') {
-    if (config.voucher_deduct_min_rate != null && config.voucher_deduct_max_rate != null) {
-      businessBadges.push(`兑换券 ${Number(config.voucher_deduct_min_rate)}-${Number(config.voucher_deduct_max_rate)}%`)
-    }
-    if (config.ai_coupon_reward_rate != null) businessBadges.push(`返 AI 券 ${Number(config.ai_coupon_reward_rate)}%`)
-    if (config.ai_coupon_max_deduct_rate != null) businessBadges.push(`AI 券抵扣 ${Number(config.ai_coupon_max_deduct_rate)}%`)
-  } else if (config.zone_type === 'HOT_SALE') {
+  if (config.zone_type === 'HOT_SALE') {
     if (config.flash_sale_enabled) businessBadges.push('开启闪购')
     if (config.per_user_limit != null) businessBadges.push(`每人限购 ${config.per_user_limit} 件`)
   } else if (config.zone_type === 'LOCAL_LIFE') {
@@ -1099,12 +1051,6 @@ function normalizeZoneConfig(data = {}) {
     ...data,
     configured: Boolean(data.configured),
     product_id: data.product_id ?? null,
-    package_id: data.package_id ?? null,
-    repurchase_discount_rate: data.repurchase_discount_rate == null ? null : Number(data.repurchase_discount_rate),
-    voucher_deduct_min_rate: data.voucher_deduct_min_rate == null ? null : Number(data.voucher_deduct_min_rate),
-    voucher_deduct_max_rate: data.voucher_deduct_max_rate == null ? null : Number(data.voucher_deduct_max_rate),
-    ai_coupon_reward_rate: data.ai_coupon_reward_rate == null ? null : Number(data.ai_coupon_reward_rate),
-    ai_coupon_max_deduct_rate: data.ai_coupon_max_deduct_rate == null ? null : Number(data.ai_coupon_max_deduct_rate),
     per_user_limit: data.per_user_limit ?? null,
     merchant_commission_rule_id: data.merchant_commission_rule_id ?? null,
     custom_commission_method: data.custom_commission_method || 'RATE',
@@ -1114,7 +1060,6 @@ function normalizeZoneConfig(data = {}) {
     custom_commission_level1_amount: Number(data.custom_commission_level1_amount || 0),
     custom_commission_level2_amount: Number(data.custom_commission_level2_amount || 0),
     custom_commission_level3_amount: Number(data.custom_commission_level3_amount || 0),
-    package_required: Boolean(data.package_required),
     points_purchase_enabled: Boolean(data.points_purchase_enabled),
     balance_purchase_enabled: Boolean(data.balance_purchase_enabled),
     alipay_purchase_enabled: data.alipay_purchase_enabled == null ? true : Boolean(data.alipay_purchase_enabled),
@@ -1329,13 +1274,6 @@ async function saveZoneConfig() {
   zoneConfigSaving.value = true
   try {
     await productApi.updateZoneConfig(zoneConfigProduct.value.id, {
-      package_required: zoneConfigForm.value.package_required,
-      package_id: zoneConfigForm.value.package_required ? zoneConfigForm.value.package_id : null,
-      repurchase_discount_rate: zoneConfigForm.value.repurchase_discount_rate,
-      voucher_deduct_min_rate: zoneConfigForm.value.voucher_deduct_min_rate,
-      voucher_deduct_max_rate: zoneConfigForm.value.voucher_deduct_max_rate,
-      ai_coupon_reward_rate: zoneConfigForm.value.ai_coupon_reward_rate,
-      ai_coupon_max_deduct_rate: zoneConfigForm.value.ai_coupon_max_deduct_rate,
       points_purchase_enabled: zoneConfigForm.value.points_purchase_enabled,
       balance_purchase_enabled: zoneConfigForm.value.balance_purchase_enabled,
       alipay_purchase_enabled: zoneConfigForm.value.alipay_purchase_enabled,

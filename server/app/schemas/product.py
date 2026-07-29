@@ -1,3 +1,5 @@
+from pydantic import ConfigDict
+
 from app.models.enums import ProductOwnerType, ProductStatus, ProductType, ZoneType
 from app.schemas.common import AppBaseModel
 
@@ -38,13 +40,8 @@ class OrderPaymentStatusRequest(AppBaseModel):
 
 
 class ProductZoneConfigUpdateRequest(AppBaseModel):
-    package_required: bool = False
-    package_id: int | None = None
-    repurchase_discount_rate: float | None = None
-    voucher_deduct_min_rate: float | None = None
-    voucher_deduct_max_rate: float | None = None
-    ai_coupon_reward_rate: float | None = None
-    ai_coupon_max_deduct_rate: float | None = None
+    model_config = ConfigDict(extra='forbid')
+
     points_purchase_enabled: bool = False
     balance_purchase_enabled: bool = True
     alipay_purchase_enabled: bool = True

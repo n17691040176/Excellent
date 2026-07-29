@@ -247,10 +247,6 @@ class CommerceService:
             balance_amount = quantize_amount(total_amount - points_decimal)
             if balance_amount > 0:
                 deductions.append({'asset_type': AssetType.BALANCE.value, 'amount': balance_amount})
-        if resolved_pay_channel == 'VOUCHER':
-            voucher_amount = quantize_amount(total_amount - points_decimal)
-            if voucher_amount > 0:
-                deductions.append({'asset_type': AssetType.VOUCHER.value, 'amount': voucher_amount})
 
         payload = {
             'order_type': ZONE_ORDER_TYPE_MAP[zone_type],
