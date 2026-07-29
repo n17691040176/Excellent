@@ -132,6 +132,14 @@ class ProductZoneConfig(TimestampMixin, Base):
     per_user_limit: Mapped[int | None] = mapped_column(nullable=True)
     merchant_commission_rule_id: Mapped[int | None] = mapped_column(nullable=True)
     device_revenue_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    custom_commission_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    custom_commission_method: Mapped[str] = mapped_column(String(32), default='RATE', nullable=False)
+    custom_commission_level1_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
+    custom_commission_level2_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
+    custom_commission_level3_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
+    custom_commission_level1_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    custom_commission_level2_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    custom_commission_level3_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
 
 
 class ProductQualification(Base):

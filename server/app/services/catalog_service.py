@@ -361,6 +361,14 @@ class ProductService:
         'per_user_limit': ['每人限购件数', 'per_user_limit'],
         'merchant_commission_rule_id': ['分佣规则ID', 'merchant_commission_rule_id'],
         'device_revenue_enabled': ['设备收益联动', 'device_revenue_enabled'],
+        'custom_commission_enabled': ['专属分润', 'custom_commission_enabled'],
+        'custom_commission_method': ['专属分润方式', 'custom_commission_method'],
+        'custom_commission_level1_rate': ['一级分润比例', 'custom_commission_level1_rate'],
+        'custom_commission_level2_rate': ['二级分润比例', 'custom_commission_level2_rate'],
+        'custom_commission_level3_rate': ['三级分润比例', 'custom_commission_level3_rate'],
+        'custom_commission_level1_amount': ['一级固定分润', 'custom_commission_level1_amount'],
+        'custom_commission_level2_amount': ['二级固定分润', 'custom_commission_level2_amount'],
+        'custom_commission_level3_amount': ['三级固定分润', 'custom_commission_level3_amount'],
     })
 
     @staticmethod
@@ -387,6 +395,14 @@ class ProductService:
                 'per_user_limit': None,
                 'merchant_commission_rule_id': None,
                 'device_revenue_enabled': False,
+                'custom_commission_enabled': False,
+                'custom_commission_method': 'RATE',
+                'custom_commission_level1_rate': 0.0,
+                'custom_commission_level2_rate': 0.0,
+                'custom_commission_level3_rate': 0.0,
+                'custom_commission_level1_amount': 0.0,
+                'custom_commission_level2_amount': 0.0,
+                'custom_commission_level3_amount': 0.0,
             }
         if zone_type == ZoneType.SELF_OPERATED:
             return {
@@ -410,6 +426,14 @@ class ProductService:
                 'per_user_limit': None,
                 'merchant_commission_rule_id': None,
                 'device_revenue_enabled': False,
+                'custom_commission_enabled': False,
+                'custom_commission_method': 'RATE',
+                'custom_commission_level1_rate': 0.0,
+                'custom_commission_level2_rate': 0.0,
+                'custom_commission_level3_rate': 0.0,
+                'custom_commission_level1_amount': 0.0,
+                'custom_commission_level2_amount': 0.0,
+                'custom_commission_level3_amount': 0.0,
             }
         if zone_type == ZoneType.HOT_SALE:
             return {
@@ -433,6 +457,14 @@ class ProductService:
                 'per_user_limit': 1,
                 'merchant_commission_rule_id': None,
                 'device_revenue_enabled': False,
+                'custom_commission_enabled': False,
+                'custom_commission_method': 'RATE',
+                'custom_commission_level1_rate': 0.0,
+                'custom_commission_level2_rate': 0.0,
+                'custom_commission_level3_rate': 0.0,
+                'custom_commission_level1_amount': 0.0,
+                'custom_commission_level2_amount': 0.0,
+                'custom_commission_level3_amount': 0.0,
             }
         return {
             'package_required': False,
@@ -455,6 +487,14 @@ class ProductService:
             'per_user_limit': None,
             'merchant_commission_rule_id': None,
             'device_revenue_enabled': True,
+            'custom_commission_enabled': False,
+            'custom_commission_method': 'RATE',
+            'custom_commission_level1_rate': 0.0,
+            'custom_commission_level2_rate': 0.0,
+            'custom_commission_level3_rate': 0.0,
+            'custom_commission_level1_amount': 0.0,
+            'custom_commission_level2_amount': 0.0,
+            'custom_commission_level3_amount': 0.0,
         }
 
     @staticmethod
@@ -760,7 +800,15 @@ class ProductService:
             '支付宝支付' if snapshot.get('alipay_purchase_enabled') else None,
             '微信开发中',
         ]
-        badges = [item for item in payment_badges if item] + badges
+        commission_badges = []
+        if snapshot.get('custom_commission_enabled'):
+            method = snapshot.get('custom_commission_method')
+            suffix = '%' if method == 'RATE' else '元/件'
+            values = [snapshot.get(f'custom_commission_level{level}_{"rate" if method == "RATE" else "amount"}', 0) for level in range(1, 4)]
+            commission_badges.append(f'专属分润 {"/".join(f"{value:g}" for value in values)}{suffix}')
+        else:
+            commission_badges.append('通用分润')
+        badges = commission_badges + [item for item in payment_badges if item] + badges
 
         return {
             'configured': bool(snapshot.get('configured')),
@@ -1274,6 +1322,14 @@ class ProductService:
             'per_user_limit': ProductService._parse_import_int(ProductService._extract_import_value(row, 'per_user_limit'), 'per_user_limit'),
             'merchant_commission_rule_id': ProductService._parse_import_int(ProductService._extract_import_value(row, 'merchant_commission_rule_id'), 'merchant_commission_rule_id'),
             'device_revenue_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'device_revenue_enabled')),
+            'custom_commission_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'custom_commission_enabled')),
+            'custom_commission_method': ProductService._extract_import_value(row, 'custom_commission_method') or None,
+            'custom_commission_level1_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level1_rate'), 'custom_commission_level1_rate'),
+            'custom_commission_level2_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level2_rate'), 'custom_commission_level2_rate'),
+            'custom_commission_level3_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level3_rate'), 'custom_commission_level3_rate'),
+            'custom_commission_level1_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level1_amount'), 'custom_commission_level1_amount'),
+            'custom_commission_level2_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level2_amount'), 'custom_commission_level2_amount'),
+            'custom_commission_level3_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level3_amount'), 'custom_commission_level3_amount'),
         }
         if not any(value is not None for value in payload.values()):
             return None
@@ -1412,6 +1468,24 @@ class ProductService:
         per_user_limit = payload.get('per_user_limit')
         if per_user_limit is not None and per_user_limit <= 0:
             raise ConflictError('per_user_limit must be greater than 0')
+
+        commission_method = str(payload.get('custom_commission_method') or 'RATE').strip().upper()
+        if commission_method not in {'RATE', 'FIXED_AMOUNT'}:
+            raise ConflictError('custom_commission_method must be RATE or FIXED_AMOUNT')
+        payload['custom_commission_method'] = commission_method
+
+        commission_rates = [payload.get(f'custom_commission_level{level}_rate', 0) for level in range(1, 4)]
+        commission_amounts = [payload.get(f'custom_commission_level{level}_amount', 0) for level in range(1, 4)]
+        if any(value < 0 or value > 100 for value in commission_rates):
+            raise ConflictError('Custom commission rates must be between 0 and 100')
+        if any(value < 0 for value in commission_amounts):
+            raise ConflictError('Custom commission amounts cannot be negative')
+        if payload.get('custom_commission_enabled'):
+            selected_values = commission_rates if commission_method == 'RATE' else commission_amounts
+            if sum(selected_values) <= 0:
+                raise ConflictError('At least one custom commission value must be greater than 0')
+            if commission_method == 'RATE' and sum(commission_rates) > 100:
+                raise ConflictError('Custom commission total rate cannot exceed 100')
 
         if product.zone_type == ZoneType.REPURCHASE and payload.get('flash_sale_enabled'):
             raise ConflictError('Repurchase zone does not support flash sale')

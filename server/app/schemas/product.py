@@ -58,6 +58,14 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     per_user_limit: int | None = None
     merchant_commission_rule_id: int | None = None
     device_revenue_enabled: bool = False
+    custom_commission_enabled: bool = False
+    custom_commission_method: str = 'RATE'
+    custom_commission_level1_rate: float = 0
+    custom_commission_level2_rate: float = 0
+    custom_commission_level3_rate: float = 0
+    custom_commission_level1_amount: float = 0
+    custom_commission_level2_amount: float = 0
+    custom_commission_level3_amount: float = 0
 
 
 class ProductCategoryCreateRequest(AppBaseModel):

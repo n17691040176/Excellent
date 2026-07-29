@@ -416,7 +416,7 @@
     </el-drawer>
 
     <!-- 专区规则配置抽屉 -->
-    <el-drawer v-model="zoneConfigVisible" :title="zoneConfigTitle" size="560px">
+    <el-drawer v-model="zoneConfigVisible" :title="zoneConfigTitle" size="min(560px, 100vw)">
       <div class="panel-card data-card" v-loading="zoneConfigLoading">
         <div class="config-head">
           <div class="soft-tag">{{ zoneLabelMap[zoneConfigForm.zone_type] || '--' }}</div>
@@ -479,6 +479,56 @@
             </div>
           </template>
 
+          <div class="commission-rule-section">
+            <div class="rule-section-heading">
+              <div>
+                <div class="cell-title small">商品专属分润</div>
+                <div class="rule-section-meta">仅对当前商品生效</div>
+              </div>
+              <el-switch v-model="zoneConfigForm.custom_commission_enabled" />
+            </div>
+
+            <template v-if="zoneConfigForm.custom_commission_enabled">
+              <el-alert
+                title="专属规则启用后，不再触发该商品的通用分润和团队奖。"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="commission-rule-alert"
+              />
+              <el-form-item label="计算方式">
+                <el-radio-group v-model="zoneConfigForm.custom_commission_method">
+                  <el-radio-button value="RATE">按利润比例</el-radio-button>
+                  <el-radio-button value="FIXED_AMOUNT">每件固定金额</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+
+              <div v-if="zoneConfigForm.custom_commission_method === 'RATE'" class="commission-value-grid">
+                <el-form-item v-for="level in 3" :key="`rate-${level}`" :label="`${levelText[level]}比例（%）`">
+                  <el-input-number
+                    v-model="zoneConfigForm[`custom_commission_level${level}_rate`]"
+                    :min="0"
+                    :max="100"
+                    :step="0.5"
+                    :precision="2"
+                    controls-position="right"
+                  />
+                </el-form-item>
+              </div>
+              <div v-else class="commission-value-grid">
+                <el-form-item v-for="level in 3" :key="`amount-${level}`" :label="`${levelText[level]}金额（元/件）`">
+                  <el-input-number
+                    v-model="zoneConfigForm[`custom_commission_level${level}_amount`]"
+                    :min="0"
+                    :step="1"
+                    :precision="2"
+                    controls-position="right"
+                  />
+                </el-form-item>
+              </div>
+            </template>
+          </div>
+
           <div class="payment-method-section">
             <div class="cell-title small">支付方式</div>
             <div class="form-split">
@@ -533,6 +583,7 @@ import { PageHeader, MetricCard, FilterBar, StatusTag } from '@/components/commo
 
 const userStore = useUserStore()
 const canAuditProducts = computed(() => hasPermission(userStore.role, 'products:audit', userStore.permissions))
+const levelText = { 1: '一级', 2: '二级', 3: '三级' }
 const canEditProducts = computed(() => hasPermission(userStore.role, 'products:edit', userStore.permissions))
 const canShelfProducts = computed(() => hasPermission(userStore.role, 'products:shelf', userStore.permissions))
 const router = useRouter()
@@ -648,7 +699,15 @@ function createDefaultZoneConfig() {
     flash_sale_enabled: false,
     per_user_limit: null,
     merchant_commission_rule_id: null,
-    device_revenue_enabled: false
+    device_revenue_enabled: false,
+    custom_commission_enabled: false,
+    custom_commission_method: 'RATE',
+    custom_commission_level1_rate: 0,
+    custom_commission_level2_rate: 0,
+    custom_commission_level3_rate: 0,
+    custom_commission_level1_amount: 0,
+    custom_commission_level2_amount: 0,
+    custom_commission_level3_amount: 0
   }
 }
 
@@ -853,6 +912,16 @@ function buildItemList(profile, detail) {
 
 function buildZoneSummary(config = {}) {
   const businessBadges = []
+  const commissionBadges = []
+  if (config.custom_commission_enabled) {
+    const fixed = config.custom_commission_method === 'FIXED_AMOUNT'
+    const suffix = fixed ? '元/件' : '%'
+    const field = fixed ? 'amount' : 'rate'
+    const values = [1, 2, 3].map((level) => Number(config[`custom_commission_level${level}_${field}`] || 0))
+    commissionBadges.push(`专属分润 ${values.join('/')} ${suffix}`)
+  } else {
+    commissionBadges.push('通用分润')
+  }
   if (config.zone_type === 'REPURCHASE') {
     businessBadges.push(config.package_required ? '需套餐资格' : '无需套餐资格')
     if (config.repurchase_discount_rate != null) businessBadges.push(`复购折扣 ${Number(config.repurchase_discount_rate).toFixed(2).replace(/\.00$/, '')}%`)
@@ -874,7 +943,7 @@ function buildZoneSummary(config = {}) {
     config.alipay_purchase_enabled ? '支付宝支付' : null,
     '微信开发中'
   ].filter(Boolean)
-  return { badges: [...paymentBadges, ...businessBadges].slice(0, 4) }
+  return { badges: [...commissionBadges, ...paymentBadges, ...businessBadges].slice(0, 5) }
 }
 
 const formPreview = computed(() => {
@@ -1038,6 +1107,13 @@ function normalizeZoneConfig(data = {}) {
     ai_coupon_max_deduct_rate: data.ai_coupon_max_deduct_rate == null ? null : Number(data.ai_coupon_max_deduct_rate),
     per_user_limit: data.per_user_limit ?? null,
     merchant_commission_rule_id: data.merchant_commission_rule_id ?? null,
+    custom_commission_method: data.custom_commission_method || 'RATE',
+    custom_commission_level1_rate: Number(data.custom_commission_level1_rate || 0),
+    custom_commission_level2_rate: Number(data.custom_commission_level2_rate || 0),
+    custom_commission_level3_rate: Number(data.custom_commission_level3_rate || 0),
+    custom_commission_level1_amount: Number(data.custom_commission_level1_amount || 0),
+    custom_commission_level2_amount: Number(data.custom_commission_level2_amount || 0),
+    custom_commission_level3_amount: Number(data.custom_commission_level3_amount || 0),
     package_required: Boolean(data.package_required),
     points_purchase_enabled: Boolean(data.points_purchase_enabled),
     balance_purchase_enabled: Boolean(data.balance_purchase_enabled),
@@ -1051,7 +1127,8 @@ function normalizeZoneConfig(data = {}) {
     balance_only_enabled: data.balance_only_enabled == null ? true : Boolean(data.balance_only_enabled),
     balance_points_enabled: data.balance_points_enabled == null ? true : Boolean(data.balance_points_enabled),
     flash_sale_enabled: Boolean(data.flash_sale_enabled),
-    device_revenue_enabled: Boolean(data.device_revenue_enabled)
+    device_revenue_enabled: Boolean(data.device_revenue_enabled),
+    custom_commission_enabled: Boolean(data.custom_commission_enabled)
   }
 }
 
@@ -1236,6 +1313,19 @@ async function openZoneConfig(row) {
 }
 
 async function saveZoneConfig() {
+  if (zoneConfigForm.value.custom_commission_enabled) {
+    const fixed = zoneConfigForm.value.custom_commission_method === 'FIXED_AMOUNT'
+    const field = fixed ? 'amount' : 'rate'
+    const values = [1, 2, 3].map((level) => Number(zoneConfigForm.value[`custom_commission_level${level}_${field}`] || 0))
+    if (values.every((value) => value <= 0)) {
+      ElMessage.warning('专属分润至少填写一个大于 0 的值')
+      return
+    }
+    if (!fixed && values.reduce((sum, value) => sum + value, 0) > 100) {
+      ElMessage.warning('专属分润比例合计不能超过 100%')
+      return
+    }
+  }
   zoneConfigSaving.value = true
   try {
     await productApi.updateZoneConfig(zoneConfigProduct.value.id, {
@@ -1258,7 +1348,15 @@ async function saveZoneConfig() {
       flash_sale_enabled: zoneConfigForm.value.flash_sale_enabled,
       per_user_limit: zoneConfigForm.value.per_user_limit,
       merchant_commission_rule_id: zoneConfigForm.value.merchant_commission_rule_id,
-      device_revenue_enabled: zoneConfigForm.value.device_revenue_enabled
+      device_revenue_enabled: zoneConfigForm.value.device_revenue_enabled,
+      custom_commission_enabled: zoneConfigForm.value.custom_commission_enabled,
+      custom_commission_method: zoneConfigForm.value.custom_commission_method,
+      custom_commission_level1_rate: zoneConfigForm.value.custom_commission_level1_rate,
+      custom_commission_level2_rate: zoneConfigForm.value.custom_commission_level2_rate,
+      custom_commission_level3_rate: zoneConfigForm.value.custom_commission_level3_rate,
+      custom_commission_level1_amount: zoneConfigForm.value.custom_commission_level1_amount,
+      custom_commission_level2_amount: zoneConfigForm.value.custom_commission_level2_amount,
+      custom_commission_level3_amount: zoneConfigForm.value.custom_commission_level3_amount
     })
     ElMessage.success('专区规则已保存')
     zoneConfigVisible.value = false
@@ -1835,6 +1933,40 @@ onMounted(loadData)
   border-top: 1px solid var(--border-light);
 }
 
+.commission-rule-section {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-light);
+}
+
+.rule-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.rule-section-meta {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.commission-rule-alert {
+  margin-bottom: var(--space-4);
+}
+
+.commission-value-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.commission-value-grid :deep(.el-input-number) {
+  width: 100%;
+}
+
 .payment-method-label {
   display: inline-flex;
   align-items: center;
@@ -1876,6 +2008,7 @@ onMounted(loadData)
 
 @media (max-width: 960px) {
   .form-split,
+  .commission-value-grid,
   .product-image-field,
   .product-cell,
   .mobile-card {

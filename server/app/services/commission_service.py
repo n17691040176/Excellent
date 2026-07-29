@@ -17,7 +17,7 @@ from app.models.enums import (
     WithdrawType,
 )
 from app.models.order import Order, OrderItem
-from app.models.product import Product
+from app.models.product import Product, ProductZoneConfig
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
@@ -101,11 +101,14 @@ class CommissionService:
         if not profit_items:
             return
 
+        custom_configs = CommissionService._custom_commission_configs(db, profit_items)
+
         if order.order_type == OrderType.REPURCHASE_ORDER:
-            CommissionService._freeze_repurchase_reward(db, order, buyer, profit_items)
+            CommissionService._freeze_repurchase_reward(db, order, buyer, profit_items, custom_configs)
         else:
-            CommissionService._freeze_distribution_rewards(db, order, buyer, profit_items)
-        CommissionService._freeze_direct_team_reward(db, order, buyer, profit_items)
+            CommissionService._freeze_distribution_rewards(db, order, buyer, profit_items, custom_configs)
+        standard_profit_items = [item for item in profit_items if item[0] not in custom_configs]
+        CommissionService._freeze_direct_team_reward(db, order, buyer, standard_profit_items)
 
     @staticmethod
     def settle_for_order(db: Session, order_id: int) -> None:
@@ -283,56 +286,88 @@ class CommissionService:
         db: Session,
         order: Order,
         buyer: User,
-        profit_items: list[tuple[int, Decimal]],
+        profit_items: list[tuple[int, Decimal, Decimal]],
+        custom_configs: dict[int, ProductZoneConfig],
     ) -> None:
         ancestors = CommissionService._ancestor_users(db, buyer, max_level=3)
         for level, beneficiary in ancestors:
             if not CommissionService._distribution_enabled(db, beneficiary):
                 continue
-            for product_id, base_amount in profit_items:
-                rate = EarningRuleService.rate_for_commission_level(
+            for product_id, base_amount, quantity in profit_items:
+                custom_config = custom_configs.get(product_id)
+                if custom_config:
+                    rate, fixed_amount = CommissionService._custom_commission_value(custom_config, level, quantity)
+                else:
+                    rate = EarningRuleService.rate_for_commission_level(
+                        db,
+                        level,
+                        product_id=product_id,
+                        trigger_event='ORDER_COMPLETE',
+                    )
+                    fixed_amount = None
+                CommissionService._add_frozen_flow(
                     db,
+                    order,
+                    buyer,
+                    beneficiary,
                     level,
-                    product_id=product_id,
-                    trigger_event='ORDER_COMPLETE',
+                    rate,
+                    base_amount,
+                    commission_amount=fixed_amount,
                 )
-                CommissionService._add_frozen_flow(db, order, buyer, beneficiary, level, rate, base_amount)
 
     @staticmethod
     def _freeze_repurchase_reward(
         db: Session,
         order: Order,
         buyer: User,
-        profit_items: list[tuple[int, Decimal]],
+        profit_items: list[tuple[int, Decimal, Decimal]],
+        custom_configs: dict[int, ProductZoneConfig],
     ) -> None:
         if not buyer.parent_id:
             return
         beneficiary = db.get(User, buyer.parent_id)
         if not beneficiary or not CommissionService._distribution_enabled(db, beneficiary):
             return
-        for product_id, base_amount in profit_items:
-            rate = EarningRuleService.rate_for_commission_level(
+        for product_id, base_amount, quantity in profit_items:
+            custom_config = custom_configs.get(product_id)
+            if custom_config:
+                rate, fixed_amount = CommissionService._custom_commission_value(custom_config, 1, quantity)
+            else:
+                rate = EarningRuleService.rate_for_commission_level(
+                    db,
+                    1,
+                    product_id=product_id,
+                    trigger_event='REPEAT_PURCHASE',
+                )
+                fixed_amount = None
+            CommissionService._add_frozen_flow(
                 db,
+                order,
+                buyer,
+                beneficiary,
                 1,
-                product_id=product_id,
-                trigger_event='REPEAT_PURCHASE',
+                rate,
+                base_amount,
+                commission_amount=fixed_amount,
             )
-            CommissionService._add_frozen_flow(db, order, buyer, beneficiary, 1, rate, base_amount)
 
     @staticmethod
     def _freeze_direct_team_reward(
         db: Session,
         order: Order,
         buyer: User,
-        profit_items: list[tuple[int, Decimal]],
+        profit_items: list[tuple[int, Decimal, Decimal]],
     ) -> None:
+        if not profit_items:
+            return
         if not buyer.parent_id:
             return
         beneficiary = db.get(User, buyer.parent_id)
         if not beneficiary or not CommissionService._distribution_enabled(db, beneficiary):
             return
         rate = EarningRuleService.rate_for_team_member_level(db, beneficiary.business_identity)
-        total_profit = quantize_amount(sum((amount for _, amount in profit_items), Decimal('0')))
+        total_profit = quantize_amount(sum((amount for _, amount, _ in profit_items), Decimal('0')))
         CommissionService._add_frozen_flow(db, order, buyer, beneficiary, TEAM_REWARD_FLOW_LEVEL, rate, total_profit)
 
     @staticmethod
@@ -344,11 +379,15 @@ class CommissionService:
         level: int,
         rate: Decimal,
         base_amount: Decimal,
+        commission_amount: Decimal | None = None,
     ) -> None:
         base = quantize_amount(base_amount)
-        if base <= Decimal('0') or rate <= Decimal('0'):
-            return
-        amount = quantize_amount(base * rate)
+        if commission_amount is None:
+            if base <= Decimal('0') or rate <= Decimal('0'):
+                return
+            amount = quantize_amount(base * rate)
+        else:
+            amount = quantize_amount(commission_amount)
         if amount <= Decimal('0'):
             return
         commission = db.query(UserCommission).filter(UserCommission.user_id == beneficiary.id).first()
@@ -375,7 +414,7 @@ class CommissionService:
         )
 
     @staticmethod
-    def _order_profit_items(db: Session, order_id: int) -> list[tuple[int, Decimal]]:
+    def _order_profit_items(db: Session, order_id: int) -> list[tuple[int, Decimal, Decimal]]:
         items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
         if not items:
             return []
@@ -384,18 +423,46 @@ class CommissionService:
             product.id: product
             for product in db.query(Product).filter(Product.id.in_(product_ids)).all()
         }
-        profit_items: list[tuple[int, Decimal]] = []
+        profit_items: list[tuple[int, Decimal, Decimal]] = []
         for item in items:
             product = products.get(item.product_id)
+            quantity = Decimal(str(item.quantity or 0))
             if not product or product.cost_price is None:
                 profit = Decimal('0')
             else:
                 unit_price = Decimal(str(item.unit_price or '0'))
                 cost_price = Decimal(str(product.cost_price or '0'))
-                quantity = Decimal(str(item.quantity or 0))
                 profit = max(Decimal('0'), unit_price - cost_price) * quantity
-            profit_items.append((item.product_id, quantize_amount(profit)))
+            profit_items.append((item.product_id, quantize_amount(profit), quantity))
         return profit_items
+
+    @staticmethod
+    def _custom_commission_configs(
+        db: Session,
+        profit_items: list[tuple[int, Decimal, Decimal]],
+    ) -> dict[int, ProductZoneConfig]:
+        product_ids = {product_id for product_id, _, _ in profit_items}
+        if not product_ids:
+            return {}
+        rows = db.query(ProductZoneConfig).filter(
+            ProductZoneConfig.product_id.in_(product_ids),
+            ProductZoneConfig.custom_commission_enabled.is_(True),
+        ).all()
+        return {row.product_id: row for row in rows}
+
+    @staticmethod
+    def _custom_commission_value(
+        config: ProductZoneConfig,
+        level: int,
+        quantity: Decimal,
+    ) -> tuple[Decimal, Decimal | None]:
+        if level < 1 or level > 3:
+            return Decimal('0'), None
+        if str(config.custom_commission_method or 'RATE').upper() == 'FIXED_AMOUNT':
+            unit_amount = Decimal(str(getattr(config, f'custom_commission_level{level}_amount', 0) or 0))
+            return Decimal('0'), quantize_amount(unit_amount * quantity)
+        percentage = Decimal(str(getattr(config, f'custom_commission_level{level}_rate', 0) or 0))
+        return percentage / Decimal('100'), None
 
     @staticmethod
     def _ancestor_users(db: Session, buyer: User, max_level: int) -> list[tuple[int, User]]:
