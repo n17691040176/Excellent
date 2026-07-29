@@ -68,9 +68,9 @@ class CommissionService:
 
     @staticmethod
     def get_config(db: Session) -> CommissionConfig:
-        config = db.query(CommissionConfig).filter(CommissionConfig.is_active.is_(True)).first()
+        config = db.query(CommissionConfig).order_by(CommissionConfig.id.desc()).first()
         if not config:
-            config = CommissionConfig(level1_rate=5, level2_rate=2, is_active=True, updated_at=now())
+            config = CommissionConfig(level1_rate=0, level2_rate=0, is_active=False, updated_at=now())
             db.add(config)
             db.commit()
             db.refresh(config)

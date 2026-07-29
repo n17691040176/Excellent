@@ -1,6 +1,8 @@
-from sqlalchemy import inspect, text
+from sqlalchemy import Connection, inspect, text
 
 from app.db.session import engine
+
+EARNING_RULE_POOL_CLEANUP_KEY = '20260729_clear_earning_rule_pool'
 
 
 def _column_names(table_name: str) -> set[str]:
@@ -9,6 +11,37 @@ def _column_names(table_name: str) -> set[str]:
 
 def _index_names(table_name: str) -> set[str]:
     return {item['name'] for item in inspect(engine).get_indexes(table_name)}
+
+
+def _clear_legacy_earning_rule_pool(connection: Connection) -> None:
+    """Delete the old shared rule pool once without touching product rules."""
+
+    connection.execute(
+        text(
+            'CREATE TABLE IF NOT EXISTS app_data_migrations ('
+            'migration_key VARCHAR(128) PRIMARY KEY, '
+            'applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
+            ')'
+        )
+    )
+    already_applied = connection.execute(
+        text('SELECT migration_key FROM app_data_migrations WHERE migration_key = :migration_key'),
+        {'migration_key': EARNING_RULE_POOL_CLEANUP_KEY},
+    ).first()
+    if already_applied:
+        return
+
+    connection.execute(text('DELETE FROM earning_rules'))
+    connection.execute(
+        text('UPDATE commission_configs SET level1_rate = 0, level2_rate = 0, is_active = 0')
+    )
+    connection.execute(
+        text(
+            'INSERT INTO app_data_migrations (migration_key, applied_at) '
+            'VALUES (:migration_key, CURRENT_TIMESTAMP)'
+        ),
+        {'migration_key': EARNING_RULE_POOL_CLEANUP_KEY},
+    )
 
 
 def apply_schema_migrations() -> None:
@@ -76,3 +109,5 @@ def apply_schema_migrations() -> None:
                 connection.execute(
                     text(f'ALTER TABLE product_zone_configs ADD COLUMN {column_name} {column_type}')
                 )
+
+        _clear_legacy_earning_rule_pool(connection)

@@ -103,6 +103,7 @@ def test_admin_zone_summary_hides_legacy_payment_modes():
     )
 
     assert summary['badges'][:3] == ['余额支付', '支付宝支付', '微信开发中']
+    assert '未配置分润' in summary['badges']
     assert all('积分' not in badge and '现金' not in badge for badge in summary['badges'])
 
 

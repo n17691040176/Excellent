@@ -18,7 +18,6 @@ def list_rules(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
-    EarningRuleService.ensure_default_rules(db)
     return {'code': 0, 'message': 'success', 'data': EarningRuleService.list_rules(db, rule_type=rule_type, is_active=is_active)}
 
 

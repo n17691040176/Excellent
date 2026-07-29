@@ -490,7 +490,7 @@
 
             <template v-if="zoneConfigForm.custom_commission_enabled">
               <el-alert
-                title="专属规则启用后，不再触发该商品的通用分润和团队奖。"
+                title="专属规则启用后，仅触发当前商品的专属分润，不触发团队奖。"
                 type="warning"
                 :closable="false"
                 show-icon
@@ -920,7 +920,7 @@ function buildZoneSummary(config = {}) {
     const values = [1, 2, 3].map((level) => Number(config[`custom_commission_level${level}_${field}`] || 0))
     commissionBadges.push(`专属分润 ${values.join('/')} ${suffix}`)
   } else {
-    commissionBadges.push('通用分润')
+    commissionBadges.push('未配置分润')
   }
   if (config.zone_type === 'REPURCHASE') {
     businessBadges.push(config.package_required ? '需套餐资格' : '无需套餐资格')
@@ -943,7 +943,7 @@ function buildZoneSummary(config = {}) {
     config.alipay_purchase_enabled ? '支付宝支付' : null,
     '微信开发中'
   ].filter(Boolean)
-  return { badges: [...commissionBadges, ...paymentBadges, ...businessBadges].slice(0, 5) }
+  return { badges: [...paymentBadges, ...commissionBadges, ...businessBadges].slice(0, 5) }
 }
 
 const formPreview = computed(() => {

@@ -12,9 +12,9 @@ class CommissionConfig(Base):
     __tablename__ = 'commission_configs'
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    level1_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=5.00)
-    level2_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=2.00)
-    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    level1_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    level2_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(default=False, nullable=False)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 

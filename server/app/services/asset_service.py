@@ -21,10 +21,6 @@ from app.utils.helpers import now, quantize_amount, today
 
 DEFAULT_ASSET_TYPES = [AssetType.BALANCE, AssetType.POINTS, AssetType.VOUCHER, AssetType.AI_COUPON, AssetType.POWER_BANK]
 VISIBLE_ASSET_TOTAL_TYPES = {AssetType.BALANCE, AssetType.POINTS, AssetType.VOUCHER}
-POWER_BANK_OWNER_DAILY_INCOME = Decimal('0.75')
-POWER_BANK_REFERRAL_DAILY_INCOME = Decimal('0.25')
-
-
 def init_user_assets(db: Session, user_id: int) -> None:
     AssetService.ensure_user_asset_accounts(db, user_id)
 
@@ -552,8 +548,8 @@ class AssetService:
         if not power_banks:
             return
 
-        owner_income_amount = EarningRuleService.fixed_amount(db, PB_OWNER_DAILY_RULE, POWER_BANK_OWNER_DAILY_INCOME)
-        referrer_income_amount = EarningRuleService.fixed_amount(db, PB_REFERRAL_DAILY_RULE, POWER_BANK_REFERRAL_DAILY_INCOME)
+        owner_income_amount = EarningRuleService.fixed_amount(db, PB_OWNER_DAILY_RULE, Decimal('0'))
+        referrer_income_amount = EarningRuleService.fixed_amount(db, PB_REFERRAL_DAILY_RULE, Decimal('0'))
 
         owner_cache: dict[int, User | None] = {}
         changed = False

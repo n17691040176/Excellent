@@ -807,8 +807,8 @@ class ProductService:
             values = [snapshot.get(f'custom_commission_level{level}_{"rate" if method == "RATE" else "amount"}', 0) for level in range(1, 4)]
             commission_badges.append(f'专属分润 {"/".join(f"{value:g}" for value in values)}{suffix}')
         else:
-            commission_badges.append('通用分润')
-        badges = commission_badges + [item for item in payment_badges if item] + badges
+            commission_badges.append('未配置分润')
+        badges = [item for item in payment_badges if item] + commission_badges + badges
 
         return {
             'configured': bool(snapshot.get('configured')),
