@@ -23,6 +23,7 @@ PERMISSION_GROUPS = [
             {'key': 'users:view', 'label': '查看用户'},
             {'key': 'users:manage-commerce', 'label': '管理用户资料与资产'},
             {'key': 'users:status', 'label': '启用或禁用用户'},
+            {'key': 'users:member-level', 'label': '管理会员等级'},
             {'key': 'teams:view', 'label': '查看团队'},
             {'key': 'teams:edit', 'label': '管理团队'},
             {'key': 'invites:view', 'label': '邀请裂变'},
@@ -43,6 +44,7 @@ PERMISSION_GROUPS = [
             {'key': 'shipments:manage', 'label': '管理物流'},
             {'key': 'region:view', 'label': '区域订单统计'},
             {'key': 'region:audit', 'label': '审核区域代理'},
+            {'key': 'region:reward-config', 'label': '配置区域订单奖励'},
         ],
     },
     {
@@ -84,6 +86,7 @@ DEFAULT_TEAM_ADMIN_PERMISSIONS = {
     'dashboard:view',
     'users:view',
     'users:manage-commerce',
+    'users:member-level',
     'teams:view',
     'teams:edit',
     'invites:view',
@@ -97,6 +100,7 @@ DEFAULT_TEAM_ADMIN_PERMISSIONS = {
     'shipments:view',
     'shipments:manage',
     'region:view',
+    'region:reward-config',
     'commission:view',
     'withdraws:view',
     'withdraws:review',
@@ -258,6 +262,8 @@ class AdminPermissionService:
         if clean_path.startswith('/users'):
             if clean_path.endswith('/status'):
                 return 'users:status'
+            if clean_path.endswith('/member-level'):
+                return 'users:member-level'
             return 'users:view' if method == 'GET' else 'users:manage-commerce'
         if clean_path.startswith('/teams'):
             return 'teams:view' if method == 'GET' else 'teams:edit'
@@ -285,6 +291,8 @@ class AdminPermissionService:
             return 'users:manage-commerce' if method == 'DELETE' else 'users:view'
         if clean_path.startswith('/region-agents/audit'):
             return 'region:audit'
+        if clean_path.endswith('/reward-config'):
+            return 'region:reward-config'
         if clean_path.startswith('/region-agents') or clean_path.startswith('/region'):
             return 'region:view'
         if clean_path.startswith('/local-life'):

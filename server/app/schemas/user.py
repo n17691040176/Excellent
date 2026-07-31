@@ -1,5 +1,6 @@
 from pydantic import Field
 
+from app.models.enums import MemberLevel
 from app.schemas.common import AppBaseModel
 
 
@@ -9,7 +10,7 @@ class UserOut(AppBaseModel):
     nickname: str
     avatar: str | None = None
     global_role: str
-    business_identity: str
+    member_level: str
     status: str
     invite_code: str
     team_id: int | None = None
@@ -23,6 +24,10 @@ class UpdateProfileRequest(AppBaseModel):
 
 class UpdateUserStatusRequest(AppBaseModel):
     status: str
+
+
+class UpdateMemberLevelRequest(AppBaseModel):
+    member_level: MemberLevel
 
 
 class BindInviterRequest(AppBaseModel):

@@ -5,9 +5,11 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     Enum,
+    ForeignKey,
     Index,
     Numeric,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,12 +24,12 @@ class RegionDividendFlow(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     # 关联订单
-    order_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey('orders.id'), nullable=False, index=True)
     order_no: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # 区域代理信息
-    agent_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    agent_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    agent_id: Mapped[int] = mapped_column(ForeignKey('region_agents.id'), nullable=False, index=True)
+    agent_user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
     agent_type: Mapped[str] = mapped_column(String(32), nullable=False)  # COUNTY_AGENT / CITY_AGENT
 
     # 区域信息
@@ -56,6 +58,7 @@ class RegionDividendFlow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (
+        UniqueConstraint('order_id', 'agent_id', name='uq_region_dividend_order_agent'),
         Index('idx_dividend_agent', 'agent_user_id'),
         Index('idx_dividend_status', 'status'),
         Index('idx_dividend_created', 'created_at'),

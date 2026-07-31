@@ -23,11 +23,8 @@
           </view>
         </view>
       </view>
-      <view v-if="isLogin" class="vip-tag" :class="{ active: isVip }">
-        <svg v-if="isVip" width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        {{ isVip ? 'VIP会员' : '普通用户' }}
+      <view v-if="isLogin" class="vip-tag" :class="{ active: level !== 'NORMAL_MEMBER' }">
+        {{ overview.levelText || '普通会员' }}
       </view>
     </view>
 
@@ -196,7 +193,7 @@ const assetSummary = ref({});
 const overview = ref({
   nickname: '点击登录',
   userId: '--',
-  level: 1,
+  memberLevel: 'NORMAL_MEMBER',
   withdrawableCommission: '0.00'
 });
 const inviteCode = ref('');
@@ -206,8 +203,7 @@ const isLogin = computed(() => !!profileInfo.value?.id);
 const avatarUrl = computed(() => profileInfo.value?.avatar || '');
 const nickname = computed(() => overview.value.nickname || '点击登录');
 const userId = computed(() => overview.value.userId || '--');
-const level = computed(() => overview.value.level || 1);
-const isVip = computed(() => level.value > 1);
+const level = computed(() => overview.value.memberLevel || 'NORMAL_MEMBER');
 
 // Assets
 const assets = computed(() => [

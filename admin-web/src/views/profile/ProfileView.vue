@@ -49,9 +49,9 @@
             <div class="meta">后台路由与菜单按角色收敛</div>
           </div>
           <div class="tiny-stat">
-            <div class="title">业务身份</div>
-            <div class="number">{{ profileForm.business_identity || '--' }}</div>
-            <div class="meta">可关联团队、招商或本地生活身份</div>
+            <div class="title">会员等级</div>
+            <div class="number">{{ memberLevelLabel }}</div>
+            <div class="meta">普通会员、经销商、区代理或市代理</div>
           </div>
         </div>
         <el-form :model="passwordForm" label-position="top">
@@ -86,7 +86,7 @@ const profileForm = reactive({
   nickname: '',
   real_name: '',
   avatar: '',
-  business_identity: '',
+  member_level: '',
   global_role: ''
 })
 const passwordForm = reactive({
@@ -100,6 +100,13 @@ const roleLabel = computed(() => ({
   TEAM_ADMIN: '团队管理员',
   USER: '普通用户'
 }[profileForm.global_role] || '--'))
+
+const memberLevelLabel = computed(() => ({
+  NORMAL_MEMBER: '普通会员',
+  DEALER: '经销商',
+  COUNTY_AGENT: '区代理',
+  CITY_AGENT: '市代理'
+}[profileForm.member_level] || '--'))
 
 async function loadData() {
   const profile = await adminProfileApi.get()

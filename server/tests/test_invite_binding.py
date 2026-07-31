@@ -7,7 +7,7 @@ import app.models  # noqa: F401
 from app.api.v1 import users as users_api
 from app.core.exceptions import ConflictError, NotFoundError
 from app.db.base import Base
-from app.models.enums import BusinessIdentity, GlobalRole, UserStatus
+from app.models.enums import GlobalRole, MemberLevel, UserStatus
 from app.models.user import InviteRecord, User
 from app.services.auth_service import AuthService
 
@@ -34,7 +34,7 @@ def create_user(db: Session, suffix: str, *, parent_id: int | None = None) -> Us
         password_hash='test',
         nickname=f'用户{suffix}',
         global_role=GlobalRole.USER,
-        business_identity=BusinessIdentity.NORMAL_MEMBER,
+        member_level=MemberLevel.NORMAL_MEMBER,
         status=UserStatus.ENABLED,
         invite_code=f'INV{suffix.zfill(5)}',
         parent_id=parent_id,

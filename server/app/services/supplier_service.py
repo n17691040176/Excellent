@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.enums import (
     AgentLevelCode,
-    BusinessIdentity,
+    MemberLevel,
     OrderType,
     PayStatus,
     ProductOwnerType,
@@ -470,7 +470,7 @@ class SupplierService:
             }
         )
         if applicant and agent_level:
-            base['applicant_identity'] = applicant.business_identity.value
+            base['member_level'] = applicant.member_level.value
         return base
 
     @staticmethod
@@ -546,26 +546,13 @@ class SupplierService:
         }
 
     @staticmethod
-    def _upgrade_business_identity_to(user: User, target_identity: BusinessIdentity) -> None:
-        identity_rank = {
-            BusinessIdentity.NORMAL_MEMBER: 0,
-            BusinessIdentity.SUPPLIER: 1,
-            BusinessIdentity.LOCAL_MERCHANT: 1,
-            BusinessIdentity.COUNTY_AGENT: 2,
-            BusinessIdentity.CITY_AGENT: 3,
-        }
-        if identity_rank[target_identity] > identity_rank.get(user.business_identity, 0):
-            user.business_identity = target_identity
-
-    @staticmethod
-    def _upgrade_business_identity(user: User, agent_level_code: AgentLevelCode) -> None:
-        SupplierService._upgrade_business_identity_to(
-            user,
-            {
-                AgentLevelCode.COUNTY_AGENT: BusinessIdentity.COUNTY_AGENT,
-                AgentLevelCode.CITY_AGENT: BusinessIdentity.CITY_AGENT,
-            }[agent_level_code],
-        )
+    def _upgrade_member_level(user: User, agent_level_code: AgentLevelCode) -> None:
+        target_level = {
+            AgentLevelCode.COUNTY_AGENT: MemberLevel.COUNTY_AGENT,
+            AgentLevelCode.CITY_AGENT: MemberLevel.CITY_AGENT,
+        }[agent_level_code]
+        if target_level.rank > user.member_level.rank:
+            user.member_level = target_level
 
     @staticmethod
     def _bind_product_owner_from_qualification(
@@ -699,9 +686,6 @@ class SupplierService:
         qualification.audited_at = now()
         db.flush()
 
-        if target_status == QualificationStatus.APPROVED and supplier:
-            SupplierService._upgrade_business_identity_to(applicant, BusinessIdentity.SUPPLIER)
-
         if qualification.qualification_type == QualificationType.AGENT_QUALIFICATION and qualification.source_ref_id:
             current_agent_qualification = agent_qualification or db.get(AgentQualification, qualification.source_ref_id)
             if current_agent_qualification:
@@ -713,7 +697,7 @@ class SupplierService:
                     (QualificationStatus.APPROVED,),
                 )
                 if target_status == QualificationStatus.APPROVED and agent_level:
-                    SupplierService._upgrade_business_identity(applicant, agent_level.level_code)
+                    SupplierService._upgrade_member_level(applicant, agent_level.level_code)
 
         if owner_bound and supplier:
             qualification.audit_remark = (

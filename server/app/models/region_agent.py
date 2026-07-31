@@ -5,6 +5,7 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     Enum,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -23,14 +24,14 @@ class RegionAgent(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     # 用户信息
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
 
     # 代理区域 - 支持省、市、区三级
     province: Mapped[str] = mapped_column(String(64), nullable=False, default='')
     city: Mapped[str] = mapped_column(String(64), nullable=False, default='')
     district: Mapped[str] = mapped_column(String(64), nullable=False, default='')
 
-    # 代理类型：区县代理、市代理
+    # 代理类型：区代理、市代理
     agent_type: Mapped[str] = mapped_column(
         Enum('COUNTY_AGENT', 'CITY_AGENT', name='region_agent_type'),
         nullable=False,
@@ -60,7 +61,7 @@ class RegionAgent(Base):
     # 一手资源证明
     resource_proof_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    # 分红比例（可后台配置）
+    # 区域订单奖励比例，按订单实付金额的百分比计算
     dividend_rate: Mapped[float] = mapped_column(default=0.0)
 
     # 统计

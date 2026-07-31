@@ -18,7 +18,7 @@
       />
 
       <!-- 数据表格 -->
-      <el-table :data="pagedRows" border>
+      <el-table :data="users" border>
         <el-table-column prop="id" label="用户 ID" width="90" />
         <el-table-column label="来源" width="130">
           <template #default="{ row }">
@@ -39,6 +39,13 @@
             <el-tag size="small">{{ roleLabel(row.global_role) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="会员等级" width="120">
+          <template #default="{ row }">
+            <el-tag size="small" :type="memberLevelTag(row.member_level)">
+              {{ memberLevelLabel(row.member_level) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <StatusTag :type="row.status === 'ENABLED' ? 'success' : 'danger'" size="small">
@@ -46,11 +53,17 @@
             </StatusTag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="action-group">
               <el-button link type="primary" @click="openUserDetail(row)">详情</el-button>
               <el-button link type="default" @click="openInviteTree(row)">邀请关系</el-button>
+              <el-button
+                v-if="canChangeMemberLevel"
+                link
+                type="primary"
+                @click="openMemberLevelDialog(row)"
+              >调整等级</el-button>
               <el-dropdown trigger="click" @command="(cmd) => handleMoreAction(cmd, row)">
                 <el-button link>
                   更多
@@ -82,10 +95,33 @@
         class="table-pagination"
         layout="total, sizes, prev, pager, next"
         :page-sizes="[10, 20, 50, 100]"
-        :total="filteredRows.length"
+        :total="total"
         @size-change="handlePageSizeChange"
+        @current-change="fetchUsers"
       />
     </div>
+
+    <el-dialog v-model="memberLevelDialogVisible" title="调整会员等级" width="420px" destroy-on-close>
+      <el-form label-width="90px">
+        <el-form-item label="会员">
+          <span>{{ currentLevelUser?.nickname || currentLevelUser?.phone || '--' }}</span>
+        </el-form-item>
+        <el-form-item label="会员等级">
+          <el-select v-model="memberLevelForm.member_level" style="width: 100%">
+            <el-option
+              v-for="item in memberLevelOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="memberLevelDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="memberLevelSubmitting" @click="submitMemberLevel">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 用户详情抽屉 -->
     <el-drawer v-model="detailDrawerVisible" title="用户详情" size="960px">
@@ -129,8 +165,10 @@
                 <el-tag size="small">{{ roleLabel(userDetail.global_role) }}</el-tag>
               </div>
               <div class="info-item">
-                <span class="info-label">业务身份</span>
-                <span class="info-value">{{ userDetail.business_identity || '--' }}</span>
+                <span class="info-label">会员等级</span>
+                <el-tag size="small" :type="memberLevelTag(userDetail.member_level)">
+                  {{ memberLevelLabel(userDetail.member_level) }}
+                </el-tag>
               </div>
               <div class="info-item">
                 <span class="info-label">状态</span>
@@ -513,6 +551,7 @@ import { PageHeader, FilterBar, StatusTag } from '@/components/common'
 
 const userStore = useUserStore()
 const canChangeUserStatus = computed(() => hasPermission(userStore.role, 'users:status', userStore.permissions))
+const canChangeMemberLevel = computed(() => hasPermission(userStore.role, 'users:member-level', userStore.permissions))
 
 const users = ref([])
 const total = ref(0)
@@ -523,8 +562,14 @@ const pageSize = ref(20)
 const filters = ref({
   keyword: '',
   source: '',
-  role: ''
+  role: '',
+  member_level: ''
 })
+
+const memberLevelDialogVisible = ref(false)
+const memberLevelSubmitting = ref(false)
+const currentLevelUser = ref(null)
+const memberLevelForm = ref({ member_level: 'NORMAL_MEMBER' })
 
 // 抽屉状态
 const drawerVisible = ref(false)
@@ -563,10 +608,18 @@ const roleOptions = [
   { label: '普通用户', value: 'USER' }
 ]
 
+const memberLevelOptions = [
+  { label: '普通会员', value: 'NORMAL_MEMBER' },
+  { label: '经销商', value: 'DEALER' },
+  { label: '区代理', value: 'COUNTY_AGENT' },
+  { label: '市代理', value: 'CITY_AGENT' }
+]
+
 const filterFields = [
   { key: 'keyword', type: 'input', placeholder: '搜索手机号、昵称、邀请码', width: 240 },
   { key: 'source', type: 'select', label: '来源', options: sourceOptions, width: 140 },
-  { key: 'role', type: 'select', label: '角色', options: roleOptions, width: 160 }
+  { key: 'role', type: 'select', label: '角色', options: roleOptions, width: 160 },
+  { key: 'member_level', type: 'select', label: '会员等级', options: memberLevelOptions, width: 140 }
 ]
 
 const scopeHint = computed(() =>
@@ -576,26 +629,6 @@ const scopeHint = computed(() =>
 )
 
 const addressDialogTitle = computed(() => (addressDialogMode.value === 'edit' ? '编辑地址' : '新增地址'))
-
-const filteredRows = computed(() => {
-  const term = filters.value.keyword?.trim() || ''
-  return users.value.filter((item) => {
-    const hitKeyword =
-      !term ||
-      (item.phone || '').includes(term) ||
-      (item.nickname || '').includes(term) ||
-      (item.invite_code || '').includes(term) ||
-      String(item.id).includes(term)
-    const hitSource = !filters.value.source || item.is_legacy_imported === (filters.value.source === 'legacy')
-    const hitRole = !filters.value.role || item.global_role === filters.value.role
-    return hitKeyword && hitSource && hitRole
-  })
-})
-
-const pagedRows = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return filteredRows.value.slice(start, start + pageSize.value)
-})
 
 const legacyFields = computed(() => {
   const payload = legacyProfile.value?.legacy_profile || {}
@@ -625,6 +658,19 @@ const cartRows = computed(() => userDetail.value?.cart_items || [])
 
 function roleLabel(role) {
   return roleOptions.find((item) => item.value === role)?.label || role || '--'
+}
+
+function memberLevelLabel(level) {
+  return memberLevelOptions.find((item) => item.value === level)?.label || level || '--'
+}
+
+function memberLevelTag(level) {
+  return {
+    NORMAL_MEMBER: 'info',
+    DEALER: 'success',
+    COUNTY_AGENT: 'warning',
+    CITY_AGENT: 'danger'
+  }[level] || 'info'
 }
 
 function formatAmount(value) {
@@ -708,6 +754,7 @@ async function fetchUsers(nextPage = page.value) {
     page_size: pageSize.value,
     keyword: filters.value.keyword || undefined,
     role: filters.value.role || undefined,
+    member_level: filters.value.member_level || undefined,
     source: filters.value.source || undefined
   })
   users.value = data.items || []
@@ -736,6 +783,26 @@ async function openUserDetail(row) {
     await loadUserDetail(row.id)
   } finally {
     detailLoading.value = false
+  }
+}
+
+function openMemberLevelDialog(row) {
+  currentLevelUser.value = row
+  memberLevelForm.value = { member_level: row.member_level || 'NORMAL_MEMBER' }
+  memberLevelDialogVisible.value = true
+}
+
+async function submitMemberLevel() {
+  if (!currentLevelUser.value?.id) return
+  memberLevelSubmitting.value = true
+  try {
+    await userApi.updateMemberLevel(currentLevelUser.value.id, memberLevelForm.value)
+    ElMessage.success('会员等级已更新')
+    memberLevelDialogVisible.value = false
+    await fetchUsers()
+    if (userDetail.value?.id === currentLevelUser.value.id) await refreshUserDetail()
+  } finally {
+    memberLevelSubmitting.value = false
   }
 }
 
@@ -882,20 +949,21 @@ async function toggleStatus(row) {
 }
 
 function handleSearch() {
-  page.value = 1
+  fetchUsers(1)
 }
 
 function handleReset() {
   filters.value = {
     keyword: '',
     source: '',
-    role: ''
+    role: '',
+    member_level: ''
   }
-  page.value = 1
+  fetchUsers(1)
 }
 
 function handlePageSizeChange() {
-  page.value = 1
+  fetchUsers(1)
 }
 
 onMounted(fetchUsers)

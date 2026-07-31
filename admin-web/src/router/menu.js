@@ -87,7 +87,7 @@ export const menuSections = [
       {
         path: '/region-stats',
         name: 'RegionStats',
-        title: '区域订单统计',
+        title: '区域订单奖励',
         icon: 'MapLocation',
         roles: ['SUPER_ADMIN', 'TEAM_ADMIN'],
         permission: 'region:view'

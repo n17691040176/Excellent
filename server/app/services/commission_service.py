@@ -8,8 +8,8 @@ from app.models.asset import UserAssetLedger
 from app.models.commission import CommissionConfig, CommissionFlow, UserCommission, WithdrawRequest
 from app.models.enums import (
     AssetType,
-    BusinessIdentity,
     CommissionStatus,
+    MemberLevel,
     OrderStatus,
     OrderType,
     PayStatus,
@@ -366,7 +366,7 @@ class CommissionService:
         beneficiary = db.get(User, buyer.parent_id)
         if not beneficiary or not CommissionService._distribution_enabled(db, beneficiary):
             return
-        rate = EarningRuleService.rate_for_team_member_level(db, beneficiary.business_identity)
+        rate = EarningRuleService.rate_for_team_member_level(db, beneficiary.member_level)
         total_profit = quantize_amount(sum((amount for _, amount, _ in profit_items), Decimal('0')))
         CommissionService._add_frozen_flow(db, order, buyer, beneficiary, TEAM_REWARD_FLOW_LEVEL, rate, total_profit)
 
@@ -482,14 +482,12 @@ class CommissionService:
 
     @staticmethod
     def _distribution_enabled(db: Session, user: User) -> bool:
-        if user.business_identity in {
-            BusinessIdentity.VIP_MEMBER,
-            BusinessIdentity.DEALER,
-            BusinessIdentity.MASTER_DEALER,
+        if user.member_level in {
+            MemberLevel.DEALER,
+            MemberLevel.COUNTY_AGENT,
+            MemberLevel.CITY_AGENT,
         }:
             return True
-        if user.business_identity != BusinessIdentity.NORMAL_MEMBER:
-            return False
         return db.query(Order.id).filter(
             Order.user_id == user.id,
             Order.pay_status == PayStatus.PAID,

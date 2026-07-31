@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
     nickname VARCHAR(64) NOT NULL,
     avatar VARCHAR(255) NULL,
     global_role VARCHAR(32) NOT NULL DEFAULT 'USER',
-    business_identity VARCHAR(32) NOT NULL DEFAULT 'NORMAL_MEMBER',
+    member_level VARCHAR(32) NOT NULL DEFAULT 'NORMAL_MEMBER',
     status VARCHAR(32) NOT NULL DEFAULT 'ENABLED',
     invite_code VARCHAR(32) NOT NULL,
     parent_id BIGINT NULL,
@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE KEY uk_users_invite_code (invite_code),
     KEY idx_users_parent_id (parent_id),
     KEY idx_users_grandparent_id (grandparent_id),
-    KEY idx_users_team_id (team_id)
+    KEY idx_users_team_id (team_id),
+    KEY ix_users_member_level (member_level)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS user_legacy_profiles (

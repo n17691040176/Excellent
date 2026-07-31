@@ -61,10 +61,18 @@ export function toOrderView(item = {}, index = 0) {
 }
 
 export function toProfileOverview(profile = {}, teamSummary = {}, assetSummary = {}, commissionSummary = {}) {
+  const memberLevelLabels = {
+    NORMAL_MEMBER: '普通会员',
+    DEALER: '经销商',
+    COUNTY_AGENT: '区代理',
+    CITY_AGENT: '市代理'
+  };
+  const memberLevel = profile.member_level || 'NORMAL_MEMBER';
   return {
     nickname: profile.nickname || profile.name || 'Excellent 用户',
     userId: profile.id || profile.user_id || '--',
-    levelText: profile.level_name || '成长型合伙人',
+    memberLevel,
+    levelText: memberLevelLabels[memberLevel] || '普通会员',
     totalAsset: formatMoney(sumVisibleAssets(assetSummary)),
     withdrawableCommission: formatMoney(commissionSummary.withdrawable_amount ?? commissionSummary.available_amount ?? 0),
     teamMembers: teamSummary.member_count ?? teamSummary.total_members ?? 0

@@ -243,9 +243,9 @@ const ruleTypeOptions = [
 
 const memberLevelOptions = [
   { label: '普通会员', value: 'NORMAL_MEMBER' },
-  { label: 'VIP会员', value: 'VIP_MEMBER' },
   { label: '经销商', value: 'DEALER' },
-  { label: '总经销商', value: 'MASTER_DEALER' }
+  { label: '区代理', value: 'COUNTY_AGENT' },
+  { label: '市代理', value: 'CITY_AGENT' }
 ]
 
 const subjectOptions = [

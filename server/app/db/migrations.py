@@ -53,12 +53,46 @@ def apply_schema_migrations() -> None:
 
     with engine.begin() as connection:
         user_columns = _column_names('users')
+        if 'member_level' not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN member_level VARCHAR(32) NOT NULL DEFAULT 'NORMAL_MEMBER'")
+            )
+            if 'business_identity' in user_columns:
+                connection.execute(
+                    text(
+                        "UPDATE users SET member_level = CASE business_identity "
+                        "WHEN 'DEALER' THEN 'DEALER' "
+                        "WHEN 'COUNTY_AGENT' THEN 'COUNTY_AGENT' "
+                        "WHEN 'CITY_AGENT' THEN 'CITY_AGENT' "
+                        "ELSE 'NORMAL_MEMBER' END"
+                    )
+                )
+        if 'business_identity' in user_columns:
+            connection.execute(text('ALTER TABLE users DROP COLUMN business_identity'))
         if 'admin_role_id' not in user_columns:
             connection.execute(text('ALTER TABLE users ADD COLUMN admin_role_id BIGINT NULL'))
 
         user_indexes = _index_names('users')
+        if 'ix_users_member_level' not in user_indexes:
+            connection.execute(text('CREATE INDEX ix_users_member_level ON users (member_level)'))
         if 'ix_users_admin_role_id' not in user_indexes:
             connection.execute(text('CREATE INDEX ix_users_admin_role_id ON users (admin_role_id)'))
+
+        dividend_indexes = _index_names('region_dividend_flows')
+        if 'uq_region_dividend_order_agent' not in dividend_indexes:
+            duplicate_group = connection.execute(
+                text(
+                    'SELECT order_id, agent_id FROM region_dividend_flows '
+                    'GROUP BY order_id, agent_id HAVING COUNT(*) > 1 LIMIT 1'
+                )
+            ).first()
+            if not duplicate_group:
+                connection.execute(
+                    text(
+                        'CREATE UNIQUE INDEX uq_region_dividend_order_agent '
+                        'ON region_dividend_flows (order_id, agent_id)'
+                    )
+                )
 
         withdraw_columns = _column_names('withdraw_requests')
         if 'paid_by' not in withdraw_columns:

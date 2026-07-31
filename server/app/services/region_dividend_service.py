@@ -1,302 +1,295 @@
-"""区域分红服务 - 处理订单完成后的区域代理分红"""
+"""区域代理审核、区域订单奖励计算与发放。"""
+
+from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models.asset import UserAssetLedger
-from app.models.enums import AssetDirection, AssetType
+from app.core.exceptions import ConflictError, NotFoundError
+from app.models.asset import UserAssetAccount, UserAssetLedger
+from app.models.enums import AssetDirection, AssetType, MemberLevel
 from app.models.order import Order
 from app.models.region_agent import RegionAgent
 from app.models.region_dividend import RegionDividendFlow
+from app.models.user import User
 from app.utils.helpers import now, quantize_amount
 
 
 class RegionDividendService:
-    """区域订单分红服务"""
+    """按订单收货区域向已生效的区代理和市代理发放余额奖励。"""
 
-    # 默认分红比例（可在后台配置）
-    DEFAULT_COUNTY_AGENT_RATE = Decimal('1.00')   # 区县代理默认1%
-    DEFAULT_CITY_AGENT_RATE = Decimal('0.50')     # 市代理默认0.5%
+    DEFAULT_COUNTY_AGENT_RATE = Decimal('1.00')
+    DEFAULT_CITY_AGENT_RATE = Decimal('0.50')
+    AGENT_MEMBER_LEVEL = {
+        'COUNTY_AGENT': MemberLevel.COUNTY_AGENT,
+        'CITY_AGENT': MemberLevel.CITY_AGENT,
+    }
 
     @staticmethod
-    def process_order_dividend(db: Session, order: Order, address: dict) -> None:
-        """
-        订单确认完成后处理区域分红
+    def process_order_dividend(db: Session, order: Order, address: dict) -> list[RegionDividendFlow]:
+        province = str(address.get('province') or '').strip()
+        city = str(address.get('city') or '').strip()
+        district = str(address.get('district') or '').strip()
+        if not province or not city:
+            return []
 
-        Args:
-            db: 数据库会话
-            order: 订单对象
-            address: 收货地址信息，包含 province, city, district
-        """
-        province = address.get('province', '').strip()
-        city = address.get('city', '').strip()
+        # Serialize concurrent completion/payment callbacks for the same order.
+        db.query(Order.id).filter(Order.id == order.id).with_for_update().first()
 
-        if not province and not city:
-            return
-
-        # 订单实付金额（用于计算分红基数）
-        order_amount = float(order.paid_amount or order.payable_amount or 0)
+        order_amount = quantize_amount(order.paid_amount or order.total_amount or order.payable_amount or 0)
         if order_amount <= 0:
-            return
+            return []
 
-        # 区县代理分红（精确匹配区）
-        RegionDividendService._process_county_agent_dividend(
-            db, order, address, order_amount
-        )
-
-        # 市代理分红（精确匹配市，但范围更广）
-        RegionDividendService._process_city_agent_dividend(
-            db, order, address, order_amount
-        )
-
-        db.commit()
-
-    @staticmethod
-    def _process_county_agent_dividend(
-        db: Session,
-        order: Order,
-        address: dict,
-        order_amount: float
-    ) -> None:
-        """处理区县代理分红 - 订单收货地址所在区的区县代理获得分红"""
-        province = address.get('province', '').strip()
-        city = address.get('city', '').strip()
-        district = address.get('district', '').strip()
-
-        if not district:
-            return
-
-        # 查询有效的区县代理（精确匹配区）
-        agents = db.query(RegionAgent).filter(
-            RegionAgent.district == district,
-            RegionAgent.status == 'APPROVED',
-            RegionAgent.agreement_signed.is_(True),
-            or_(
-                RegionAgent.effective_at.is_(None),
-                RegionAgent.effective_at <= now()
-            ),
-            or_(
-                RegionAgent.expired_at.is_(None),
-                RegionAgent.expired_at > now()
-            )
-        ).all()
-
-        if not agents:
-            return
-
-        # 获取分红比例（使用配置的比例或默认比例）
-        rate = Decimal(str(agents[0].dividend_rate or RegionDividendService.DEFAULT_COUNTY_AGENT_RATE))
-        # 比例是百分比形式，如 1% = 1.00，需要除以100
-        actual_rate = rate / Decimal('100')
-        dividend_amount = quantize_amount(order_amount * float(actual_rate))
-
-        if dividend_amount <= 0:
-            return
-
-        agent = agents[0]
-
-        # 创建分红流水
-        flow = RegionDividendFlow(
-            order_id=order.id,
-            order_no=order.order_no,
-            agent_id=agent.id,
-            agent_user_id=agent.user_id,
+        awarded: list[RegionDividendFlow] = []
+        county_agent = RegionDividendService._active_agent(
+            db,
             agent_type='COUNTY_AGENT',
             province=province,
             city=city,
             district=district,
-            order_amount=order_amount,
-            dividend_rate=float(actual_rate * 100),  # 存为百分比形式
-            dividend_amount=float(dividend_amount),
-            status='SETTLED',
-            settled_at=now(),
-            remark=f'区县代理分红：{district}'
-        )
-        db.add(flow)
+        ) if district else None
+        if county_agent:
+            flow = RegionDividendService._allocate_reward(
+                db, order, county_agent, order_amount, province, city, district
+            )
+            if flow:
+                awarded.append(flow)
 
-        # 直接发放到用户余额（订单完成后立即分红）
-        RegionDividendService._credit_to_user_balance(
-            db, agent.user_id, float(dividend_amount), order, agent.id
+        city_agent = RegionDividendService._active_agent(
+            db,
+            agent_type='CITY_AGENT',
+            province=province,
+            city=city,
+            district='',
         )
+        if city_agent:
+            flow = RegionDividendService._allocate_reward(
+                db, order, city_agent, order_amount, province, city, district
+            )
+            if flow:
+                awarded.append(flow)
 
-        # 更新代理统计
-        agent.total_orders += 1
-        agent.total_dividend = float(
-            quantize_amount(agent.total_dividend or 0) + dividend_amount
-        )
+        if awarded:
+            db.commit()
+        return awarded
 
     @staticmethod
-    def _process_city_agent_dividend(
+    def _active_agent(
         db: Session,
-        order: Order,
-        address: dict,
-        order_amount: float
-    ) -> None:
-        """处理市代理分红 - 订单收货地址所在市的市代理获得分红"""
-        province = address.get('province', '').strip()
-        city = address.get('city', '').strip()
-
-        if not city:
-            return
-
-        # 查询有效的市代理（精确匹配市）
-        agents = db.query(RegionAgent).filter(
+        *,
+        agent_type: str,
+        province: str,
+        city: str,
+        district: str,
+    ) -> RegionAgent | None:
+        query = db.query(RegionAgent).filter(
+            RegionAgent.agent_type == agent_type,
+            RegionAgent.province == province,
             RegionAgent.city == city,
-            RegionAgent.agent_type == 'CITY_AGENT',
             RegionAgent.status == 'APPROVED',
             RegionAgent.agreement_signed.is_(True),
-            or_(
-                RegionAgent.effective_at.is_(None),
-                RegionAgent.effective_at <= now()
-            ),
-            or_(
-                RegionAgent.expired_at.is_(None),
-                RegionAgent.expired_at > now()
-            )
-        ).all()
+            or_(RegionAgent.effective_at.is_(None), RegionAgent.effective_at <= now()),
+            or_(RegionAgent.expired_at.is_(None), RegionAgent.expired_at > now()),
+        )
+        if agent_type == 'COUNTY_AGENT':
+            query = query.filter(RegionAgent.district == district)
+        return query.order_by(RegionAgent.id.asc()).first()
 
-        if not agents:
-            return
+    @staticmethod
+    def _allocate_reward(
+        db: Session,
+        order: Order,
+        agent: RegionAgent,
+        order_amount: Decimal,
+        province: str,
+        city: str,
+        district: str,
+    ) -> RegionDividendFlow | None:
+        existed = db.query(RegionDividendFlow.id).filter(
+            RegionDividendFlow.order_id == order.id,
+            RegionDividendFlow.agent_id == agent.id,
+        ).first()
+        if existed:
+            return None
 
-        # 获取分红比例
-        rate = Decimal(str(agents[0].dividend_rate or RegionDividendService.DEFAULT_CITY_AGENT_RATE))
-        actual_rate = rate / Decimal('100')
-        dividend_amount = quantize_amount(order_amount * float(actual_rate))
+        rate = Decimal(str(agent.dividend_rate or 0))
+        if rate <= 0:
+            return None
+        reward_amount = quantize_amount(order_amount * rate / Decimal('100'))
+        if reward_amount <= 0:
+            return None
 
-        if dividend_amount <= 0:
-            return
-
-        agent = agents[0]
-
-        # 创建分红流水
+        reward_district = district if agent.agent_type == 'COUNTY_AGENT' else ''
         flow = RegionDividendFlow(
             order_id=order.id,
             order_no=order.order_no,
             agent_id=agent.id,
             agent_user_id=agent.user_id,
-            agent_type='CITY_AGENT',
+            agent_type=agent.agent_type,
             province=province,
             city=city,
-            district='',
+            district=reward_district,
             order_amount=order_amount,
-            dividend_rate=float(actual_rate * 100),
-            dividend_amount=float(dividend_amount),
+            dividend_rate=rate,
+            dividend_amount=reward_amount,
             status='SETTLED',
             settled_at=now(),
-            remark=f'市代理分红：{city}'
+            remark=f'{"区代理" if agent.agent_type == "COUNTY_AGENT" else "市代理"}订单奖励',
         )
         db.add(flow)
+        RegionDividendService._credit_to_user_balance(db, agent.user_id, reward_amount, order)
 
-        # 直接发放到用户余额
-        RegionDividendService._credit_to_user_balance(
-            db, agent.user_id, float(dividend_amount), order, agent.id
-        )
-
-        # 更新代理统计
-        agent.total_orders += 1
+        agent.total_orders = int(agent.total_orders or 0) + 1
         agent.total_dividend = float(
-            quantize_amount(agent.total_dividend or 0) + dividend_amount
+            quantize_amount(Decimal(str(agent.total_dividend or 0)) + reward_amount)
         )
+        return flow
 
     @staticmethod
-    def _credit_to_user_balance(
-        db: Session,
-        user_id: int,
-        amount: float,
-        order: Order,
-        region_agent_id: int
-    ) -> None:
-        """将分红金额发放到用户余额"""
+    def _credit_to_user_balance(db: Session, user_id: int, amount: Decimal, order: Order) -> None:
         quantized = quantize_amount(amount)
         if quantized <= 0:
             return
 
-        from app.models.asset import UserAssetAccount
-
-        # 获取或创建用户资产账户
         account = db.query(UserAssetAccount).filter(
             UserAssetAccount.user_id == user_id,
-            UserAssetAccount.asset_type == AssetType.BALANCE
-        ).first()
-
+            UserAssetAccount.asset_type == AssetType.BALANCE,
+        ).with_for_update().first()
+        current_time = now()
         if account:
-            account.available_amount = quantize_amount(
-                account.available_amount + quantized
-            )
-            account.updated_at = now()
+            before_amount = quantize_amount(account.available_amount or 0)
+            after_amount = quantize_amount(before_amount + quantized)
+            account.total_amount = quantize_amount((account.total_amount or 0) + quantized)
+            account.available_amount = after_amount
+            account.updated_at = current_time
         else:
+            before_amount = Decimal('0.00')
+            after_amount = quantized
             account = UserAssetAccount(
                 user_id=user_id,
                 asset_type=AssetType.BALANCE,
                 total_amount=quantized,
                 available_amount=quantized,
-                frozen_amount=Decimal('0'),
+                frozen_amount=Decimal('0.00'),
+                consumed_amount=Decimal('0.00'),
+                withdrawn_amount=Decimal('0.00'),
+                updated_at=current_time,
             )
             db.add(account)
 
-        # 记录资产流水
-        ledger = UserAssetLedger(
+        db.add(UserAssetLedger(
             user_id=user_id,
             asset_type=AssetType.BALANCE,
             direction=AssetDirection.INCOME,
             change_amount=quantized,
-            before_amount=quantize_amount(account.available_amount - quantized if account else 0),
-            after_amount=quantized,
+            before_amount=before_amount,
+            after_amount=after_amount,
             business_type='REGION_DIVIDEND',
             source_id=order.id,
             source_no=order.order_no,
-            remark=f'区域代理订单分红，订单号：{order.order_no}'
-        )
-        db.add(ledger)
+            remark=f'区域代理订单奖励，订单号：{order.order_no}',
+            created_at=current_time,
+        ))
 
     @staticmethod
     def get_agent_dividends(
         db: Session,
         user_id: int,
         status: str | None = None,
-        limit: int = 50
+        limit: int = 50,
     ) -> list[RegionDividendFlow]:
-        """获取用户的区域分红记录"""
-        query = db.query(RegionDividendFlow).filter(
-            RegionDividendFlow.agent_user_id == user_id
-        )
+        query = db.query(RegionDividendFlow).filter(RegionDividendFlow.agent_user_id == user_id)
         if status:
             query = query.filter(RegionDividendFlow.status == status)
         return query.order_by(RegionDividendFlow.id.desc()).limit(limit).all()
 
     @staticmethod
-    def get_agent_summary(db: Session, user_id: int) -> dict:
-        """获取用户区域代理分红汇总"""
-        agents = db.query(RegionAgent).filter(
-            RegionAgent.user_id == user_id,
-            RegionAgent.status == 'APPROVED'
+    def reverse_order_dividend(db: Session, order: Order) -> None:
+        flows = db.query(RegionDividendFlow).filter(
+            RegionDividendFlow.order_id == order.id,
+            RegionDividendFlow.status == 'SETTLED',
         ).all()
+        for flow in flows:
+            amount = quantize_amount(flow.dividend_amount)
+            account = db.query(UserAssetAccount).filter(
+                UserAssetAccount.user_id == flow.agent_user_id,
+                UserAssetAccount.asset_type == AssetType.BALANCE,
+            ).with_for_update().first()
+            if not account or quantize_amount(account.available_amount) < amount:
+                raise ConflictError('区域订单奖励余额不足，无法完成退款')
 
-        total_dividend = Decimal('0')
-        total_orders = 0
-        agent_info = []
+            before_amount = quantize_amount(account.available_amount)
+            after_amount = quantize_amount(before_amount - amount)
+            account.available_amount = after_amount
+            account.total_amount = max(
+                quantize_amount(account.total_amount) - amount, Decimal('0.00')
+            )
+            account.updated_at = now()
+            db.add(UserAssetLedger(
+                user_id=flow.agent_user_id,
+                asset_type=AssetType.BALANCE,
+                direction=AssetDirection.EXPENSE,
+                change_amount=amount,
+                before_amount=before_amount,
+                after_amount=after_amount,
+                business_type='REGION_DIVIDEND_REVERSAL',
+                source_id=order.id,
+                source_no=order.order_no,
+                remark=f'订单退款，收回区域代理奖励：{order.order_no}',
+                created_at=now(),
+            ))
+            flow.status = 'EXPIRED'
+            flow.remark = '订单退款，奖励已收回'
+            agent = db.get(RegionAgent, flow.agent_id)
+            if agent:
+                agent.total_orders = max(int(agent.total_orders or 0) - 1, 0)
+                agent.total_dividend = float(max(
+                    quantize_amount(Decimal(str(agent.total_dividend or 0)) - amount), Decimal('0.00')
+                ))
+        db.flush()
 
-        for agent in agents:
-            total_dividend += Decimal(str(agent.total_dividend or 0))
-            total_orders += (agent.total_orders or 0)
-            agent_info.append({
-                'id': agent.id,
-                'agent_type': agent.agent_type,
-                'province': agent.province,
-                'city': agent.city,
-                'district': agent.district,
-                'dividend_rate': agent.dividend_rate,
-                'total_orders': agent.total_orders,
-                'total_dividend': float(agent.total_dividend or 0),
-                'effective_at': agent.effective_at,
-                'expired_at': agent.expired_at,
-            })
-
+    @staticmethod
+    def get_agent_summary(db: Session, user_id: int) -> dict:
+        agents = db.query(RegionAgent).filter(RegionAgent.user_id == user_id).order_by(
+            RegionAgent.id.desc()
+        ).all()
+        active_agents = [agent for agent in agents if agent.is_valid()]
+        user = db.get(User, user_id)
         return {
-            'total_dividend': float(total_dividend),
-            'total_orders': total_orders,
-            'agents': agent_info
+            'member_level': user.member_level.value if user else None,
+            'total_dividend': float(sum(
+                (Decimal(str(agent.total_dividend or 0)) for agent in active_agents), Decimal('0')
+            )),
+            'total_orders': sum(int(agent.total_orders or 0) for agent in active_agents),
+            'agents': [RegionDividendService.serialize_agent(agent) for agent in agents],
+        }
+
+    @staticmethod
+    def serialize_agent(agent: RegionAgent, user: User | None = None) -> dict:
+        return {
+            'id': agent.id,
+            'user_id': agent.user_id,
+            'user_nickname': user.nickname if user else None,
+            'user_phone': user.phone if user else None,
+            'member_level': user.member_level.value if user else None,
+            'member_level_name': user.member_level.label if user else None,
+            'province': agent.province,
+            'city': agent.city,
+            'district': agent.district,
+            'agent_type': agent.agent_type,
+            'status': agent.status,
+            'dividend_rate': float(agent.dividend_rate or 0),
+            'total_orders': int(agent.total_orders or 0),
+            'total_dividend': float(agent.total_dividend or 0),
+            'effective_at': agent.effective_at.isoformat() if agent.effective_at else None,
+            'expired_at': agent.expired_at.isoformat() if agent.expired_at else None,
+            'agreement_signed': bool(agent.agreement_signed),
+            'agreement_url': agent.agreement_url,
+            'resource_proof_url': agent.resource_proof_url,
+            'audit_remark': agent.audit_remark,
+            'audited_at': agent.audited_at.isoformat() if agent.audited_at else None,
+            'created_at': agent.created_at.isoformat() if agent.created_at else None,
         }
 
     @staticmethod
@@ -308,34 +301,41 @@ class RegionDividendService:
         district: str,
         agent_type: str,
         resource_proof_url: str | None = None,
-        agreement_url: str | None = None
+        agreement_url: str | None = None,
     ) -> RegionAgent:
-        """用户申请区域代理"""
-        # 检查是否已有申请中的代理
+        clean_type = str(agent_type or '').strip().upper()
+        if clean_type not in RegionDividendService.AGENT_MEMBER_LEVEL:
+            raise ConflictError('代理类型仅支持区代理或市代理')
+        clean_province = str(province or '').strip()
+        clean_city = str(city or '').strip()
+        clean_district = str(district or '').strip() if clean_type == 'COUNTY_AGENT' else ''
+        if not clean_province or not clean_city:
+            raise ConflictError('省份和城市不能为空')
+        if clean_type == 'COUNTY_AGENT' and not clean_district:
+            raise ConflictError('区代理必须选择区县')
+
         existing = db.query(RegionAgent).filter(
             RegionAgent.user_id == user_id,
-            RegionAgent.province == province,
-            RegionAgent.city == city,
-            RegionAgent.district == district,
-            RegionAgent.status.in_(['PENDING', 'APPROVED'])
+            RegionAgent.province == clean_province,
+            RegionAgent.city == clean_city,
+            RegionAgent.district == clean_district,
+            RegionAgent.agent_type == clean_type,
+            RegionAgent.status.in_(['PENDING', 'APPROVED']),
         ).first()
-
         if existing:
-            from app.core.exceptions import ConflictError
             raise ConflictError('该区域代理申请已存在')
 
-        # 设置默认分红比例
-        if agent_type == 'CITY_AGENT':
-            default_rate = RegionDividendService.DEFAULT_CITY_AGENT_RATE
-        else:
-            default_rate = RegionDividendService.DEFAULT_COUNTY_AGENT_RATE
-
+        default_rate = (
+            RegionDividendService.DEFAULT_CITY_AGENT_RATE
+            if clean_type == 'CITY_AGENT'
+            else RegionDividendService.DEFAULT_COUNTY_AGENT_RATE
+        )
         agent = RegionAgent(
             user_id=user_id,
-            province=province,
-            city=city,
-            district=district,
-            agent_type=agent_type,
+            province=clean_province,
+            city=clean_city,
+            district=clean_district,
+            agent_type=clean_type,
             status='PENDING',
             resource_proof_url=resource_proof_url,
             agreement_url=agreement_url,
@@ -353,32 +353,59 @@ class RegionDividendService:
         admin_user_id: int,
         approved: bool,
         remark: str | None = None,
-        dividend_rate: float | None = None
+        dividend_rate: float | None = None,
     ) -> RegionAgent:
-        """后台审核区域代理申请"""
         agent = db.get(RegionAgent, agent_id)
         if not agent:
-            from app.core.exceptions import NotFoundError
             raise NotFoundError('区域代理申请不存在')
-
         if agent.status != 'PENDING':
-            from app.core.exceptions import ConflictError
-            raise ConflictError('该申请已审核过')
+            raise ConflictError('该申请已审核')
 
         if approved:
+            conflict_query = db.query(RegionAgent.id).filter(
+                RegionAgent.id != agent.id,
+                RegionAgent.agent_type == agent.agent_type,
+                RegionAgent.province == agent.province,
+                RegionAgent.city == agent.city,
+                RegionAgent.status == 'APPROVED',
+                or_(RegionAgent.expired_at.is_(None), RegionAgent.expired_at > now()),
+            )
+            if agent.agent_type == 'COUNTY_AGENT':
+                conflict_query = conflict_query.filter(RegionAgent.district == agent.district)
+            if conflict_query.first():
+                raise ConflictError('该区域已有生效代理')
+
             agent.status = 'APPROVED'
             agent.effective_at = now()
-            # 默认1年有效期
-            from datetime import timedelta
             agent.expired_at = now() + timedelta(days=365)
+            agent.agreement_signed = True
             if dividend_rate is not None:
-                agent.dividend_rate = dividend_rate
+                agent.dividend_rate = float(dividend_rate)
+
+            user = db.get(User, agent.user_id)
+            if not user:
+                raise NotFoundError('代理用户不存在')
+            target_level = RegionDividendService.AGENT_MEMBER_LEVEL[agent.agent_type]
+            if target_level.rank > user.member_level.rank:
+                user.member_level = target_level
         else:
             agent.status = 'REJECTED'
 
         agent.audited_by = admin_user_id
         agent.audited_at = now()
         agent.audit_remark = remark
+        db.commit()
+        db.refresh(agent)
+        return agent
+
+    @staticmethod
+    def update_reward_config(db: Session, agent_id: int, dividend_rate: float) -> RegionAgent:
+        agent = db.get(RegionAgent, agent_id)
+        if not agent:
+            raise NotFoundError('区域代理不存在')
+        if agent.status != 'APPROVED':
+            raise ConflictError('只能配置已通过代理的奖励比例')
+        agent.dividend_rate = float(dividend_rate)
         db.commit()
         db.refresh(agent)
         return agent

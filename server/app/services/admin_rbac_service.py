@@ -357,7 +357,12 @@ class AdminRbacService:
     @staticmethod
     def profile(db: Session, user: User) -> dict:
         data = AdminRbacService._serialize_admin(db, user)
-        data.update({'avatar': user.avatar, 'real_name': user.real_name, 'business_identity': user.business_identity.value})
+        data.update({
+            'avatar': user.avatar,
+            'real_name': user.real_name,
+            'member_level': user.member_level.value,
+            'member_level_name': user.member_level.label,
+        })
         return data
 
     @staticmethod

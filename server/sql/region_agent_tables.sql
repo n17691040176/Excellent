@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS `region_dividend_flows` (
     `remark` VARCHAR(255) NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_dividend_order` (`order_id`),
+    UNIQUE INDEX `uq_region_dividend_order_agent` (`order_id`, `agent_id`),
     INDEX `idx_dividend_agent` (`agent_user_id`),
     INDEX `idx_dividend_status` (`status`),
     INDEX `idx_dividend_created` (`created_at`)

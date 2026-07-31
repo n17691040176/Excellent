@@ -27,7 +27,7 @@ class User(Base):
     password_hash = Column(String(255))
     global_role = Column(String(20), default='USER')
     status = Column(String(20), default='ENABLED')
-    business_identity = Column(String(20))
+    member_level = Column(String(20))
     invite_code = Column(String(20), unique=True)
     parent_id = Column(Integer, ForeignKey('users.id'))
     grandparent_id = Column(Integer, ForeignKey('users.id'))
@@ -196,7 +196,7 @@ def test_distribution_system():
                 password_hash='test',
                 global_role='USER',
                 status='ENABLED',
-                business_identity='VIP_MEMBER',
+                member_level='DEALER',
                 invite_code='TESTA011',
                 created_at=now_str(),
                 updated_at=now_str(),
@@ -213,7 +213,7 @@ def test_distribution_system():
                 password_hash='test',
                 global_role='USER',
                 status='ENABLED',
-                business_identity='VIP_MEMBER',
+                member_level='DEALER',
                 invite_code='TESTB012',
                 parent_id=user_a.id,
                 created_at=now_str(),
@@ -231,7 +231,7 @@ def test_distribution_system():
                 password_hash='test',
                 global_role='USER',
                 status='ENABLED',
-                business_identity='NORMAL_MEMBER',
+                member_level='NORMAL_MEMBER',
                 invite_code='TESTC013',
                 parent_id=user_b.id,
                 grandparent_id=user_a.id,

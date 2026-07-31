@@ -7,15 +7,29 @@ class GlobalRole(StrEnum):
     USER = 'USER'
 
 
-class BusinessIdentity(StrEnum):
+class MemberLevel(StrEnum):
     NORMAL_MEMBER = 'NORMAL_MEMBER'
-    VIP_MEMBER = 'VIP_MEMBER'
     DEALER = 'DEALER'
-    MASTER_DEALER = 'MASTER_DEALER'
-    SUPPLIER = 'SUPPLIER'
     COUNTY_AGENT = 'COUNTY_AGENT'
     CITY_AGENT = 'CITY_AGENT'
-    LOCAL_MERCHANT = 'LOCAL_MERCHANT'
+
+    @property
+    def label(self) -> str:
+        return {
+            MemberLevel.NORMAL_MEMBER: '普通会员',
+            MemberLevel.DEALER: '经销商',
+            MemberLevel.COUNTY_AGENT: '区代理',
+            MemberLevel.CITY_AGENT: '市代理',
+        }[self]
+
+    @property
+    def rank(self) -> int:
+        return {
+            MemberLevel.NORMAL_MEMBER: 0,
+            MemberLevel.DEALER: 1,
+            MemberLevel.COUNTY_AGENT: 2,
+            MemberLevel.CITY_AGENT: 3,
+        }[self]
 
 
 class UserStatus(StrEnum):

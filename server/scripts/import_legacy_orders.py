@@ -362,7 +362,7 @@ def create_placeholder_legacy_user(cursor: pymysql.cursors.Cursor, legacy_user_i
             `nickname`,
             `avatar`,
             `global_role`,
-            `business_identity`,
+            `member_level`,
             `status`,
             `invite_code`,
             `parent_id`,

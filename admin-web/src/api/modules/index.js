@@ -37,6 +37,9 @@ export const userApi = {
   updateStatus(id, data) {
     return request.patch(`/api/v1/admin/users/${id}/status`, data)
   },
+  updateMemberLevel(id, data) {
+    return request.patch(`/api/v1/admin/users/${id}/member-level`, data)
+  },
   createAddress(id, data) {
     return request.post(`/api/v1/admin/users/${id}/addresses`, data)
   },
@@ -183,6 +186,9 @@ export const regionApi = {
   },
   auditAgent(id, data) {
     return request.post(`/api/v1/admin/region-agents/audit/${id}`, data)
+  },
+  updateRewardConfig(id, data) {
+    return request.patch(`/api/v1/admin/region-agents/${id}/reward-config`, data)
   },
   dividends(params) {
     return request.get('/api/v1/admin/region-agents/dividends', { params })

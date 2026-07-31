@@ -4,7 +4,7 @@ from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
-from app.models.enums import BusinessIdentity, GlobalRole, UserStatus
+from app.models.enums import GlobalRole, MemberLevel, UserStatus
 
 
 class User(TimestampMixin, Base):
@@ -18,9 +18,10 @@ class User(TimestampMixin, Base):
     global_role: Mapped[GlobalRole] = mapped_column(Enum(GlobalRole), default=GlobalRole.USER, nullable=False)
     admin_role_id: Mapped[int | None] = mapped_column(ForeignKey('admin_roles.id'), nullable=True, index=True)
     admin_role = relationship('AdminRole', foreign_keys=[admin_role_id])
-    business_identity: Mapped[BusinessIdentity] = mapped_column(
-        Enum(BusinessIdentity),
-        default=BusinessIdentity.NORMAL_MEMBER,
+    member_level: Mapped[MemberLevel] = mapped_column(
+        Enum(MemberLevel),
+        default=MemberLevel.NORMAL_MEMBER,
+        index=True,
         nullable=False,
     )
     status: Mapped[UserStatus] = mapped_column(Enum(UserStatus), default=UserStatus.ENABLED, nullable=False)

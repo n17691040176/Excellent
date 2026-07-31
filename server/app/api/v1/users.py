@@ -5,12 +5,12 @@ from sqlalchemy.orm import Session
 from app.api.deps.auth import get_current_user, require_roles
 from app.api.v1.mobile_serializers import serialize_address
 from app.db.session import get_db
-from app.models.enums import GlobalRole, PowerBankStatus, UserStatus
+from app.models.enums import GlobalRole, MemberLevel, PowerBankStatus, UserStatus
 from app.models.team import TeamMember
 from app.models.user import User
 from app.schemas.address import AddressCreateRequest, AddressUpdateRequest
 from app.schemas.asset import AdminPowerBankCreateRequest, AdminPowerBankUpdateRequest
-from app.schemas.user import BindInviterRequest, UpdateProfileRequest, UpdateUserStatusRequest
+from app.schemas.user import BindInviterRequest, UpdateMemberLevelRequest, UpdateProfileRequest, UpdateUserStatusRequest
 from app.services.address_service import AddressService
 from app.services.asset_service import AssetService
 from app.services.commerce_service import CommerceService
@@ -102,17 +102,18 @@ def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     keyword: str | None = Query(default=None),
-    role: str | None = Query(default=None),
+    role: GlobalRole | None = Query(default=None),
+    member_level: MemberLevel | None = Query(default=None),
     source: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
-    role_filter = GlobalRole(role) if role else None
     data = UserService.list_users_page(
         db,
         current_user,
         keyword=keyword,
-        role=role_filter,
+        role=role,
+        member_level=member_level,
         source=source,
         page=page,
         page_size=page_size,
@@ -148,6 +149,17 @@ def update_user_status(
     _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
     user = UserService.update_user_status(db, user_id, UserStatus(payload.status))
+    return {'code': 0, 'message': 'success', 'data': user}
+
+
+@admin_router.patch('/{user_id}/member-level')
+def update_member_level(
+    user_id: int,
+    payload: UpdateMemberLevelRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
+):
+    user = UserService.update_member_level(db, user_id, payload.member_level, current_user)
     return {'code': 0, 'message': 'success', 'data': user}
 
 

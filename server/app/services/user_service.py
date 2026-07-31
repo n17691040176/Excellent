@@ -11,7 +11,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.models.address import UserAddress
 from app.models.asset import UserAssetAccount, UserAssetLedger, UserPowerBank
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
-from app.models.enums import GlobalRole, UserStatus
+from app.models.enums import GlobalRole, MemberLevel, UserStatus
 from app.models.order import Order
 from app.models.user import InviteRecord, User, UserLegacyProfile
 from app.services.admin_permission_service import AdminPermissionService
@@ -131,6 +131,7 @@ class UserService:
         current_user: User,
         keyword: str | None = None,
         role: GlobalRole | None = None,
+        member_level: MemberLevel | None = None,
         source: str | None = None,
     ):
         query = db.query(User, UserLegacyProfile).outerjoin(UserLegacyProfile, UserLegacyProfile.user_id == User.id)
@@ -138,6 +139,8 @@ class UserService:
             query = query.filter(User.team_id == AdminScopeService.require_team_id(current_user))
         if role:
             query = query.filter(User.global_role == role)
+        if member_level:
+            query = query.filter(User.member_level == member_level)
         if source == 'legacy':
             query = query.filter(UserLegacyProfile.user_id.isnot(None))
         elif source == 'native':
@@ -179,7 +182,8 @@ class UserService:
                 'data_scope': user.admin_role.data_scope,
                 'status': user.admin_role.status,
             } if user.admin_role else None,
-            'business_identity': user.business_identity.value,
+            'member_level': user.member_level.value,
+            'member_level_name': user.member_level.label,
             'status': user.status.value,
             'invite_code': user.invite_code,
             'parent_id': user.parent_id,
@@ -209,7 +213,8 @@ class UserService:
                 'data_scope': user.admin_role.data_scope,
                 'status': user.admin_role.status,
             } if user.admin_role else None,
-            'business_identity': user.business_identity.value,
+            'member_level': user.member_level.value,
+            'member_level_name': user.member_level.label,
             'status': user.status.value,
             'invite_code': user.invite_code,
             'parent_id': user.parent_id,
@@ -238,9 +243,12 @@ class UserService:
         current_user: User,
         keyword: str | None = None,
         role: GlobalRole | None = None,
+        member_level: MemberLevel | None = None,
         source: str | None = None,
     ) -> list[dict]:
-        query = UserService._user_list_query(db, current_user, keyword=keyword, role=role, source=source)
+        query = UserService._user_list_query(
+            db, current_user, keyword=keyword, role=role, member_level=member_level, source=source
+        )
         rows = query.distinct(User.id).order_by(User.id.desc()).all()
         return [UserService.serialize_admin_user(user, legacy_profile) for user, legacy_profile in rows]
 
@@ -250,13 +258,16 @@ class UserService:
         current_user: User,
         keyword: str | None = None,
         role: GlobalRole | None = None,
+        member_level: MemberLevel | None = None,
         source: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> dict:
         safe_page = max(page, 1)
         safe_page_size = max(1, min(page_size, 100))
-        query = UserService._user_list_query(db, current_user, keyword=keyword, role=role, source=source)
+        query = UserService._user_list_query(
+            db, current_user, keyword=keyword, role=role, member_level=member_level, source=source
+        )
         total = int(
             query.order_by(None).with_entities(func.count(func.distinct(User.id))).scalar() or 0
         )
@@ -432,6 +443,20 @@ class UserService:
         db.commit()
         db.refresh(user)
         return user
+
+    @staticmethod
+    def update_member_level(
+        db: Session,
+        user_id: int,
+        member_level: MemberLevel,
+        current_user: User | None = None,
+    ) -> dict:
+        user = UserService.get_user(db, user_id, current_user)
+        user.member_level = member_level
+        db.commit()
+        db.refresh(user)
+        legacy_profile = db.get(UserLegacyProfile, user.id)
+        return UserService.serialize_admin_user(user, legacy_profile)
 
     @staticmethod
     def get_invite_tree(db: Session, user_id: int, current_user: User | None = None) -> dict:

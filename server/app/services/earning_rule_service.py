@@ -23,7 +23,7 @@ RULE_TYPE_VALUES = {
 SUBJECT_TYPE_VALUES = {'USER', 'TEAM', 'ORDER', 'DEVICE', 'POOL', 'PROJECT'}
 CALCULATION_METHOD_VALUES = {'FIXED_AMOUNT', 'RATE', 'TIERED_RATE', 'WEIGHTED_POOL', 'MANUAL_AUDIT'}
 SETTLEMENT_CYCLE_VALUES = {'IMMEDIATE', 'DAILY', 'WEEKLY', 'HALF_MONTHLY', 'MONTHLY', 'YEARLY', 'MANUAL'}
-MEMBER_LEVEL_VALUES = {'NORMAL_MEMBER', 'VIP_MEMBER', 'DEALER', 'MASTER_DEALER'}
+MEMBER_LEVEL_VALUES = {'NORMAL_MEMBER', 'DEALER', 'COUNTY_AGENT', 'CITY_AGENT'}
 
 PB_OWNER_DAILY_RULE = 'PB_OWNER_DAILY'
 PB_REFERRAL_DAILY_RULE = 'PB_REFERRAL_DAILY'
@@ -125,7 +125,7 @@ class EarningRuleService:
     @staticmethod
     def rate_for_team_member_level(db: Session, member_level: str | None) -> Decimal:
         level = str(member_level or '').strip().upper()
-        if level not in {'VIP_MEMBER', 'DEALER', 'MASTER_DEALER'}:
+        if level not in {'DEALER', 'COUNTY_AGENT', 'CITY_AGENT'}:
             return Decimal('0')
         rule = EarningRuleService._active_rate_query(db).filter(
             EarningRule.rule_type == 'TEAM_REWARD',

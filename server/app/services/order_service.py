@@ -234,6 +234,7 @@ class OrderService:
                 raise ConflictError('Current order status cannot be refunded')
             OrderService._close_refunded_payment_transactions(db, order)
             CommissionService.cancel_for_order(db, order.id)
+            RegionDividendService.reverse_order_dividend(db, order)
             OrderService._revoke_order_rewards(db, order)
         else:
             if order.pay_status != PayStatus.UNPAID or order.order_status != OrderStatus.PENDING_PAYMENT:
@@ -279,6 +280,7 @@ class OrderService:
         if order.pay_status != PayStatus.PAID:
             raise ConflictError('Only paid orders can be confirmed')
         if order.order_status == OrderStatus.COMPLETED:
+            OrderService._process_region_dividend(db, order)
             return order
         if order.order_status == OrderStatus.REFUND:
             raise ConflictError('Refunded order cannot be confirmed')
@@ -291,17 +293,23 @@ class OrderService:
         # 结算分销佣金
         CommissionService.settle_for_order(db, order.id)
 
-        # 处理区域订单分红（订单完成后立刻分红）
-        if order.legacy_address_id:
-            address = db.get(UserAddress, order.legacy_address_id)
-            if address:
-                RegionDividendService.process_order_dividend(
-                    db, order,
-                    {'province': address.province, 'city': address.city, 'district': address.district}
-                )
+        OrderService._process_region_dividend(db, order)
 
         db.refresh(order)
         return order
+
+    @staticmethod
+    def _process_region_dividend(db: Session, order: Order) -> None:
+        address_id = getattr(order, 'legacy_address_id', None)
+        if not address_id:
+            return
+        address = db.get(UserAddress, address_id)
+        if address:
+            RegionDividendService.process_order_dividend(db, order, {
+                'province': address.province,
+                'city': address.city,
+                'district': address.district,
+            })
 
     @staticmethod
     def confirm_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
@@ -862,6 +870,8 @@ class OrderService:
     @staticmethod
     def _mark_paid(db: Session, order: Order, external_paid_amount: Decimal | None = None) -> Order:
         if order.pay_status == PayStatus.PAID:
+            if order.order_status == OrderStatus.COMPLETED:
+                OrderService._process_region_dividend(db, order)
             return order
         if order.order_status == OrderStatus.REFUND:
             raise ConflictError('Canceled or refunded order cannot be paid')
@@ -892,6 +902,7 @@ class OrderService:
         db.refresh(order)
         if not requires_shipping:
             CommissionService.settle_for_order(db, order.id)
+            OrderService._process_region_dividend(db, order)
             db.refresh(order)
         return order
 

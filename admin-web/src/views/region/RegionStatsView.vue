@@ -2,8 +2,8 @@
   <div class="region-view">
     <div class="page-heading">
       <div>
-        <h2>区域订单统计</h2>
-        <p>查看区域代理订单分红数据，按省份、城市汇总分析订单与分红情况。</p>
+        <h2>区域订单奖励</h2>
+        <p>管理区代理、市代理的订单奖励比例，查询订单奖励发放明细。</p>
       </div>
       <el-button type="primary" @click="loadData">刷新数据</el-button>
     </div>
@@ -23,7 +23,7 @@
         <div class="section-title">
           <div>
             <h3>区域代理申请</h3>
-            <p>管理省、市、区县代理商审核与分红比例设置。</p>
+            <p>审核区代理、市代理申请并配置区域订单奖励比例。</p>
           </div>
         </div>
 
@@ -33,7 +33,7 @@
             placeholder="搜索省份 / 城市 / 区县"
             clearable
             style="max-width: 200px;"
-            @keyup.enter="loadAgents"
+            @keyup.enter="loadAgents(1)"
           />
           <el-select v-model="filters.status" placeholder="状态" clearable style="width: 140px;">
             <el-option label="待审核" value="PENDING" />
@@ -41,17 +41,18 @@
             <el-option label="已过期" value="EXPIRED" />
           </el-select>
           <el-select v-model="filters.agentType" placeholder="代理类型" clearable style="width: 140px;">
-            <el-option label="区县代理" value="COUNTY_AGENT" />
-            <el-option label="城市代理" value="CITY_AGENT" />
+            <el-option label="区代理" value="COUNTY_AGENT" />
+            <el-option label="市代理" value="CITY_AGENT" />
           </el-select>
           <el-button type="primary" @click="loadAgents">查询</el-button>
           <el-button plain @click="resetAgentFilters">重置</el-button>
         </div>
 
-        <el-table v-loading="loadingAgents" :data="agentPagedRows" border>
-          <el-table-column label="用户信息" min-width="140">
+        <el-table v-loading="loadingAgents" :data="agentRows" border>
+          <el-table-column label="用户信息" min-width="180">
             <template #default="{ row }">
-              <div class="cell-title">{{ row.user_id }}</div>
+              <div class="cell-title">{{ row.user_nickname || `用户 ${row.user_id}` }}</div>
+              <div class="cell-meta">{{ row.user_phone || `ID: ${row.user_id}` }}</div>
             </template>
           </el-table-column>
           <el-table-column label="代理区域" min-width="200">
@@ -65,7 +66,7 @@
               <el-tag size="small">{{ agentTypeLabel(row.agent_type) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="分红比例" width="100">
+          <el-table-column label="奖励比例" width="100">
             <template #default="{ row }">
               <span class="rate-text">{{ row.dividend_rate || 0 }}%</span>
             </template>
@@ -80,7 +81,7 @@
               <span class="count-text">{{ row.total_orders || 0 }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="累计分红" width="120">
+          <el-table-column label="累计奖励" width="120">
             <template #default="{ row }">
               <div class="amount-primary">¥{{ formatMoney(row.total_dividend) }}</div>
             </template>
@@ -88,7 +89,7 @@
           <el-table-column label="申请时间" width="160">
             <template #default="scope">{{ formatDate(scope.row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="scope">
               <el-button
                 v-permission="'region:audit'"
@@ -104,6 +105,13 @@
                 :disabled="scope.row.status !== 'PENDING'"
                 @click="auditAgent(scope.row, false)"
               >驳回</el-button>
+              <el-button
+                v-permission="'region:reward-config'"
+                link
+                type="primary"
+                :disabled="scope.row.status !== 'APPROVED'"
+                @click="openRewardConfig(scope.row)"
+              >配置奖励</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -113,20 +121,32 @@
           v-model:page-size="agentPageSize"
           class="table-pagination"
           layout="total, prev, pager, next"
-          :total="agentRows.length"
+          :total="agentTotal"
+          @current-change="loadAgents"
+          @size-change="handleAgentPageSizeChange"
         />
       </div>
 
-      <!-- 分红记录 -->
+      <!-- 奖励记录 -->
       <div class="panel-card data-card block-gap">
         <div class="section-title">
           <div>
-            <h3>分红记录</h3>
-            <p>查看各区域代理的订单分红明细与结算状态。</p>
+            <h3>奖励发放记录</h3>
+            <p>查看每笔区域订单奖励的代理会员、计算比例和到账状态。</p>
           </div>
         </div>
 
-        <el-table v-loading="loadingDividends" :data="dividendPagedRows" border>
+        <div class="toolbar-row toolbar-wrap">
+          <el-input v-model="dividendFilters.keyword" placeholder="搜索订单号 / 代理" clearable style="max-width: 220px" />
+          <el-select v-model="dividendFilters.status" placeholder="状态" clearable style="width: 130px">
+            <el-option label="已结算" value="SETTLED" />
+            <el-option label="冻结中" value="FROZEN" />
+            <el-option label="已失效" value="EXPIRED" />
+          </el-select>
+          <el-button type="primary" @click="loadDividends(1)">查询</el-button>
+        </div>
+
+        <el-table v-loading="loadingDividends" :data="dividendRows" border>
           <el-table-column prop="order_no" label="订单号" min-width="180" />
           <el-table-column label="代理区域" min-width="180">
             <template #default="{ row }">
@@ -139,12 +159,12 @@
               <span class="amount-text">¥{{ formatMoney(row.order_amount) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="分红比例" width="100">
+          <el-table-column label="奖励比例" width="100">
             <template #default="{ row }">
-              <span class="rate-text">{{ (row.dividend_rate * 100).toFixed(1) }}%</span>
+              <span class="rate-text">{{ Number(row.dividend_rate || 0).toFixed(2) }}%</span>
             </template>
           </el-table-column>
-          <el-table-column label="分红金额" width="120">
+          <el-table-column label="奖励金额" width="120">
             <template #default="{ row }">
               <div class="amount-primary">¥{{ formatMoney(row.dividend_amount) }}</div>
             </template>
@@ -164,7 +184,9 @@
           v-model:page-size="dividendPageSize"
           class="table-pagination"
           layout="total, prev, pager, next"
-          :total="dividendRows.length"
+          :total="dividendTotal"
+          @current-change="loadDividends"
+          @size-change="handleDividendPageSizeChange"
         />
       </div>
     </div>
@@ -178,7 +200,7 @@
         <el-form-item label="代理类型">
           <el-tag>{{ agentTypeLabel(currentAuditRow?.agent_type) }}</el-tag>
         </el-form-item>
-        <el-form-item label="分红比例">
+        <el-form-item label="订单奖励比例">
           <el-input-number v-model="auditForm.dividendRate" :min="0" :max="100" :precision="1" />
           <span class="unit">%</span>
         </el-form-item>
@@ -188,8 +210,9 @@
       </el-form>
       <template #footer>
         <el-button @click="auditDialogVisible = false">取消</el-button>
-        <el-button type="success" @click="confirmAudit(true)">通过</el-button>
-        <el-button type="danger" @click="confirmAudit(false)">驳回</el-button>
+        <el-button v-if="currentAuditRow?.status === 'PENDING'" type="success" @click="confirmAudit(true)">通过</el-button>
+        <el-button v-if="currentAuditRow?.status === 'PENDING'" type="danger" @click="confirmAudit(false)">驳回</el-button>
+        <el-button v-else type="primary" @click="confirmAudit(true)">保存比例</el-button>
       </template>
     </el-dialog>
   </div>
@@ -211,6 +234,7 @@ const summary = ref({})
 
 // 代理列表
 const agentRows = ref([])
+const agentTotal = ref(0)
 const filters = ref({
   keyword: '',
   status: '',
@@ -221,8 +245,10 @@ const agentPageSize = ref(10)
 
 // 分红记录
 const dividendRows = ref([])
+const dividendTotal = ref(0)
 const dividendPage = ref(1)
 const dividendPageSize = ref(10)
+const dividendFilters = ref({ keyword: '', status: '' })
 
 // 审核对话框
 const auditDialogVisible = ref(false)
@@ -235,19 +261,9 @@ const auditForm = ref({
 const metrics = computed(() => [
   { label: '区域代理', value: summary.value.total_agents || 0, subtext: '已生效代理' },
   { label: '待审核', value: summary.value.pending_count || 0, subtext: '申请待处理' },
-  { label: '分红记录', value: summary.value.total_dividend_records || 0, subtext: '累计笔数' },
-  { label: '累计分红', value: '¥' + (summary.value.total_dividend_amount || 0), subtext: '已结算金额' }
+  { label: '奖励记录', value: summary.value.total_dividend_records || 0, subtext: '累计笔数' },
+  { label: '累计奖励', value: '¥' + (summary.value.total_dividend_amount || 0), subtext: '已到账金额' }
 ])
-
-const agentPagedRows = computed(() => {
-  const start = (agentPage.value - 1) * agentPageSize.value
-  return agentRows.value.slice(start, start + agentPageSize.value)
-})
-
-const dividendPagedRows = computed(() => {
-  const start = (dividendPage.value - 1) * dividendPageSize.value
-  return dividendRows.value.slice(start, start + dividendPageSize.value)
-})
 
 function formatDate(value) {
   if (!value) return '--'
@@ -259,15 +275,15 @@ function formatMoney(value) {
 }
 
 function agentTypeLabel(value) {
-  return { COUNTY_AGENT: '区县代理', CITY_AGENT: '城市代理' }[value] || value || '--'
+  return { COUNTY_AGENT: '区代理', CITY_AGENT: '市代理' }[value] || value || '--'
 }
 
 function agentStatusLabel(value) {
-  return { PENDING: '待审核', APPROVED: '已通过', EXPIRED: '已过期' }[value] || value || '--'
+  return { PENDING: '待审核', APPROVED: '已通过', REJECTED: '已驳回', EXPIRED: '已过期' }[value] || value || '--'
 }
 
 function agentStatusType(status) {
-  return { PENDING: 'warning', APPROVED: 'success', EXPIRED: 'info' }[status] || 'info'
+  return { PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger', EXPIRED: 'info' }[status] || 'info'
 }
 
 function dividendStatusLabel(value) {
@@ -288,28 +304,37 @@ async function loadData() {
   }
 }
 
-async function loadAgents() {
+async function loadAgents(nextPage = agentPage.value) {
   loadingAgents.value = true
   try {
+    agentPage.value = nextPage
     const params = {
       keyword: filters.value.keyword || undefined,
       status: filters.value.status || undefined,
       agent_type: filters.value.agentType || undefined,
       page: agentPage.value,
-      page_size: agentPageSize.value * 5
+      page_size: agentPageSize.value
     }
     const res = await regionApi.agents(params)
     agentRows.value = res.items || []
+    agentTotal.value = res.total || 0
   } finally {
     loadingAgents.value = false
   }
 }
 
-async function loadDividends() {
+async function loadDividends(nextPage = dividendPage.value) {
   loadingDividends.value = true
   try {
-    const res = await regionApi.dividends({ limit: 100 })
-    dividendRows.value = res || []
+    dividendPage.value = nextPage
+    const res = await regionApi.dividends({
+      keyword: dividendFilters.value.keyword || undefined,
+      status: dividendFilters.value.status || undefined,
+      page: dividendPage.value,
+      page_size: dividendPageSize.value
+    })
+    dividendRows.value = res.items || []
+    dividendTotal.value = res.total || 0
   } finally {
     loadingDividends.value = false
   }
@@ -321,28 +346,43 @@ function resetAgentFilters() {
   loadAgents()
 }
 
+function handleAgentPageSizeChange() {
+  agentPage.value = 1
+  loadAgents(1)
+}
+
+function handleDividendPageSizeChange() {
+  dividendPage.value = 1
+  loadDividends(1)
+}
+
 function auditAgent(row) {
   currentAuditRow.value = row
   auditForm.value = {
-    dividendRate: row.dividend_rate || 5,
+    dividendRate: row.dividend_rate ?? 0,
     remark: ''
   }
   auditDialogVisible.value = true
 }
 
-async function confirmAudit(approved) {
-  if (approved && !auditForm.value.dividendRate) {
-    ElMessage.warning('请设置分红比例')
-    return
-  }
+function openRewardConfig(row) {
+  auditAgent(row)
+}
 
+async function confirmAudit(approved) {
   try {
-    await regionApi.auditAgent(currentAuditRow.value.id, {
-      approved,
-      remark: auditForm.value.remark || undefined,
-      dividend_rate: approved ? auditForm.value.dividendRate : undefined
-    })
-    ElMessage.success(approved ? '已通过审核' : '已驳回申请')
+    if (currentAuditRow.value.status === 'PENDING') {
+      await regionApi.auditAgent(currentAuditRow.value.id, {
+        approved,
+        remark: auditForm.value.remark || undefined,
+        dividend_rate: approved ? auditForm.value.dividendRate : undefined
+      })
+    } else {
+      await regionApi.updateRewardConfig(currentAuditRow.value.id, {
+        dividend_rate: auditForm.value.dividendRate
+      })
+    }
+    ElMessage.success(currentAuditRow.value.status === 'PENDING' ? (approved ? '已通过审核' : '已驳回申请') : '奖励比例已更新')
     auditDialogVisible.value = false
     await loadAgents()
     await loadData()
