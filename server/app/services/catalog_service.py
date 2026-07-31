@@ -349,12 +349,18 @@ class ProductService:
         'device_revenue_enabled': ['设备收益联动', 'device_revenue_enabled'],
         'custom_commission_enabled': ['专属分润', 'custom_commission_enabled'],
         'custom_commission_method': ['专属分润方式', 'custom_commission_method'],
+        'custom_commission_level1_enabled': ['启用一级分润', 'custom_commission_level1_enabled'],
+        'custom_commission_level2_enabled': ['启用二级分润', 'custom_commission_level2_enabled'],
+        'custom_commission_county_agent_enabled': ['启用区代分润', 'custom_commission_county_agent_enabled'],
+        'custom_commission_city_agent_enabled': ['启用市代分润', 'custom_commission_city_agent_enabled'],
         'custom_commission_level1_rate': ['一级分润比例', 'custom_commission_level1_rate'],
         'custom_commission_level2_rate': ['二级分润比例', 'custom_commission_level2_rate'],
-        'custom_commission_level3_rate': ['三级分润比例', 'custom_commission_level3_rate'],
+        'custom_commission_county_agent_rate': ['区代分润比例', 'custom_commission_county_agent_rate'],
+        'custom_commission_city_agent_rate': ['市代分润比例', 'custom_commission_city_agent_rate'],
         'custom_commission_level1_amount': ['一级固定分润', 'custom_commission_level1_amount'],
         'custom_commission_level2_amount': ['二级固定分润', 'custom_commission_level2_amount'],
-        'custom_commission_level3_amount': ['三级固定分润', 'custom_commission_level3_amount'],
+        'custom_commission_county_agent_amount': ['区代固定分润', 'custom_commission_county_agent_amount'],
+        'custom_commission_city_agent_amount': ['市代固定分润', 'custom_commission_city_agent_amount'],
     })
 
     @staticmethod
@@ -376,12 +382,18 @@ class ProductService:
                 'device_revenue_enabled': False,
                 'custom_commission_enabled': False,
                 'custom_commission_method': 'RATE',
+                'custom_commission_level1_enabled': False,
+                'custom_commission_level2_enabled': False,
+                'custom_commission_county_agent_enabled': False,
+                'custom_commission_city_agent_enabled': False,
                 'custom_commission_level1_rate': 0.0,
                 'custom_commission_level2_rate': 0.0,
-                'custom_commission_level3_rate': 0.0,
+                'custom_commission_county_agent_rate': 0.0,
+                'custom_commission_city_agent_rate': 0.0,
                 'custom_commission_level1_amount': 0.0,
                 'custom_commission_level2_amount': 0.0,
-                'custom_commission_level3_amount': 0.0,
+                'custom_commission_county_agent_amount': 0.0,
+                'custom_commission_city_agent_amount': 0.0,
             }
         if zone_type == ZoneType.SELF_OPERATED:
             return {
@@ -400,12 +412,18 @@ class ProductService:
                 'device_revenue_enabled': False,
                 'custom_commission_enabled': False,
                 'custom_commission_method': 'RATE',
+                'custom_commission_level1_enabled': False,
+                'custom_commission_level2_enabled': False,
+                'custom_commission_county_agent_enabled': False,
+                'custom_commission_city_agent_enabled': False,
                 'custom_commission_level1_rate': 0.0,
                 'custom_commission_level2_rate': 0.0,
-                'custom_commission_level3_rate': 0.0,
+                'custom_commission_county_agent_rate': 0.0,
+                'custom_commission_city_agent_rate': 0.0,
                 'custom_commission_level1_amount': 0.0,
                 'custom_commission_level2_amount': 0.0,
-                'custom_commission_level3_amount': 0.0,
+                'custom_commission_county_agent_amount': 0.0,
+                'custom_commission_city_agent_amount': 0.0,
             }
         if zone_type == ZoneType.HOT_SALE:
             return {
@@ -424,12 +442,18 @@ class ProductService:
                 'device_revenue_enabled': False,
                 'custom_commission_enabled': False,
                 'custom_commission_method': 'RATE',
+                'custom_commission_level1_enabled': False,
+                'custom_commission_level2_enabled': False,
+                'custom_commission_county_agent_enabled': False,
+                'custom_commission_city_agent_enabled': False,
                 'custom_commission_level1_rate': 0.0,
                 'custom_commission_level2_rate': 0.0,
-                'custom_commission_level3_rate': 0.0,
+                'custom_commission_county_agent_rate': 0.0,
+                'custom_commission_city_agent_rate': 0.0,
                 'custom_commission_level1_amount': 0.0,
                 'custom_commission_level2_amount': 0.0,
-                'custom_commission_level3_amount': 0.0,
+                'custom_commission_county_agent_amount': 0.0,
+                'custom_commission_city_agent_amount': 0.0,
             }
         return {
             'points_purchase_enabled': True,
@@ -447,12 +471,18 @@ class ProductService:
             'device_revenue_enabled': True,
             'custom_commission_enabled': False,
             'custom_commission_method': 'RATE',
+            'custom_commission_level1_enabled': False,
+            'custom_commission_level2_enabled': False,
+            'custom_commission_county_agent_enabled': False,
+            'custom_commission_city_agent_enabled': False,
             'custom_commission_level1_rate': 0.0,
             'custom_commission_level2_rate': 0.0,
-            'custom_commission_level3_rate': 0.0,
+            'custom_commission_county_agent_rate': 0.0,
+            'custom_commission_city_agent_rate': 0.0,
             'custom_commission_level1_amount': 0.0,
             'custom_commission_level2_amount': 0.0,
-            'custom_commission_level3_amount': 0.0,
+            'custom_commission_county_agent_amount': 0.0,
+            'custom_commission_city_agent_amount': 0.0,
         }
 
     @staticmethod
@@ -751,8 +781,19 @@ class ProductService:
         if snapshot.get('custom_commission_enabled'):
             method = snapshot.get('custom_commission_method')
             suffix = '%' if method == 'RATE' else '元/件'
-            values = [snapshot.get(f'custom_commission_level{level}_{"rate" if method == "RATE" else "amount"}', 0) for level in range(1, 4)]
-            commission_badges.append(f'专属分润 {"/".join(f"{value:g}" for value in values)}{suffix}')
+            field = 'rate' if method == 'RATE' else 'amount'
+            role_fields = [
+                ('一级', 'level1'),
+                ('二级', 'level2'),
+                ('区代', 'county_agent'),
+                ('市代', 'city_agent'),
+            ]
+            values = [
+                f'{label}{snapshot.get(f"custom_commission_{role}_{field}", 0):g}'
+                for label, role in role_fields
+                if snapshot.get(f'custom_commission_{role}_enabled')
+            ]
+            commission_badges.append(f'专属分润 {"/".join(values)}{suffix}')
         else:
             commission_badges.append('未配置分润')
         badges = [item for item in payment_badges if item] + commission_badges + badges
@@ -1246,12 +1287,18 @@ class ProductService:
             'device_revenue_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'device_revenue_enabled')),
             'custom_commission_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'custom_commission_enabled')),
             'custom_commission_method': ProductService._extract_import_value(row, 'custom_commission_method') or None,
+            'custom_commission_level1_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'custom_commission_level1_enabled')),
+            'custom_commission_level2_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'custom_commission_level2_enabled')),
+            'custom_commission_county_agent_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'custom_commission_county_agent_enabled')),
+            'custom_commission_city_agent_enabled': ProductService._parse_import_optional_bool(ProductService._extract_import_value(row, 'custom_commission_city_agent_enabled')),
             'custom_commission_level1_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level1_rate'), 'custom_commission_level1_rate'),
             'custom_commission_level2_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level2_rate'), 'custom_commission_level2_rate'),
-            'custom_commission_level3_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level3_rate'), 'custom_commission_level3_rate'),
+            'custom_commission_county_agent_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_county_agent_rate'), 'custom_commission_county_agent_rate'),
+            'custom_commission_city_agent_rate': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_city_agent_rate'), 'custom_commission_city_agent_rate'),
             'custom_commission_level1_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level1_amount'), 'custom_commission_level1_amount'),
             'custom_commission_level2_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level2_amount'), 'custom_commission_level2_amount'),
-            'custom_commission_level3_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_level3_amount'), 'custom_commission_level3_amount'),
+            'custom_commission_county_agent_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_county_agent_amount'), 'custom_commission_county_agent_amount'),
+            'custom_commission_city_agent_amount': ProductService._parse_import_float(ProductService._extract_import_value(row, 'custom_commission_city_agent_amount'), 'custom_commission_city_agent_amount'),
         }
         if not any(value is not None for value in payload.values()):
             return None
@@ -1379,18 +1426,28 @@ class ProductService:
             raise ConflictError('custom_commission_method must be RATE or FIXED_AMOUNT')
         payload['custom_commission_method'] = commission_method
 
-        commission_rates = [payload.get(f'custom_commission_level{level}_rate', 0) for level in range(1, 4)]
-        commission_amounts = [payload.get(f'custom_commission_level{level}_amount', 0) for level in range(1, 4)]
+        commission_roles = ('level1', 'level2', 'county_agent', 'city_agent')
+        commission_rates = [payload.get(f'custom_commission_{role}_rate', 0) for role in commission_roles]
+        commission_amounts = [payload.get(f'custom_commission_{role}_amount', 0) for role in commission_roles]
         if any(value < 0 or value > 100 for value in commission_rates):
             raise ConflictError('Custom commission rates must be between 0 and 100')
         if any(value < 0 for value in commission_amounts):
             raise ConflictError('Custom commission amounts cannot be negative')
         if payload.get('custom_commission_enabled'):
-            selected_values = commission_rates if commission_method == 'RATE' else commission_amounts
+            selected_values = [
+                payload.get(f'custom_commission_{role}_{"rate" if commission_method == "RATE" else "amount"}', 0)
+                for role in commission_roles
+                if payload.get(f'custom_commission_{role}_enabled')
+            ]
             if sum(selected_values) <= 0:
                 raise ConflictError('At least one custom commission value must be greater than 0')
-            if commission_method == 'RATE' and sum(commission_rates) > 100:
+            if commission_method == 'RATE' and sum(selected_values) > 100:
                 raise ConflictError('Custom commission total rate cannot exceed 100')
+
+        for role in commission_roles:
+            if not payload.get(f'custom_commission_{role}_enabled'):
+                payload[f'custom_commission_{role}_rate'] = 0
+                payload[f'custom_commission_{role}_amount'] = 0
 
         if product.zone_type == ZoneType.REPURCHASE and payload.get('flash_sale_enabled'):
             raise ConflictError('Repurchase zone does not support flash sale')

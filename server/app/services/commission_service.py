@@ -288,12 +288,18 @@ class CommissionService:
             'product_name': product.product_name,
             'zone_type': product.zone_type.value,
             'method': config.custom_commission_method,
+            'level1_enabled': bool(config.custom_commission_level1_enabled),
+            'level2_enabled': bool(config.custom_commission_level2_enabled),
+            'county_agent_enabled': bool(config.custom_commission_county_agent_enabled),
+            'city_agent_enabled': bool(config.custom_commission_city_agent_enabled),
             'level1_rate': float(config.custom_commission_level1_rate or 0),
             'level2_rate': float(config.custom_commission_level2_rate or 0),
-            'level3_rate': float(config.custom_commission_level3_rate or 0),
+            'county_agent_rate': float(config.custom_commission_county_agent_rate or 0),
+            'city_agent_rate': float(config.custom_commission_city_agent_rate or 0),
             'level1_amount': float(config.custom_commission_level1_amount or 0),
             'level2_amount': float(config.custom_commission_level2_amount or 0),
-            'level3_amount': float(config.custom_commission_level3_amount or 0),
+            'county_agent_amount': float(config.custom_commission_county_agent_amount or 0),
+            'city_agent_amount': float(config.custom_commission_city_agent_amount or 0),
             'updated_at': config.updated_at,
         }
 
@@ -581,7 +587,9 @@ class CommissionService:
         level: int,
         quantity: Decimal,
     ) -> tuple[Decimal, Decimal | None]:
-        if level < 1 or level > 3:
+        if level < 1 or level > 2:
+            return Decimal('0'), None
+        if not bool(getattr(config, f'custom_commission_level{level}_enabled', False)):
             return Decimal('0'), None
         if str(config.custom_commission_method or 'RATE').upper() == 'FIXED_AMOUNT':
             unit_amount = Decimal(str(getattr(config, f'custom_commission_level{level}_amount', 0) or 0))

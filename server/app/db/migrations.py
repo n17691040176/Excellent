@@ -131,17 +131,36 @@ def apply_schema_migrations() -> None:
         commission_columns = {
             'custom_commission_enabled': "TINYINT(1) NOT NULL DEFAULT 0",
             'custom_commission_method': "VARCHAR(32) NOT NULL DEFAULT 'RATE'",
+            'custom_commission_level1_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
+            'custom_commission_level2_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
+            'custom_commission_county_agent_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
+            'custom_commission_city_agent_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
             'custom_commission_level1_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 0',
             'custom_commission_level2_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 0',
-            'custom_commission_level3_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 0',
+            'custom_commission_county_agent_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 0',
+            'custom_commission_city_agent_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 0',
             'custom_commission_level1_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
             'custom_commission_level2_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
-            'custom_commission_level3_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
+            'custom_commission_county_agent_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
+            'custom_commission_city_agent_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
         }
+        added_commission_columns: set[str] = set()
         for column_name, column_type in commission_columns.items():
             if column_name not in zone_config_columns:
                 connection.execute(
                     text(f'ALTER TABLE product_zone_configs ADD COLUMN {column_name} {column_type}')
                 )
+                added_commission_columns.add(column_name)
+
+        if 'custom_commission_level1_enabled' in added_commission_columns:
+            connection.execute(text(
+                'UPDATE product_zone_configs SET custom_commission_level1_enabled = 1 '
+                'WHERE custom_commission_level1_rate > 0 OR custom_commission_level1_amount > 0'
+            ))
+        if 'custom_commission_level2_enabled' in added_commission_columns:
+            connection.execute(text(
+                'UPDATE product_zone_configs SET custom_commission_level2_enabled = 1 '
+                'WHERE custom_commission_level2_rate > 0 OR custom_commission_level2_amount > 0'
+            ))
 
         _clear_legacy_earning_rule_pool(connection)

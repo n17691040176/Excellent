@@ -134,12 +134,18 @@ class ProductZoneConfig(TimestampMixin, Base):
     device_revenue_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     custom_commission_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     custom_commission_method: Mapped[str] = mapped_column(String(32), default='RATE', nullable=False)
+    custom_commission_level1_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    custom_commission_level2_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    custom_commission_county_agent_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    custom_commission_city_agent_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     custom_commission_level1_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
     custom_commission_level2_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
-    custom_commission_level3_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
+    custom_commission_county_agent_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
+    custom_commission_city_agent_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=0, nullable=False)
     custom_commission_level1_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     custom_commission_level2_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
-    custom_commission_level3_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    custom_commission_county_agent_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    custom_commission_city_agent_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
 
 
 class ProductQualification(Base):

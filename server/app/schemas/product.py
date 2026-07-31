@@ -57,12 +57,18 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     device_revenue_enabled: bool = False
     custom_commission_enabled: bool = False
     custom_commission_method: str = 'RATE'
+    custom_commission_level1_enabled: bool = False
+    custom_commission_level2_enabled: bool = False
+    custom_commission_county_agent_enabled: bool = False
+    custom_commission_city_agent_enabled: bool = False
     custom_commission_level1_rate: float = 0
     custom_commission_level2_rate: float = 0
-    custom_commission_level3_rate: float = 0
+    custom_commission_county_agent_rate: float = 0
+    custom_commission_city_agent_rate: float = 0
     custom_commission_level1_amount: float = 0
     custom_commission_level2_amount: float = 0
-    custom_commission_level3_amount: float = 0
+    custom_commission_county_agent_amount: float = 0
+    custom_commission_city_agent_amount: float = 0
 
 
 class ProductCategoryCreateRequest(AppBaseModel):
