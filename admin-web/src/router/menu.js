@@ -108,7 +108,7 @@ export const menuSections = [
       {
         path: '/commission',
         name: 'Commission',
-        title: '返现管理',
+        title: '佣金明细',
         icon: 'Coin',
         roles: ['SUPER_ADMIN', 'TEAM_ADMIN'],
         permission: 'commission:view'

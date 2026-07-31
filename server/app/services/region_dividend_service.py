@@ -1,6 +1,5 @@
-"""区域代理审核、区域订单奖励计算与发放。"""
+"""后台区域代理配置、区域订单奖励计算与发放。"""
 
-from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import or_
@@ -193,18 +192,6 @@ class RegionDividendService:
         ))
 
     @staticmethod
-    def get_agent_dividends(
-        db: Session,
-        user_id: int,
-        status: str | None = None,
-        limit: int = 50,
-    ) -> list[RegionDividendFlow]:
-        query = db.query(RegionDividendFlow).filter(RegionDividendFlow.agent_user_id == user_id)
-        if status:
-            query = query.filter(RegionDividendFlow.status == status)
-        return query.order_by(RegionDividendFlow.id.desc()).limit(limit).all()
-
-    @staticmethod
     def reverse_order_dividend(db: Session, order: Order) -> None:
         flows = db.query(RegionDividendFlow).filter(
             RegionDividendFlow.order_id == order.id,
@@ -250,22 +237,6 @@ class RegionDividendService:
         db.flush()
 
     @staticmethod
-    def get_agent_summary(db: Session, user_id: int) -> dict:
-        agents = db.query(RegionAgent).filter(RegionAgent.user_id == user_id).order_by(
-            RegionAgent.id.desc()
-        ).all()
-        active_agents = [agent for agent in agents if agent.is_valid()]
-        user = db.get(User, user_id)
-        return {
-            'member_level': user.member_level.value if user else None,
-            'total_dividend': float(sum(
-                (Decimal(str(agent.total_dividend or 0)) for agent in active_agents), Decimal('0')
-            )),
-            'total_orders': sum(int(agent.total_orders or 0) for agent in active_agents),
-            'agents': [RegionDividendService.serialize_agent(agent) for agent in agents],
-        }
-
-    @staticmethod
     def serialize_agent(agent: RegionAgent, user: User | None = None) -> dict:
         return {
             'id': agent.id,
@@ -293,16 +264,141 @@ class RegionDividendService:
         }
 
     @staticmethod
-    def apply_region_agent(
+    def create_agent(
         db: Session,
         user_id: int,
+        admin_user_id: int,
         province: str,
         city: str,
         district: str,
         agent_type: str,
-        resource_proof_url: str | None = None,
-        agreement_url: str | None = None,
+        dividend_rate: float | None = None,
+        effective_at=None,
+        expired_at=None,
+        remark: str | None = None,
     ) -> RegionAgent:
+        user = db.get(User, user_id)
+        if not user:
+            raise NotFoundError('代理用户不存在')
+        clean_type, clean_province, clean_city, clean_district = RegionDividendService._normalize_agent_fields(
+            agent_type, province, city, district
+        )
+        RegionDividendService._ensure_area_available(
+            db,
+            clean_type,
+            clean_province,
+            clean_city,
+            clean_district,
+        )
+        if effective_at and expired_at and expired_at <= effective_at:
+            raise ConflictError('失效时间必须晚于生效时间')
+
+        agent = db.query(RegionAgent).filter(
+            RegionAgent.user_id == user_id,
+            RegionAgent.province == clean_province,
+            RegionAgent.city == clean_city,
+            RegionAgent.district == clean_district,
+        ).first()
+        if not agent:
+            agent = RegionAgent(user_id=user_id)
+            db.add(agent)
+        default_rate = RegionDividendService._default_rate(clean_type)
+        agent.province = clean_province
+        agent.city = clean_city
+        agent.district = clean_district
+        agent.agent_type = clean_type
+        agent.status = 'APPROVED'
+        agent.agreement_signed = True
+        agent.dividend_rate = float(default_rate if dividend_rate is None else dividend_rate)
+        agent.effective_at = effective_at or now()
+        agent.expired_at = expired_at
+        agent.audited_by = admin_user_id
+        agent.audited_at = now()
+        agent.audit_remark = remark
+        RegionDividendService._sync_user_member_level(db, user.id)
+        db.commit()
+        db.refresh(agent)
+        return agent
+
+    @staticmethod
+    def update_agent(
+        db: Session,
+        agent_id: int,
+        admin_user_id: int,
+        province: str,
+        city: str,
+        district: str,
+        agent_type: str,
+        dividend_rate: float,
+        effective_at=None,
+        expired_at=None,
+        remark: str | None = None,
+    ) -> RegionAgent:
+        agent = db.get(RegionAgent, agent_id)
+        if not agent:
+            raise NotFoundError('区域代理不存在')
+        clean_type, clean_province, clean_city, clean_district = RegionDividendService._normalize_agent_fields(
+            agent_type, province, city, district
+        )
+        if effective_at and expired_at and expired_at <= effective_at:
+            raise ConflictError('失效时间必须晚于生效时间')
+        RegionDividendService._ensure_area_available(
+            db,
+            clean_type,
+            clean_province,
+            clean_city,
+            clean_district,
+            exclude_agent_id=agent.id,
+        )
+        duplicate = db.query(RegionAgent.id).filter(
+            RegionAgent.id != agent.id,
+            RegionAgent.user_id == agent.user_id,
+            RegionAgent.province == clean_province,
+            RegionAgent.city == clean_city,
+            RegionAgent.district == clean_district,
+        ).first()
+        if duplicate:
+            raise ConflictError('该用户在此区域已有代理配置')
+        agent.agent_type = clean_type
+        agent.province = clean_province
+        agent.city = clean_city
+        agent.district = clean_district
+        agent.dividend_rate = float(dividend_rate)
+        agent.status = 'APPROVED'
+        agent.agreement_signed = True
+        agent.effective_at = effective_at or agent.effective_at or now()
+        agent.expired_at = expired_at
+        agent.audited_by = admin_user_id
+        agent.audited_at = now()
+        agent.audit_remark = remark
+        RegionDividendService._sync_user_member_level(db, agent.user_id)
+        db.commit()
+        db.refresh(agent)
+        return agent
+
+    @staticmethod
+    def disable_agent(db: Session, agent_id: int, admin_user_id: int) -> RegionAgent:
+        agent = db.get(RegionAgent, agent_id)
+        if not agent:
+            raise NotFoundError('区域代理不存在')
+        agent.status = 'EXPIRED'
+        agent.agreement_signed = False
+        agent.expired_at = now()
+        agent.audited_by = admin_user_id
+        agent.audited_at = now()
+        agent.audit_remark = '后台取消区域代理配置'
+        RegionDividendService._sync_user_member_level(db, agent.user_id)
+        db.commit()
+        db.refresh(agent)
+        return agent
+
+    @staticmethod
+    def _normalize_agent_fields(
+        agent_type: str,
+        province: str,
+        city: str,
+        district: str,
+    ) -> tuple[str, str, str, str]:
         clean_type = str(agent_type or '').strip().upper()
         if clean_type not in RegionDividendService.AGENT_MEMBER_LEVEL:
             raise ConflictError('代理类型仅支持区代理或市代理')
@@ -313,99 +409,57 @@ class RegionDividendService:
             raise ConflictError('省份和城市不能为空')
         if clean_type == 'COUNTY_AGENT' and not clean_district:
             raise ConflictError('区代理必须选择区县')
-
-        existing = db.query(RegionAgent).filter(
-            RegionAgent.user_id == user_id,
-            RegionAgent.province == clean_province,
-            RegionAgent.city == clean_city,
-            RegionAgent.district == clean_district,
-            RegionAgent.agent_type == clean_type,
-            RegionAgent.status.in_(['PENDING', 'APPROVED']),
-        ).first()
-        if existing:
-            raise ConflictError('该区域代理申请已存在')
-
-        default_rate = (
-            RegionDividendService.DEFAULT_CITY_AGENT_RATE
-            if clean_type == 'CITY_AGENT'
-            else RegionDividendService.DEFAULT_COUNTY_AGENT_RATE
-        )
-        agent = RegionAgent(
-            user_id=user_id,
-            province=clean_province,
-            city=clean_city,
-            district=clean_district,
-            agent_type=clean_type,
-            status='PENDING',
-            resource_proof_url=resource_proof_url,
-            agreement_url=agreement_url,
-            dividend_rate=float(default_rate),
-        )
-        db.add(agent)
-        db.commit()
-        db.refresh(agent)
-        return agent
+        return clean_type, clean_province, clean_city, clean_district
 
     @staticmethod
-    def audit_region_agent(
+    def _default_rate(agent_type: str) -> Decimal:
+        if agent_type == 'CITY_AGENT':
+            return RegionDividendService.DEFAULT_CITY_AGENT_RATE
+        return RegionDividendService.DEFAULT_COUNTY_AGENT_RATE
+
+    @staticmethod
+    def _ensure_area_available(
         db: Session,
-        agent_id: int,
-        admin_user_id: int,
-        approved: bool,
-        remark: str | None = None,
-        dividend_rate: float | None = None,
-    ) -> RegionAgent:
-        agent = db.get(RegionAgent, agent_id)
-        if not agent:
-            raise NotFoundError('区域代理申请不存在')
-        if agent.status != 'PENDING':
-            raise ConflictError('该申请已审核')
-
-        if approved:
-            conflict_query = db.query(RegionAgent.id).filter(
-                RegionAgent.id != agent.id,
-                RegionAgent.agent_type == agent.agent_type,
-                RegionAgent.province == agent.province,
-                RegionAgent.city == agent.city,
-                RegionAgent.status == 'APPROVED',
-                or_(RegionAgent.expired_at.is_(None), RegionAgent.expired_at > now()),
-            )
-            if agent.agent_type == 'COUNTY_AGENT':
-                conflict_query = conflict_query.filter(RegionAgent.district == agent.district)
-            if conflict_query.first():
-                raise ConflictError('该区域已有生效代理')
-
-            agent.status = 'APPROVED'
-            agent.effective_at = now()
-            agent.expired_at = now() + timedelta(days=365)
-            agent.agreement_signed = True
-            if dividend_rate is not None:
-                agent.dividend_rate = float(dividend_rate)
-
-            user = db.get(User, agent.user_id)
-            if not user:
-                raise NotFoundError('代理用户不存在')
-            target_level = RegionDividendService.AGENT_MEMBER_LEVEL[agent.agent_type]
-            if target_level.rank > user.member_level.rank:
-                user.member_level = target_level
-        else:
-            agent.status = 'REJECTED'
-
-        agent.audited_by = admin_user_id
-        agent.audited_at = now()
-        agent.audit_remark = remark
-        db.commit()
-        db.refresh(agent)
-        return agent
+        agent_type: str,
+        province: str,
+        city: str,
+        district: str,
+        exclude_agent_id: int | None = None,
+    ) -> None:
+        query = db.query(RegionAgent.id).filter(
+            RegionAgent.agent_type == agent_type,
+            RegionAgent.province == province,
+            RegionAgent.city == city,
+            RegionAgent.status == 'APPROVED',
+            or_(RegionAgent.expired_at.is_(None), RegionAgent.expired_at > now()),
+        )
+        if exclude_agent_id is not None:
+            query = query.filter(RegionAgent.id != exclude_agent_id)
+        if agent_type == 'COUNTY_AGENT':
+            query = query.filter(RegionAgent.district == district)
+        if query.first():
+            raise ConflictError('该区域已有生效代理')
 
     @staticmethod
-    def update_reward_config(db: Session, agent_id: int, dividend_rate: float) -> RegionAgent:
-        agent = db.get(RegionAgent, agent_id)
-        if not agent:
-            raise NotFoundError('区域代理不存在')
-        if agent.status != 'APPROVED':
-            raise ConflictError('只能配置已通过代理的奖励比例')
-        agent.dividend_rate = float(dividend_rate)
-        db.commit()
-        db.refresh(agent)
-        return agent
+    def _sync_user_member_level(db: Session, user_id: int) -> None:
+        user = db.get(User, user_id)
+        if not user:
+            return
+        active_types = {
+            row.agent_type
+            for row in db.query(RegionAgent.agent_type).filter(
+                RegionAgent.user_id == user_id,
+                RegionAgent.status == 'APPROVED',
+                RegionAgent.agreement_signed.is_(True),
+                or_(RegionAgent.expired_at.is_(None), RegionAgent.expired_at > now()),
+            ).all()
+        }
+        target_level = None
+        if 'CITY_AGENT' in active_types:
+            target_level = MemberLevel.CITY_AGENT
+        elif 'COUNTY_AGENT' in active_types:
+            target_level = MemberLevel.COUNTY_AGENT
+        if target_level:
+            user.member_level = target_level
+        elif user.member_level in {MemberLevel.COUNTY_AGENT, MemberLevel.CITY_AGENT}:
+            user.member_level = MemberLevel.NORMAL_MEMBER

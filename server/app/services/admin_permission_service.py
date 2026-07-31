@@ -43,8 +43,7 @@ PERMISSION_GROUPS = [
             {'key': 'shipments:view', 'label': '查看物流'},
             {'key': 'shipments:manage', 'label': '管理物流'},
             {'key': 'region:view', 'label': '区域订单统计'},
-            {'key': 'region:audit', 'label': '审核区域代理'},
-            {'key': 'region:reward-config', 'label': '配置区域订单奖励'},
+            {'key': 'region:manage', 'label': '管理区域代理与奖励'},
         ],
     },
     {
@@ -54,7 +53,7 @@ PERMISSION_GROUPS = [
             {'key': 'local-life:create', 'label': '新增本地生活'},
             {'key': 'local-life:edit', 'label': '编辑本地生活'},
             {'key': 'local-life:verify', 'label': '本地生活核销'},
-            {'key': 'commission:view', 'label': '返现管理'},
+            {'key': 'commission:view', 'label': '佣金明细'},
             {'key': 'withdraws:view', 'label': '查看提现'},
             {'key': 'withdraws:review', 'label': '审核提现'},
             {'key': 'withdraws:pay', 'label': '提现打款'},
@@ -100,7 +99,7 @@ DEFAULT_TEAM_ADMIN_PERMISSIONS = {
     'shipments:view',
     'shipments:manage',
     'region:view',
-    'region:reward-config',
+    'region:manage',
     'commission:view',
     'withdraws:view',
     'withdraws:review',
@@ -289,12 +288,8 @@ class AdminPermissionService:
             return 'shipments:manage' if method in {'POST', 'PUT', 'PATCH', 'DELETE'} else 'shipments:view'
         if clean_path.startswith('/commerce/favorites') or clean_path.startswith('/commerce/footprints'):
             return 'users:manage-commerce' if method == 'DELETE' else 'users:view'
-        if clean_path.startswith('/region-agents/audit'):
-            return 'region:audit'
-        if clean_path.endswith('/reward-config'):
-            return 'region:reward-config'
         if clean_path.startswith('/region-agents') or clean_path.startswith('/region'):
-            return 'region:view'
+            return 'region:manage' if method in {'POST', 'PUT', 'PATCH', 'DELETE'} else 'region:view'
         if clean_path.startswith('/local-life'):
             if method == 'POST':
                 return 'local-life:create'

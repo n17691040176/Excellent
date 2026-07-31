@@ -26,7 +26,7 @@ export const PERMISSION_MATRIX = {
     'shipments:view',
     'shipments:manage',
     'region:view',
-    'region:reward-config',
+    'region:manage',
     'invites:view',
     'suppliers:view',
     'assets:view',

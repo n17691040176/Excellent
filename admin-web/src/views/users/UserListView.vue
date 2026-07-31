@@ -640,14 +640,18 @@ const legacyFields = computed(() => {
 
 const assetRows = computed(() => {
   const summary = userDetail.value?.asset_summary || {}
-  return Object.entries(summary).map(([assetType, item]) => ({
-    assetType,
+  const labels = { BALANCE: '余额', COMMISSION: '佣金', POINTS: '积分' }
+  return ['BALANCE', 'COMMISSION', 'POINTS'].map((assetType) => {
+    const item = summary[assetType] || {}
+    return {
+    assetType: labels[assetType],
     availableAmount: formatAmount(item.available_amount),
     totalAmount: formatAmount(item.total_amount),
     frozenAmount: formatAmount(item.frozen_amount),
     consumedAmount: formatAmount(item.consumed_amount),
     withdrawnAmount: formatAmount(item.withdrawn_amount)
-  }))
+    }
+  })
 })
 
 const powerBankRows = computed(() => userDetail.value?.power_banks || [])

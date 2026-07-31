@@ -136,14 +136,14 @@ export const orderApi = {
 }
 
 export const commissionApi = {
-  config() {
-    return request.get('/api/v1/admin/commission/config')
-  },
   users(params) {
     return request.get('/api/v1/admin/commission/users', { params })
   },
-  flows() {
-    return request.get('/api/v1/admin/commission/flows')
+  flows(params) {
+    return request.get('/api/v1/admin/commission/flows', { params })
+  },
+  productRules(params) {
+    return request.get('/api/v1/admin/commission/product-rules', { params })
   },
   withdraws() {
     return request.get('/api/v1/admin/withdraws')
@@ -184,11 +184,14 @@ export const regionApi = {
   summary() {
     return request.get('/api/v1/admin/region-agents/summary')
   },
-  auditAgent(id, data) {
-    return request.post(`/api/v1/admin/region-agents/audit/${id}`, data)
+  createAgent(data) {
+    return request.post('/api/v1/admin/region-agents', data)
   },
-  updateRewardConfig(id, data) {
-    return request.patch(`/api/v1/admin/region-agents/${id}/reward-config`, data)
+  updateAgent(id, data) {
+    return request.put(`/api/v1/admin/region-agents/${id}`, data)
+  },
+  deleteAgent(id) {
+    return request.delete(`/api/v1/admin/region-agents/${id}`)
   },
   dividends(params) {
     return request.get('/api/v1/admin/region-agents/dividends', { params })

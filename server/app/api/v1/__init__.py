@@ -19,7 +19,6 @@ from app.api.v1 import (
     page_decorations,
     payments,
     products,
-    region_agents,
     suppliers,
     teams,
     users,
@@ -38,7 +37,6 @@ api_router.include_router(addresses.app_router, tags=['App Addresses'])
 api_router.include_router(orders.app_router, tags=['App Orders'])
 api_router.include_router(payments.app_router, tags=['App Payments'])
 api_router.include_router(commission.app_router, tags=['App Commission'])
-api_router.include_router(region_agents.router, tags=['App Region Agents'])
 api_router.include_router(local_life.app_router, tags=['App Local Life'])
 api_router.include_router(page_decorations.app_router, tags=['App Page Decorations'])
 api_router.include_router(users.admin_router, tags=['Admin Users'])

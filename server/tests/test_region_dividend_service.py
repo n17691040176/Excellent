@@ -20,7 +20,7 @@ def test_member_levels_are_the_only_four_supported_levels():
     assert [level.label for level in MemberLevel] == ['普通会员', '经销商', '区代理', '市代理']
 
 
-def test_region_agent_audit_activates_agreement_and_upgrades_member_level():
+def test_region_agent_admin_update_keeps_assignment_active_and_syncs_member_level():
     db = MagicMock()
     agent = SimpleNamespace(
         id=11,
@@ -29,11 +29,11 @@ def test_region_agent_audit_activates_agreement_and_upgrades_member_level():
         province='浙江省',
         city='杭州市',
         district='西湖区',
-        status='PENDING',
-        agreement_signed=False,
+        status='APPROVED',
+        agreement_signed=True,
         effective_at=None,
         expired_at=None,
-        dividend_rate=0,
+        dividend_rate=1,
         audited_by=None,
         audited_at=None,
         audit_remark=None,
@@ -48,19 +48,41 @@ def test_region_agent_audit_activates_agreement_and_upgrades_member_level():
         return None
 
     db.get.side_effect = get_model
-    db.query.return_value.filter.return_value.first.return_value = None
-    db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
+    area_query = MagicMock()
+    area_query.filter.return_value.first.return_value = None
+    area_query.filter.return_value.filter.return_value.first.return_value = None
+    duplicate_query = MagicMock()
+    duplicate_query.filter.return_value.first.return_value = None
+    active_query = MagicMock()
+    active_query.filter.return_value.all.return_value = [SimpleNamespace(agent_type='CITY_AGENT')]
+    db.query.side_effect = [area_query, duplicate_query, active_query]
 
-    result = RegionDividendService.audit_region_agent(
-        db, agent.id, admin_user_id=1, approved=True, dividend_rate=1.5
+    result = RegionDividendService.update_agent(
+        db,
+        agent.id,
+        admin_user_id=1,
+        agent_type='CITY_AGENT',
+        province='浙江省',
+        city='杭州市',
+        district='',
+        dividend_rate=0.75,
     )
 
     assert result is agent
     assert agent.status == 'APPROVED'
     assert agent.agreement_signed is True
-    assert agent.dividend_rate == 1.5
-    assert user.member_level == MemberLevel.COUNTY_AGENT
+    assert agent.agent_type == 'CITY_AGENT'
+    assert agent.district == ''
+    assert agent.dividend_rate == 0.75
+    assert user.member_level == MemberLevel.CITY_AGENT
     db.commit.assert_called_once()
+
+
+def test_public_region_agent_application_route_is_removed():
+    from app.api.v1 import api_router
+
+    paths = {route.path for route in api_router.routes}
+    assert '/api/v1/region-agents/apply' not in paths
 
 
 def test_allocate_region_reward_credits_balance_and_records_exact_percentage():

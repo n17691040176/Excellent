@@ -1,11 +1,11 @@
 from decimal import Decimal
 
 from sqlalchemy import String, and_, cast, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.asset import UserAssetLedger
-from app.models.commission import CommissionConfig, CommissionFlow, UserCommission, WithdrawRequest
+from app.models.commission import CommissionFlow, UserCommission, WithdrawRequest
 from app.models.enums import (
     AssetType,
     CommissionStatus,
@@ -21,6 +21,7 @@ from app.models.product import Product, ProductZoneConfig
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
+from app.services.catalog_service import ProductService
 from app.services.earning_rule_service import EarningRuleService
 from app.utils.helpers import now, quantize_amount
 
@@ -65,16 +66,6 @@ class CommissionService:
             'total_amount': float(item.total_amount),
             'updated_at': item.updated_at,
         }
-
-    @staticmethod
-    def get_config(db: Session) -> CommissionConfig:
-        config = db.query(CommissionConfig).order_by(CommissionConfig.id.desc()).first()
-        if not config:
-            config = CommissionConfig(level1_rate=0, level2_rate=0, is_active=False, updated_at=now())
-            db.add(config)
-            db.commit()
-            db.refresh(config)
-        return config
 
     @staticmethod
     def summary(db: Session, user_id: int) -> dict:
@@ -246,11 +237,145 @@ class CommissionService:
         }
 
     @staticmethod
-    def list_flows_for_admin(db: Session, current_user: User) -> list[CommissionFlow]:
-        query = db.query(CommissionFlow)
+    def list_product_rules_for_admin(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+        zone_type: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        safe_page = max(page, 1)
+        safe_page_size = max(1, min(page_size, 100))
+        query = ProductService._admin_product_query(db, current_user).join(
+            ProductZoneConfig,
+            ProductZoneConfig.product_id == Product.id,
+        ).filter(ProductZoneConfig.custom_commission_enabled.is_(True))
+        keyword_value = keyword.strip() if keyword else ''
+        if keyword_value:
+            like_value = f'%{keyword_value}%'
+            query = query.filter(or_(
+                cast(Product.id, String).ilike(like_value),
+                Product.product_name.ilike(like_value),
+            ))
+        if zone_type:
+            query = query.filter(Product.zone_type == zone_type)
+
+        total = int(query.order_by(None).with_entities(func.count(Product.id)).scalar() or 0)
+        rows = query.order_by(Product.id.desc()).offset(
+            (safe_page - 1) * safe_page_size
+        ).limit(safe_page_size).all()
+        config_by_product_id = {
+            config.product_id: config
+            for config in db.query(ProductZoneConfig).filter(
+                ProductZoneConfig.product_id.in_([product.id for product in rows])
+            ).all()
+        } if rows else {}
+        return {
+            'items': [
+                CommissionService.serialize_product_rule(product, config_by_product_id[product.id])
+                for product in rows
+            ],
+            'total': total,
+            'page': safe_page,
+            'page_size': safe_page_size,
+        }
+
+    @staticmethod
+    def serialize_product_rule(product: Product, config: ProductZoneConfig) -> dict:
+        return {
+            'product_id': product.id,
+            'product_name': product.product_name,
+            'zone_type': product.zone_type.value,
+            'method': config.custom_commission_method,
+            'level1_rate': float(config.custom_commission_level1_rate or 0),
+            'level2_rate': float(config.custom_commission_level2_rate or 0),
+            'level3_rate': float(config.custom_commission_level3_rate or 0),
+            'level1_amount': float(config.custom_commission_level1_amount or 0),
+            'level2_amount': float(config.custom_commission_level2_amount or 0),
+            'level3_amount': float(config.custom_commission_level3_amount or 0),
+            'updated_at': config.updated_at,
+        }
+
+    @staticmethod
+    def list_flows_page_for_admin(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+        status: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        safe_page = max(page, 1)
+        safe_page_size = max(1, min(page_size, 100))
+        beneficiary = aliased(User)
+        source = aliased(User)
+        query = db.query(CommissionFlow, beneficiary, source, Order).join(
+            beneficiary,
+            beneficiary.id == CommissionFlow.beneficiary_user_id,
+        ).join(
+            source,
+            source.id == CommissionFlow.source_user_id,
+        ).join(Order, Order.id == CommissionFlow.order_id)
         if not AdminScopeService.has_global_scope(current_user):
             query = query.filter(CommissionFlow.team_id == AdminScopeService.require_team_id(current_user))
-        return query.order_by(CommissionFlow.id.desc()).all()
+        keyword_value = keyword.strip() if keyword else ''
+        if keyword_value:
+            like_value = f'%{keyword_value}%'
+            query = query.filter(or_(
+                cast(CommissionFlow.id, String).ilike(like_value),
+                cast(CommissionFlow.beneficiary_user_id, String).ilike(like_value),
+                cast(CommissionFlow.source_user_id, String).ilike(like_value),
+                Order.order_no.ilike(like_value),
+                beneficiary.nickname.ilike(like_value),
+                beneficiary.phone.ilike(like_value),
+                source.nickname.ilike(like_value),
+                source.phone.ilike(like_value),
+            ))
+        if status:
+            query = query.filter(CommissionFlow.status == status)
+
+        total = int(query.order_by(None).with_entities(func.count(CommissionFlow.id)).scalar() or 0)
+        rows = query.order_by(CommissionFlow.id.desc()).offset(
+            (safe_page - 1) * safe_page_size
+        ).limit(safe_page_size).all()
+        return {
+            'items': [
+                CommissionService.serialize_admin_flow(flow, beneficiary_user, source_user, order)
+                for flow, beneficiary_user, source_user, order in rows
+            ],
+            'total': total,
+            'page': safe_page,
+            'page_size': safe_page_size,
+        }
+
+    @staticmethod
+    def serialize_admin_flow(
+        flow: CommissionFlow,
+        beneficiary: User,
+        source: User,
+        order: Order,
+    ) -> dict:
+        level_label = '直属团队奖励' if flow.level == TEAM_REWARD_FLOW_LEVEL else f'{flow.level}级分润'
+        return {
+            'id': flow.id,
+            'beneficiary_user_id': flow.beneficiary_user_id,
+            'beneficiary_nickname': beneficiary.nickname,
+            'beneficiary_phone': beneficiary.phone,
+            'source_user_id': flow.source_user_id,
+            'source_nickname': source.nickname,
+            'source_phone': source.phone,
+            'order_id': flow.order_id,
+            'order_no': order.order_no,
+            'level': flow.level,
+            'level_label': level_label,
+            'rate': float(flow.rate),
+            'base_amount': float(flow.base_amount),
+            'commission_amount': float(flow.commission_amount),
+            'status': flow.status.value,
+            'settled_at': flow.settled_at,
+            'created_at': flow.created_at,
+        }
 
     @staticmethod
     def list_withdraws_for_admin(db: Session, current_user: User) -> list[WithdrawRequest]:

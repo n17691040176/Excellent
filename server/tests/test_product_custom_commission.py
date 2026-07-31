@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import app.main  # noqa: F401 - initialize application modules in production order
 from app.core.exceptions import ConflictError
-from app.models.enums import OrderType, ZoneType
+from app.models.enums import CommissionStatus, OrderType, ZoneType
 from app.services.catalog_service import ProductService
 from app.services.commission_service import CommissionService
 
@@ -124,3 +124,42 @@ class ProductCustomCommissionTest(TestCase):
 
         with self.assertRaisesRegex(ConflictError, 'total rate cannot exceed 100'):
             ProductService._validate_zone_config_payload(product, payload)
+
+    def test_admin_product_rule_uses_current_three_level_product_config(self):
+        product = SimpleNamespace(id=100, product_name='测试商品', zone_type=ZoneType.SELF_OPERATED)
+        config = custom_config()
+        config.updated_at = None
+
+        data = CommissionService.serialize_product_rule(product, config)
+
+        self.assertEqual(data['product_name'], '测试商品')
+        self.assertEqual(data['method'], 'RATE')
+        self.assertEqual(data['level1_rate'], 12.5)
+        self.assertEqual(data['level2_rate'], 5.0)
+        self.assertEqual(data['level3_rate'], 0.0)
+
+    def test_admin_commission_flow_contains_users_order_and_level_label(self):
+        flow = SimpleNamespace(
+            id=1,
+            beneficiary_user_id=10,
+            source_user_id=20,
+            order_id=30,
+            level=2,
+            rate=Decimal('5.00'),
+            base_amount=Decimal('40.00'),
+            commission_amount=Decimal('2.00'),
+            status=CommissionStatus.SETTLED,
+            settled_at=None,
+            created_at=None,
+        )
+        beneficiary = SimpleNamespace(nickname='受益人', phone='13800000000')
+        source = SimpleNamespace(nickname='购买人', phone='13900000000')
+        order = SimpleNamespace(order_no='OD30')
+
+        data = CommissionService.serialize_admin_flow(flow, beneficiary, source, order)
+
+        self.assertEqual(data['order_no'], 'OD30')
+        self.assertEqual(data['beneficiary_nickname'], '受益人')
+        self.assertEqual(data['source_nickname'], '购买人')
+        self.assertEqual(data['level_label'], '2级分润')
+        self.assertEqual(data['status'], 'SETTLED')

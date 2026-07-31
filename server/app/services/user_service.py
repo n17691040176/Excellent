@@ -11,6 +11,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.models.address import UserAddress
 from app.models.asset import UserAssetAccount, UserAssetLedger, UserPowerBank
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
+from app.models.commission import UserCommission
 from app.models.enums import GlobalRole, MemberLevel, UserStatus
 from app.models.order import Order
 from app.models.user import InviteRecord, User, UserLegacyProfile
@@ -338,6 +339,7 @@ class UserService:
             ShoppingCartItem.updated_at.desc(),
             ShoppingCartItem.id.desc(),
         ).limit(20).all()
+        visible_asset_types = {'BALANCE', 'POINTS'}
         asset_summary = {
             account.asset_type.value: {
                 'total_amount': float(account.total_amount),
@@ -347,15 +349,15 @@ class UserService:
                 'withdrawn_amount': float(account.withdrawn_amount),
             }
             for account in asset_rows
+            if account.asset_type.value in visible_asset_types
         }
-        power_bank_available = float(AssetService.active_power_bank_count(db, user.id))
-        power_bank_total = float(asset_summary.get('POWER_BANK', {}).get('total_amount', 0))
-        asset_summary['POWER_BANK'] = {
-            'total_amount': max(power_bank_total, power_bank_available),
-            'available_amount': power_bank_available,
-            'frozen_amount': 0.0,
-            'consumed_amount': float(asset_summary.get('POWER_BANK', {}).get('consumed_amount', 0)),
-            'withdrawn_amount': 0.0,
+        commission = db.query(UserCommission).filter(UserCommission.user_id == user.id).first()
+        asset_summary['COMMISSION'] = {
+            'total_amount': float(commission.total_amount) if commission else 0.0,
+            'available_amount': float(commission.available_amount) if commission else 0.0,
+            'frozen_amount': float(commission.frozen_amount) if commission else 0.0,
+            'consumed_amount': 0.0,
+            'withdrawn_amount': float(commission.withdrawn_amount) if commission else 0.0,
         }
         asset_ledger_rows = db.query(UserAssetLedger).filter(
             UserAssetLedger.user_id == user.id,
