@@ -323,8 +323,10 @@ class PaymentService:
         params['sign'] = PaymentService._rsa_sign(private_key, PaymentService._alipay_sign_string(params))
 
         request_body = urlencode(params).encode(config.charset)
+        gateway_separator = '&' if '?' in config.gateway_url else '?'
+        gateway_url = f'{config.gateway_url}{gateway_separator}{urlencode({"charset": config.charset})}'
         request = urlrequest.Request(
-            config.gateway_url,
+            gateway_url,
             data=request_body,
             headers={'Content-Type': f'application/x-www-form-urlencoded;charset={config.charset}'},
             method='POST',

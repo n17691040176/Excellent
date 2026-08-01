@@ -145,6 +145,29 @@ class AlipayH5PaymentTest(TestCase):
 
         self.assertEqual(result, response)
 
+    def test_trade_query_sends_charset_in_gateway_url(self):
+        response = {
+            'code': '10000',
+            'msg': 'Success',
+            'out_trade_no': 'PAYAL0012ABCDEF',
+            'trade_no': '20260720000000000001',
+            'trade_status': 'TRADE_SUCCESS',
+            'total_amount': '9.90',
+        }
+        response_body = json.dumps(response, ensure_ascii=False, separators=(',', ':'))
+        signature = PaymentService._rsa_sign(self.alipay_private_key, response_body)
+        raw_body = f'{{"alipay_trade_query_response":{response_body},"sign":"{signature}"}}'
+        provider_response = MagicMock()
+        provider_response.read.return_value = raw_body.encode(self.config.charset)
+
+        with patch.object(payment_module.urlrequest, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value = provider_response
+            result = PaymentService._alipay_query_trade('PAYAL0012ABCDEF', self.config)
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, f'{self.config.gateway_url}?charset=utf-8')
+        self.assertEqual(result, response)
+
     def test_reconciles_successful_trade_query(self):
         tx = self.build_transaction()
         order = self.build_order()
