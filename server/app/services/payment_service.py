@@ -122,7 +122,7 @@ class PaymentService:
         raise ConflictError('Payment private key format is invalid') from last_error
 
     @staticmethod
-    def _load_certificate_public_key(path: str):
+    def _load_certificate_public_key(path: str, certificate_sn: str | None = None):
         certificate_path = Path(path)
         if not certificate_path.is_file():
             raise ConflictError(f'Payment certificate not found: {path}')
@@ -132,6 +132,16 @@ class PaymentService:
             raise ConflictError('Payment certificate format is invalid') from exc
         if not certificates:
             raise ConflictError('Payment certificate is empty')
+        normalized_sn = str(certificate_sn or '').strip().lower()
+        if normalized_sn:
+            for certificate in certificates:
+                if alipay_certificate_sn(certificate).lower() == normalized_sn:
+                    return certificate.public_key()
+            available_sns = ','.join(alipay_certificate_sn(certificate) for certificate in certificates)
+            raise ConflictError(
+                'Alipay response certificate does not match ALIPAY_PUBLIC_CERT_PATH '
+                f'(response={normalized_sn}, configured={available_sns})'
+            )
         return certificates[0].public_key()
 
     @staticmethod
@@ -290,7 +300,11 @@ class PaymentService:
 
         if not config.alipay_public_cert_path:
             raise ConflictError('Alipay public certificate path is not configured')
-        public_key = PaymentService._load_certificate_public_key(config.alipay_public_cert_path)
+        certificate_sn = str(payload.get('alipay_cert_sn') or '').strip()
+        public_key = PaymentService._load_certificate_public_key(
+            config.alipay_public_cert_path,
+            certificate_sn,
+        )
         try:
             public_key.verify(
                 base64.b64decode(signature, validate=True),
@@ -696,7 +710,10 @@ class PaymentService:
             raise ConflictError('Alipay payload is missing sign')
         if str(payload.get('sign_type') or '').upper() != 'RSA2':
             raise ForbiddenError('Alipay sign_type is invalid')
-        public_key = PaymentService._load_certificate_public_key(config.alipay_public_cert_path)
+        public_key = PaymentService._load_certificate_public_key(
+            config.alipay_public_cert_path,
+            str(payload.get('alipay_cert_sn') or '').strip(),
+        )
         unsigned_payload = {
             key: value
             for key, value in payload.items()

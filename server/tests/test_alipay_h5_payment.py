@@ -145,6 +145,59 @@ class AlipayH5PaymentTest(TestCase):
 
         self.assertEqual(result, response)
 
+    def test_verifies_trade_query_with_certificate_selected_by_response_sn(self):
+        rotated_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        rotated_certificate = self.build_certificate(rotated_private_key, 'Rotated Alipay Platform', 456789012)
+        self.alipay_cert_path.write_bytes(
+            self.alipay_certificate.public_bytes(serialization.Encoding.PEM)
+            + rotated_certificate.public_bytes(serialization.Encoding.PEM)
+        )
+        response = {
+            'code': '10000',
+            'msg': 'Success',
+            'out_trade_no': 'PAYAL0012ABCDEF',
+            'trade_no': '20260720000000000001',
+            'trade_status': 'TRADE_SUCCESS',
+            'total_amount': '9.90',
+        }
+        response_body = json.dumps(response, ensure_ascii=False, separators=(',', ':'))
+        signature = PaymentService._rsa_sign(rotated_private_key, response_body)
+        certificate_sn = md5(
+            f'{rotated_certificate.issuer.rfc4514_string()}{rotated_certificate.serial_number}'.encode(),
+            usedforsecurity=False,
+        ).hexdigest()
+        raw_body = (
+            f'{{"alipay_trade_query_response":{response_body},'
+            f'"alipay_cert_sn":"{certificate_sn}","sign":"{signature}"}}'
+        )
+
+        result = PaymentService._alipay_verify_api_response(
+            raw_body,
+            'alipay_trade_query_response',
+            self.config,
+        )
+
+        self.assertEqual(result, response)
+
+    def test_rejects_trade_query_with_unconfigured_response_certificate(self):
+        response = {'code': '10000', 'msg': 'Success'}
+        response_body = json.dumps(response, separators=(',', ':'))
+        signature = PaymentService._rsa_sign(self.alipay_private_key, response_body)
+        raw_body = (
+            f'{{"alipay_trade_query_response":{response_body},'
+            f'"alipay_cert_sn":"stale-certificate-sn","sign":"{signature}"}}'
+        )
+
+        with self.assertRaisesRegex(
+            ConflictError,
+            'response=stale-certificate-sn, configured=',
+        ):
+            PaymentService._alipay_verify_api_response(
+                raw_body,
+                'alipay_trade_query_response',
+                self.config,
+            )
+
     def test_trade_query_sends_charset_in_gateway_url(self):
         response = {
             'code': '10000',
