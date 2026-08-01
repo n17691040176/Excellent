@@ -2,8 +2,8 @@
   <div class="region-view">
     <div class="page-heading">
       <div>
-        <h2>区域订单奖励</h2>
-        <p>区域代理仅由后台配置；订单完成后按收货区域和配置比例自动发放余额奖励。</p>
+        <h2>区域订单分润</h2>
+        <p>区域代理仅由后台配置；订单完成后按收货区域和商品专属分润规则自动发放余额。</p>
       </div>
       <div class="header-actions">
         <el-button v-permission="'region:manage'" type="primary" @click="openCreateDialog">新增区域代理</el-button>
@@ -23,7 +23,7 @@
       <div class="section-title">
         <div>
           <h3>区域代理配置</h3>
-          <p>直接指定会员为区代理或市代理，并维护负责区域、有效期和订单奖励比例。</p>
+          <p>从已调整为区代理或市代理等级的会员中选择，并维护负责区域和有效期。</p>
         </div>
       </div>
 
@@ -63,9 +63,6 @@
         <el-table-column label="代理类型" width="110">
           <template #default="{ row }">{{ agentTypeLabel(row.agent_type) }}</template>
         </el-table-column>
-        <el-table-column label="奖励比例" width="110">
-          <template #default="{ row }"><span class="rate-text">{{ Number(row.dividend_rate || 0).toFixed(2) }}%</span></template>
-        </el-table-column>
         <el-table-column label="有效期" min-width="190">
           <template #default="{ row }">
             <div>{{ formatDate(row.effective_at) }}</div>
@@ -99,8 +96,8 @@
     <div class="panel-card data-card block-gap">
       <div class="section-title">
         <div>
-          <h3>区域奖励发放记录</h3>
-          <p>记录当前订单完成链路实际计算并发放的区代理、市代理奖励；订单退款后记录会变为已收回。</p>
+          <h3>区域分润发放记录</h3>
+          <p>记录订单按商品专属分润规则实际发放的区代理、市代理金额；订单退款后记录会变为已收回。</p>
         </div>
       </div>
 
@@ -140,9 +137,6 @@
         </el-table-column>
         <el-table-column label="订单实付" width="120">
           <template #default="{ row }">¥{{ formatMoney(row.order_amount) }}</template>
-        </el-table-column>
-        <el-table-column label="奖励比例" width="100">
-          <template #default="{ row }">{{ Number(row.dividend_rate || 0).toFixed(2) }}%</template>
         </el-table-column>
         <el-table-column label="奖励金额" width="120">
           <template #default="{ row }"><div class="amount-primary">¥{{ formatMoney(row.dividend_amount) }}</div></template>
@@ -186,25 +180,30 @@
             <el-option
               v-for="item in userOptions"
               :key="item.id"
-              :label="`${item.nickname || '未命名用户'} / ${item.phone || `ID ${item.id}`}`"
+              :label="`${item.nickname || '未命名用户'} / ${item.phone || `ID ${item.id}`} / ${memberLevelLabel(item.member_level)}`"
               :value="item.id"
             />
           </el-select>
         </el-form-item>
         <el-form-item label="代理类型" required>
-          <el-radio-group v-model="agentForm.agentType" @change="handleAgentTypeChange">
+          <el-radio-group
+            v-model="agentForm.agentType"
+            :disabled="Boolean(editingAgentId)"
+            @change="handleAgentTypeChange"
+          >
             <el-radio value="COUNTY_AGENT">区代理</el-radio>
             <el-radio value="CITY_AGENT">市代理</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="省份" required><el-input v-model="agentForm.province" placeholder="例如：浙江省" /></el-form-item>
-        <el-form-item label="城市" required><el-input v-model="agentForm.city" placeholder="例如：杭州市" /></el-form-item>
-        <el-form-item v-if="agentForm.agentType === 'COUNTY_AGENT'" label="区县" required>
-          <el-input v-model="agentForm.district" placeholder="例如：西湖区" />
-        </el-form-item>
-        <el-form-item label="奖励比例" required>
-          <el-input-number v-model="agentForm.dividendRate" :min="0" :max="100" :precision="2" :step="0.1" />
-          <span class="unit">%</span>
+        <el-form-item label="代理区域" required>
+          <el-cascader
+            v-model="agentForm.region"
+            :options="agentRegionOptions"
+            filterable
+            clearable
+            :placeholder="agentForm.agentType === 'COUNTY_AGENT' ? '请选择省 / 市 / 区县' : '请选择省 / 市'"
+            style="width: 100%"
+          />
         </el-form-item>
         <el-form-item label="生效时间">
           <el-date-picker v-model="agentForm.effectiveAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="默认立即生效" style="width: 100%" />
@@ -228,6 +227,7 @@ import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { regionApi, userApi } from '@/api/modules'
+import { findRegionPath, regionOptions } from '@/utils/region-options'
 
 const loadingAgents = ref(false)
 const loadingDividends = ref(false)
@@ -249,6 +249,15 @@ const editingAgentId = ref(null)
 const userOptions = ref([])
 const agentForm = ref(createEmptyForm())
 
+const agentRegionOptions = computed(() => {
+  if (agentForm.value.agentType === 'COUNTY_AGENT') return regionOptions
+  return regionOptions.map((province) => ({
+    value: province.value,
+    label: province.label,
+    children: province.children.map((city) => ({ value: city.value, label: city.label }))
+  }))
+})
+
 const metrics = computed(() => [
   { label: '区域代理', value: summary.value.total_agents || 0, subtext: '当前生效配置' },
   { label: '区代理', value: summary.value.county_agents || 0, subtext: '按省市区匹配订单' },
@@ -260,10 +269,7 @@ function createEmptyForm() {
   return {
     userId: null,
     agentType: 'COUNTY_AGENT',
-    province: '',
-    city: '',
-    district: '',
-    dividendRate: 1,
+    region: [],
     effectiveAt: null,
     expiredAt: null,
     remark: ''
@@ -283,6 +289,10 @@ function formatMoney(value) {
 }
 
 function agentTypeLabel(value) {
+  return { COUNTY_AGENT: '区代理', CITY_AGENT: '市代理' }[value] || value || '--'
+}
+
+function memberLevelLabel(value) {
   return { COUNTY_AGENT: '区代理', CITY_AGENT: '市代理' }[value] || value || '--'
 }
 
@@ -332,10 +342,16 @@ function resetAgentFilters() {
 }
 
 async function searchUsers(keyword = '') {
+  const requestedLevel = agentForm.value.agentType
   loadingUsers.value = true
   try {
-    const data = await userApi.list({ keyword: keyword || undefined, page: 1, page_size: 20 })
-    userOptions.value = data.items || []
+    const data = await userApi.list({
+      keyword: keyword || undefined,
+      member_level: requestedLevel,
+      page: 1,
+      page_size: 20
+    })
+    if (requestedLevel === agentForm.value.agentType) userOptions.value = data.items || []
   } finally {
     loadingUsers.value = false
   }
@@ -351,14 +367,16 @@ function openCreateDialog() {
 
 function openEditDialog(row) {
   editingAgentId.value = row.id
-  userOptions.value = [{ id: row.user_id, nickname: row.user_nickname, phone: row.user_phone }]
+  userOptions.value = [{
+    id: row.user_id,
+    nickname: row.user_nickname,
+    phone: row.user_phone,
+    member_level: row.member_level
+  }]
   agentForm.value = {
     userId: row.user_id,
     agentType: row.agent_type,
-    province: row.province || '',
-    city: row.city || '',
-    district: row.district || '',
-    dividendRate: Number(row.dividend_rate || 0),
+    region: findRegionPath(row.province, row.city, row.district),
     effectiveAt: row.effective_at ? dayjs(row.effective_at).format('YYYY-MM-DDTHH:mm:ss') : null,
     expiredAt: row.expired_at ? dayjs(row.expired_at).format('YYYY-MM-DDTHH:mm:ss') : null,
     remark: row.audit_remark || ''
@@ -366,23 +384,26 @@ function openEditDialog(row) {
   agentDialogVisible.value = true
 }
 
-function handleAgentTypeChange(value) {
-  agentForm.value.dividendRate = value === 'CITY_AGENT' ? 0.5 : 1
-  if (value === 'CITY_AGENT') agentForm.value.district = ''
+function handleAgentTypeChange() {
+  agentForm.value.userId = null
+  agentForm.value.region = []
+  userOptions.value = []
+  searchUsers()
 }
 
 async function saveAgent() {
   const form = agentForm.value
-  if (!form.userId || !form.province.trim() || !form.city.trim() || (form.agentType === 'COUNTY_AGENT' && !form.district.trim())) {
+  const expectedRegionDepth = form.agentType === 'COUNTY_AGENT' ? 3 : 2
+  if (!form.userId || !Array.isArray(form.region) || form.region.length !== expectedRegionDepth) {
     ElMessage.warning('请完整填写代理会员和代理区域')
     return
   }
+  const [province, city, district] = form.region
   const payload = {
     agent_type: form.agentType,
-    province: form.province.trim(),
-    city: form.city.trim(),
-    district: form.agentType === 'COUNTY_AGENT' ? form.district.trim() : '',
-    dividend_rate: form.dividendRate,
+    province,
+    city,
+    district: form.agentType === 'COUNTY_AGENT' ? district : '',
     effective_at: form.effectiveAt || null,
     expired_at: form.expiredAt || null,
     remark: form.remark || null
@@ -446,16 +467,6 @@ onMounted(loadData)
   font-size: 15px;
   font-weight: 700;
   color: var(--primary-deep);
-}
-
-.rate-text {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.unit {
-  margin-left: 8px;
-  color: var(--text-secondary);
 }
 
 .table-pagination {

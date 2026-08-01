@@ -7,6 +7,7 @@ from app.models.enums import MemberLevel
 from app.models.region_agent import RegionAgent
 from app.models.region_dividend import RegionDividendFlow
 from app.models.user import User
+from app.schemas.region_agent import RegionAgentCreateRequest, RegionAgentUpdateRequest
 from app.services.region_dividend_service import RegionDividendService
 
 
@@ -80,6 +81,20 @@ def test_public_region_agent_application_route_is_removed():
 
     paths = {route.path for route in api_router.routes}
     assert '/api/v1/region-agents/apply' not in paths
+
+
+def test_region_agent_requests_do_not_include_legacy_dividend_rate():
+    assert 'dividend_rate' not in RegionAgentCreateRequest.model_fields
+    assert 'dividend_rate' not in RegionAgentUpdateRequest.model_fields
+    payload = RegionAgentCreateRequest(
+        user_id=21,
+        agent_type='COUNTY_AGENT',
+        province='陕西省',
+        city='西安市',
+        district='莲湖区',
+        dividend_rate=1,
+    )
+    assert 'dividend_rate' not in payload.model_dump()
 
 
 def test_allocate_product_region_reward_credits_balance_and_records_exact_amount():
