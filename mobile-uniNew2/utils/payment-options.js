@@ -25,6 +25,14 @@ export function paymentOptionKey(item) {
   return `${item.value}|CASH_ONLY`;
 }
 
+export function defaultPaymentOption(options = []) {
+  const available = options.filter((item) => item.available !== false);
+  return available.find((item) => item.value === 'BALANCE')
+    || available.find((item) => item.value === 'ALIPAY')
+    || available[0]
+    || null;
+}
+
 function cashOnlyOption(options, channel) {
   const rows = Array.isArray(options) ? options : [];
   return rows.find((item) => (

@@ -610,6 +610,9 @@ onShow(() => {
 
 .submit-btn,
 .retry-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 76rpx;
   margin: 0;
   padding: 0 34rpx;
@@ -619,6 +622,7 @@ onShow(() => {
   font-size: 27rpx;
   font-weight: 700;
   line-height: 1;
+  box-sizing: border-box;
 }
 
 .submit-btn { min-width: 224rpx; }

@@ -23,9 +23,14 @@
         </view>
       </picker>
       <view class="form-row detail-row"><text>详细地址</text><textarea v-model="form.detail_address" placeholder="街道、小区、门牌号" /></view>
-      <view class="default-row" @click="form.is_default = !form.is_default">
+      <view class="default-row" @click="toggleDefault">
         <text>设为默认地址</text>
-        <switch :checked="form.is_default" color="#10B981" @change="form.is_default = $event.detail.value" />
+        <switch
+          :checked="form.is_default"
+          color="#10B981"
+          @click.stop
+          @change="onDefaultChange"
+        />
       </view>
     </view>
     <button class="save-btn" :disabled="saving" @click="save">{{ saving ? '保存中...' : '保存地址' }}</button>
@@ -78,6 +83,14 @@ const regionRange = computed(() => [
 
 function goBack() {
   uni.navigateBack();
+}
+
+function toggleDefault() {
+  form.is_default = !form.is_default;
+}
+
+function onDefaultChange(event) {
+  form.is_default = event.detail.value;
 }
 
 function onRegionColumnChange(event) {
@@ -186,5 +199,21 @@ onLoad(async (query) => {
 .detail-row { align-items: flex-start; padding: 24rpx 0; }
 .detail-row textarea { min-height: 120rpx; text-align: left; }
 .default-row { justify-content: space-between; border-bottom: 0; }
-.save-btn { margin: 36rpx 24rpx; color: white; background: var(--primary); border-radius: 999rpx; }
+.save-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  margin: 36rpx 24rpx calc(36rpx + env(safe-area-inset-bottom));
+  color: white;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-primary);
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.save-btn:active { transform: scale(0.98); opacity: 0.9; }
+.save-btn[disabled] { opacity: 0.55; }
 </style>

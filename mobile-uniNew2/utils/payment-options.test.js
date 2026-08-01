@@ -1,7 +1,36 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { commonPaymentOptions, normalizePaymentOptions } from './payment-options.js';
+import {
+  commonPaymentOptions,
+  defaultPaymentOption,
+  normalizePaymentOptions
+} from './payment-options.js';
+
+test('defaults to balance when sufficient and alipay when balance is unavailable', () => {
+  const options = normalizePaymentOptions([
+    { value: 'BALANCE', purchase_mode: 'CASH_ONLY' },
+    { value: 'ALIPAY', purchase_mode: 'CASH_ONLY' }
+  ]);
+
+  assert.equal(defaultPaymentOption(options).value, 'BALANCE');
+
+  const insufficientBalance = options.map((item) => ({
+    ...item,
+    available: item.value === 'BALANCE' ? false : item.available
+  }));
+  assert.equal(defaultPaymentOption(insufficientBalance).value, 'ALIPAY');
+});
+
+test('falls back to another available channel when balance and alipay are unavailable', () => {
+  const options = [
+    { value: 'BALANCE', available: false },
+    { value: 'ALIPAY', available: false },
+    { value: 'OTHER', available: true }
+  ];
+
+  assert.equal(defaultPaymentOption(options).value, 'OTHER');
+});
 
 test('normalizes checkout methods to balance, wechat, and alipay', () => {
   const options = normalizePaymentOptions([

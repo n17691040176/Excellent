@@ -269,7 +269,7 @@ import { computed, ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { assetApi, commerceApi, packageApi } from '@/api/modules';
 import { getApiBaseUrl } from '@/config/index';
-import { normalizePaymentOptions } from '@/utils/payment-options';
+import { defaultPaymentOption, normalizePaymentOptions } from '@/utils/payment-options';
 import { trackEvent, trackPageView } from '@/utils/track';
 
 const LEGACY_FILE_BASE_URL = 'https://file.hoh516.com/huohonghuo';
@@ -283,6 +283,7 @@ const payChannel = ref('BALANCE');
 const purchaseMode = ref('CASH_ONLY');
 const selectedPayKey = ref('');
 const assetSummary = ref({});
+const paymentOptionsReady = ref(false);
 const currentGalleryIndex = ref(0);
 
 const detail = ref({
@@ -400,25 +401,15 @@ const loadProductStatus = async () => {
 };
 
 watch(
-  () => detail.value.defaultPayChannel,
-  (value) => {
-    if (!value || selectedPayKey.value) return;
-    const option = paymentOptions.value.find((item) => item.value === value && item.available !== false)
-      || paymentOptions.value.find((item) => item.available !== false)
-      || paymentOptions.value[0];
-    if (option) selectPaymentOption(option);
-  },
-  { immediate: true }
-);
-
-watch(
-  paymentOptions,
-  (options) => {
-    if (!options.length) return;
-    const available = options.find((item) => item.available !== false);
-    const target = available || options[0];
-    if (target && !options.some((item) => item.key === selectedPayKey.value)) {
-      selectPaymentOption(target);
+  [paymentOptions, paymentOptionsReady],
+  ([options, ready]) => {
+    if (!ready || !options.length) return;
+    const selected = options.find((item) => item.key === selectedPayKey.value);
+    if (!selected || selected.available === false) {
+      const target = defaultPaymentOption(options);
+      if (target) {
+        selectPaymentOption(target);
+      }
     }
   },
   { immediate: true }
@@ -428,10 +419,13 @@ const loadDetail = async () => {
   if (!id.value) return;
   loading.value = true;
   failed.value = false;
+  paymentOptionsReady.value = false;
+  selectedPayKey.value = '';
   try {
     const [res, assets] = await Promise.all([packageApi.detail(id.value), assetApi.summary()]);
     detail.value = normalize(res || {});
     assetSummary.value = assets || {};
+    paymentOptionsReady.value = true;
     await Promise.allSettled([
       loadProductStatus(),
       commerceApi.recordFootprint(id.value)
