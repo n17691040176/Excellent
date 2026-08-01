@@ -20,7 +20,7 @@
     <div class="panel-card data-card">
       <div class="section-title-lite">
         <h3>商品分润规则</h3>
-        <p>同步商品管理中已启用的专属分润配置；订单佣金按这里的三级比例或固定金额计算。</p>
+        <p>同步商品管理中已启用的专属分润配置；普通会员、经销商按推荐关系结算，区代理、市代理按订单区域结算。</p>
       </div>
       <div class="toolbar-row">
         <el-input
@@ -45,8 +45,17 @@
         <el-table-column label="分润方式" width="120">
           <template #default="{ row }">{{ row.method === 'FIXED_AMOUNT' ? '固定金额' : '利润比例' }}</template>
         </el-table-column>
-        <el-table-column v-for="level in 3" :key="level" :label="`${level}级分润`" min-width="120">
-          <template #default="{ row }">{{ ruleValue(row, level) }}</template>
+        <el-table-column
+          v-for="level in commissionMemberLevels"
+          :key="level.key"
+          :label="level.label"
+          min-width="130"
+        >
+          <template #default="{ row }">
+            <span :class="{ 'rule-value-disabled': !row[`${level.key}_enabled`] }">
+              {{ ruleValue(row, level.key) }}
+            </span>
+          </template>
         </el-table-column>
         <el-table-column label="更新时间" min-width="170">
           <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
@@ -204,6 +213,13 @@ const zoneOptions = [
   { label: '本地生活', value: 'LOCAL_LIFE' }
 ]
 
+const commissionMemberLevels = [
+  { label: '普通会员', key: 'level1' },
+  { label: '经销商', key: 'level2' },
+  { label: '区代理', key: 'county_agent' },
+  { label: '市代理', key: 'city_agent' }
+]
+
 const scopeHint = computed(() => userStore.role === 'TEAM_ADMIN'
   ? '查看所属团队的佣金账户、真实订单佣金流水及可见商品分润规则。'
   : '查看平台商品分润规则、用户佣金账户和真实订单佣金流水。'
@@ -233,8 +249,9 @@ function zoneLabel(value) {
 }
 
 function ruleValue(row, level) {
+  if (!row[`${level}_enabled`]) return '未启用'
   const suffix = row.method === 'FIXED_AMOUNT' ? 'amount' : 'rate'
-  const value = Number(row[`level${level}_${suffix}`] || 0).toFixed(2)
+  const value = Number(row[`${level}_${suffix}`] || 0).toFixed(2)
   return row.method === 'FIXED_AMOUNT' ? `¥${value} / 件` : `${value}%`
 }
 
@@ -345,5 +362,9 @@ onMounted(loadData)
   margin-top: 4px;
   color: var(--text-muted);
   font-size: var(--text-xs);
+}
+
+.rule-value-disabled {
+  color: var(--text-muted);
 }
 </style>

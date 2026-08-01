@@ -148,6 +148,7 @@ async function loadData() {
   try {
     const res = await commerceApi.shipments();
     items.value = pickListPayload(res);
+    await commerceApi.markViewed('shipping');
   } catch (error) {
     failed.value = true;
   } finally {

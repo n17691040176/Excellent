@@ -274,7 +274,7 @@ const goLogin = () => {
 
 const loadProfile = async () => {
   try {
-    const [profileRes, teamRes, assetRes, commissionRes, inviteRes, favoritesRes, cartRes, footprintsRes, shipmentsRes, statusCountsRes] = await Promise.allSettled([
+    const [profileRes, teamRes, assetRes, commissionRes, inviteRes, favoritesRes, cartRes, commerceUnreadRes, orderUnreadRes] = await Promise.allSettled([
       userApi.profile(),
       userApi.teamSummary(),
       assetApi.summary(),
@@ -282,9 +282,8 @@ const loadProfile = async () => {
       userApi.inviteCode(),
       commerceApi.favorites({ page: 1, page_size: 100 }),
       commerceApi.cart(),
-      commerceApi.footprints({ page: 1, page_size: 100 }),
-      commerceApi.shipments(),
-      orderApi.statusCounts()
+      commerceApi.unreadCounts(),
+      orderApi.unreadCounts()
     ]);
 
     if (profileRes.status === 'fulfilled') {
@@ -306,17 +305,14 @@ const loadProfile = async () => {
       const total = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
       cartCount.value = total > 0 ? String(total) : '';
     }
-    if (footprintsRes.status === 'fulfilled') {
-      const total = pickListPayload(footprintsRes.value).length;
-      footprintsCount.value = total > 0 ? String(total) : '';
-    }
-    if (shipmentsRes.status === 'fulfilled') {
-      const shipments = pickListPayload(shipmentsRes.value);
-      shippingCount.value = shipments.length > 0 ? String(shipments.length) : '';
+    if (commerceUnreadRes.status === 'fulfilled') {
+      const counts = commerceUnreadRes.value || {};
+      shippingCount.value = formatOrderBadge(counts.shipping);
+      footprintsCount.value = formatOrderBadge(counts.footprints);
     }
 
-    if (statusCountsRes.status === 'fulfilled') {
-      const counts = statusCountsRes.value || {};
+    if (orderUnreadRes.status === 'fulfilled') {
+      const counts = orderUnreadRes.value || {};
       pendingCount.value = formatOrderBadge(counts.pending_payment);
       pendingShipCount.value = formatOrderBadge(counts.pending_ship);
       shippedCount.value = formatOrderBadge(counts.shipped);

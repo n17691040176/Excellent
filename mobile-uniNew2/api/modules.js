@@ -183,6 +183,12 @@ export const commerceApi = {
   footprints(params = {}) {
     return request.get('/api/v1/app/commerce/footprints', { params, hideLoading: true });
   },
+  unreadCounts() {
+    return request.get('/api/v1/app/commerce/unread-counts', { hideLoading: true });
+  },
+  markViewed(view = 'all') {
+    return request.post('/api/v1/app/commerce/viewed', { view }, { hideLoading: true });
+  },
   removeFootprint(productId) {
     return request.delete(`/api/v1/app/commerce/footprints/${productId}`);
   },

@@ -421,13 +421,22 @@ class CommissionService:
         custom_configs: dict[int, ProductZoneConfig],
     ) -> None:
         ancestors = CommissionService._ancestor_users(db, buyer, max_level=3)
+        matched_custom_roles: dict[int, set[str]] = {}
         for level, beneficiary in ancestors:
             if not CommissionService._distribution_enabled(db, beneficiary):
                 continue
             for product_id, base_amount, quantity in profit_items:
                 custom_config = custom_configs.get(product_id)
                 if custom_config:
-                    rate, fixed_amount = CommissionService._custom_commission_value(custom_config, level, quantity)
+                    role = CommissionService._custom_commission_member_role(beneficiary.member_level)
+                    if not role or role in matched_custom_roles.setdefault(product_id, set()):
+                        continue
+                    matched_custom_roles[product_id].add(role)
+                    rate, fixed_amount = CommissionService._custom_commission_value(
+                        custom_config,
+                        beneficiary.member_level,
+                        quantity,
+                    )
                 else:
                     rate = EarningRuleService.rate_for_commission_level(
                         db,
@@ -463,7 +472,11 @@ class CommissionService:
         for product_id, base_amount, quantity in profit_items:
             custom_config = custom_configs.get(product_id)
             if custom_config:
-                rate, fixed_amount = CommissionService._custom_commission_value(custom_config, 1, quantity)
+                rate, fixed_amount = CommissionService._custom_commission_value(
+                    custom_config,
+                    beneficiary.member_level,
+                    quantity,
+                )
             else:
                 rate = EarningRuleService.rate_for_commission_level(
                     db,
@@ -584,18 +597,27 @@ class CommissionService:
     @staticmethod
     def _custom_commission_value(
         config: ProductZoneConfig,
-        level: int,
+        member_level: MemberLevel | str,
         quantity: Decimal,
     ) -> tuple[Decimal, Decimal | None]:
-        if level < 1 or level > 2:
+        role = CommissionService._custom_commission_member_role(member_level)
+        if not role:
             return Decimal('0'), None
-        if not bool(getattr(config, f'custom_commission_level{level}_enabled', False)):
+        if not bool(getattr(config, f'custom_commission_{role}_enabled', False)):
             return Decimal('0'), None
         if str(config.custom_commission_method or 'RATE').upper() == 'FIXED_AMOUNT':
-            unit_amount = Decimal(str(getattr(config, f'custom_commission_level{level}_amount', 0) or 0))
+            unit_amount = Decimal(str(getattr(config, f'custom_commission_{role}_amount', 0) or 0))
             return Decimal('0'), quantize_amount(unit_amount * quantity)
-        percentage = Decimal(str(getattr(config, f'custom_commission_level{level}_rate', 0) or 0))
+        percentage = Decimal(str(getattr(config, f'custom_commission_{role}_rate', 0) or 0))
         return percentage / Decimal('100'), None
+
+    @staticmethod
+    def _custom_commission_member_role(member_level: MemberLevel | str) -> str | None:
+        normalized = str(member_level or '').strip().upper()
+        return {
+            MemberLevel.NORMAL_MEMBER.value: 'level1',
+            MemberLevel.DEALER.value: 'level2',
+        }.get(normalized)
 
     @staticmethod
     def _ancestor_users(db: Session, buyer: User, max_level: int) -> list[tuple[int, User]]:

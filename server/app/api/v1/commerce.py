@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user
@@ -15,6 +16,10 @@ from app.schemas.commerce import CartCheckoutRequest, CartItemCreateRequest, Car
 from app.services.commerce_service import CommerceService
 
 app_router = APIRouter(prefix='/app/commerce')
+
+
+class MarkCommerceViewedRequest(BaseModel):
+    view: str = 'all'
 
 
 @app_router.get('/products/{product_id}/status')
@@ -72,6 +77,21 @@ def list_footprints(
 def remove_footprint(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     CommerceService.remove_footprint(db, current_user.id, product_id)
     return {'code': 0, 'message': 'success', 'data': {'success': True}}
+
+
+@app_router.get('/unread-counts')
+def unread_counts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return {'code': 0, 'message': 'success', 'data': CommerceService.unread_counts(db, current_user)}
+
+
+@app_router.post('/viewed')
+def mark_viewed(
+    payload: MarkCommerceViewedRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    counts = CommerceService.mark_viewed(db, current_user, payload.view)
+    return {'code': 0, 'message': 'success', 'data': {'unread_counts': counts}}
 
 
 @app_router.get('/cart')

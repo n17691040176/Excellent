@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
 from app.models.enums import AssetType, OrderType, PayStatus, ZoneType
-from app.models.order import Order, OrderItem
+from app.models.order import Order, OrderItem, OrderStatusView
 from app.models.product import Product
 from app.models.user import User
 from app.services.catalog_service import ProductService
@@ -19,6 +19,12 @@ ZONE_ORDER_TYPE_MAP = {
     ZoneType.SELF_OPERATED: OrderType.SELF_OPERATED_ORDER,
     ZoneType.HOT_SALE: OrderType.HOT_SALE_ORDER,
     ZoneType.LOCAL_LIFE: OrderType.LOCAL_LIFE_ORDER,
+}
+
+COMMERCE_VIEW_KEYS = ('shipping', 'footprints')
+COMMERCE_VIEW_MARKER_KEYS = {
+    'shipping': 'commerce_shipping',
+    'footprints': 'commerce_footprints',
 }
 
 
@@ -289,6 +295,55 @@ class CommerceService:
             Order.pay_status == PayStatus.PAID,
         ).order_by(Order.id.desc()).all()
         return [order for order in orders if CommerceService.order_requires_shipping(db, order.id)]
+
+    @staticmethod
+    def unread_counts(db: Session, user: User) -> dict[str, int]:
+        marker_keys = tuple(COMMERCE_VIEW_MARKER_KEYS.values())
+        views = db.query(OrderStatusView).filter(
+            OrderStatusView.user_id == user.id,
+            OrderStatusView.status_key.in_(marker_keys),
+        ).all()
+        viewed_at = {item.status_key: item.viewed_at for item in views}
+
+        shipping_viewed_at = viewed_at.get(COMMERCE_VIEW_MARKER_KEYS['shipping'])
+        shipping_count = sum(
+            1
+            for order in CommerceService.list_shipments(db, user.id)
+            if shipping_viewed_at is None or order.updated_at > shipping_viewed_at
+        )
+
+        footprints_viewed_at = viewed_at.get(COMMERCE_VIEW_MARKER_KEYS['footprints'])
+        footprints_count = sum(
+            1
+            for footprint in CommerceService.list_footprints(db, user)
+            if footprints_viewed_at is None or footprint.last_viewed_at > footprints_viewed_at
+        )
+        return {'shipping': shipping_count, 'footprints': footprints_count}
+
+    @staticmethod
+    def mark_viewed(db: Session, user: User, view_key: str) -> dict[str, int]:
+        target_keys = COMMERCE_VIEW_KEYS if view_key == 'all' else (view_key,)
+        if any(item not in COMMERCE_VIEW_KEYS for item in target_keys):
+            raise ConflictError('Unsupported commerce view')
+
+        marker_keys = tuple(COMMERCE_VIEW_MARKER_KEYS[item] for item in target_keys)
+        existing = {
+            item.status_key: item
+            for item in db.query(OrderStatusView).filter(
+                OrderStatusView.user_id == user.id,
+                OrderStatusView.status_key.in_(marker_keys),
+            ).all()
+        }
+        viewed_at = now()
+        for target_key in target_keys:
+            marker_key = COMMERCE_VIEW_MARKER_KEYS[target_key]
+            marker = existing.get(marker_key)
+            if marker:
+                marker.viewed_at = viewed_at
+            else:
+                db.add(OrderStatusView(user_id=user.id, status_key=marker_key, viewed_at=viewed_at))
+        db.commit()
+        return CommerceService.unread_counts(db, user)
 
     @staticmethod
     def get_shipment(db: Session, user_id: int, order_id: int) -> Order:

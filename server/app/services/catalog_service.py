@@ -349,16 +349,16 @@ class ProductService:
         'device_revenue_enabled': ['设备收益联动', 'device_revenue_enabled'],
         'custom_commission_enabled': ['专属分润', 'custom_commission_enabled'],
         'custom_commission_method': ['专属分润方式', 'custom_commission_method'],
-        'custom_commission_level1_enabled': ['启用一级分润', 'custom_commission_level1_enabled'],
-        'custom_commission_level2_enabled': ['启用二级分润', 'custom_commission_level2_enabled'],
+        'custom_commission_level1_enabled': ['启用普通会员分润', '启用一级分润', 'custom_commission_level1_enabled'],
+        'custom_commission_level2_enabled': ['启用经销商分润', '启用二级分润', 'custom_commission_level2_enabled'],
         'custom_commission_county_agent_enabled': ['启用区代分润', 'custom_commission_county_agent_enabled'],
         'custom_commission_city_agent_enabled': ['启用市代分润', 'custom_commission_city_agent_enabled'],
-        'custom_commission_level1_rate': ['一级分润比例', 'custom_commission_level1_rate'],
-        'custom_commission_level2_rate': ['二级分润比例', 'custom_commission_level2_rate'],
+        'custom_commission_level1_rate': ['普通会员分润比例', '一级分润比例', 'custom_commission_level1_rate'],
+        'custom_commission_level2_rate': ['经销商分润比例', '二级分润比例', 'custom_commission_level2_rate'],
         'custom_commission_county_agent_rate': ['区代分润比例', 'custom_commission_county_agent_rate'],
         'custom_commission_city_agent_rate': ['市代分润比例', 'custom_commission_city_agent_rate'],
-        'custom_commission_level1_amount': ['一级固定分润', 'custom_commission_level1_amount'],
-        'custom_commission_level2_amount': ['二级固定分润', 'custom_commission_level2_amount'],
+        'custom_commission_level1_amount': ['普通会员固定分润', '一级固定分润', 'custom_commission_level1_amount'],
+        'custom_commission_level2_amount': ['经销商固定分润', '二级固定分润', 'custom_commission_level2_amount'],
         'custom_commission_county_agent_amount': ['区代固定分润', 'custom_commission_county_agent_amount'],
         'custom_commission_city_agent_amount': ['市代固定分润', 'custom_commission_city_agent_amount'],
     })
@@ -783,8 +783,8 @@ class ProductService:
             suffix = '%' if method == 'RATE' else '元/件'
             field = 'rate' if method == 'RATE' else 'amount'
             role_fields = [
-                ('一级', 'level1'),
-                ('二级', 'level2'),
+                ('普通会员', 'level1'),
+                ('经销商', 'level2'),
                 ('区代', 'county_agent'),
                 ('市代', 'city_agent'),
             ]

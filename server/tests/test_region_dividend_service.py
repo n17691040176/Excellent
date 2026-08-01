@@ -20,7 +20,7 @@ def test_member_levels_are_the_only_four_supported_levels():
     assert [level.label for level in MemberLevel] == ['普通会员', '经销商', '区代理', '市代理']
 
 
-def test_region_agent_admin_update_keeps_assignment_active_and_syncs_member_level():
+def test_region_agent_admin_update_keeps_assignment_active_for_matching_member_level():
     db = MagicMock()
     agent = SimpleNamespace(
         id=11,
@@ -38,7 +38,7 @@ def test_region_agent_admin_update_keeps_assignment_active_and_syncs_member_leve
         audited_at=None,
         audit_remark=None,
     )
-    user = SimpleNamespace(id=21, member_level=MemberLevel.DEALER)
+    user = SimpleNamespace(id=21, member_level=MemberLevel.CITY_AGENT)
 
     def get_model(model, record_id):
         if model is RegionAgent and record_id == agent.id:
@@ -53,9 +53,7 @@ def test_region_agent_admin_update_keeps_assignment_active_and_syncs_member_leve
     area_query.filter.return_value.filter.return_value.first.return_value = None
     duplicate_query = MagicMock()
     duplicate_query.filter.return_value.first.return_value = None
-    active_query = MagicMock()
-    active_query.filter.return_value.all.return_value = [SimpleNamespace(agent_type='CITY_AGENT')]
-    db.query.side_effect = [area_query, duplicate_query, active_query]
+    db.query.side_effect = [area_query, duplicate_query]
 
     result = RegionDividendService.update_agent(
         db,
@@ -65,7 +63,6 @@ def test_region_agent_admin_update_keeps_assignment_active_and_syncs_member_leve
         province='浙江省',
         city='杭州市',
         district='',
-        dividend_rate=0.75,
     )
 
     assert result is agent
@@ -73,7 +70,7 @@ def test_region_agent_admin_update_keeps_assignment_active_and_syncs_member_leve
     assert agent.agreement_signed is True
     assert agent.agent_type == 'CITY_AGENT'
     assert agent.district == ''
-    assert agent.dividend_rate == 0.75
+    assert agent.dividend_rate == 0
     assert user.member_level == MemberLevel.CITY_AGENT
     db.commit.assert_called_once()
 
@@ -85,7 +82,7 @@ def test_public_region_agent_application_route_is_removed():
     assert '/api/v1/region-agents/apply' not in paths
 
 
-def test_allocate_region_reward_credits_balance_and_records_exact_percentage():
+def test_allocate_product_region_reward_credits_balance_and_records_exact_amount():
     db = MagicMock()
     duplicate_query = MagicMock()
     duplicate_query.filter.return_value.first.return_value = None
@@ -113,14 +110,17 @@ def test_allocate_region_reward_credits_balance_and_records_exact_percentage():
         order,
         agent,
         Decimal('200.00'),
+        Decimal('3.00'),
+        1,
         '浙江省',
         '杭州市',
         '西湖区',
     )
 
     assert isinstance(flow, RegionDividendFlow)
-    assert Decimal(str(flow.dividend_rate)) == Decimal('1.5')
+    assert Decimal(str(flow.dividend_rate)) == Decimal('0')
     assert Decimal(str(flow.dividend_amount)) == Decimal('3.00')
+    assert flow.remark == '商品专属区代分润（1种商品）'
     assert account.available_amount == Decimal('13.00')
     assert account.total_amount == Decimal('33.00')
     assert agent.total_orders == 3
@@ -145,7 +145,15 @@ def test_allocate_region_reward_is_idempotent_for_order_and_agent():
     )
 
     result = RegionDividendService._allocate_reward(
-        db, order, agent, Decimal('200.00'), '浙江省', '杭州市', ''
+        db,
+        order,
+        agent,
+        Decimal('200.00'),
+        Decimal('1.00'),
+        1,
+        '浙江省',
+        '杭州市',
+        '',
     )
 
     assert result is None

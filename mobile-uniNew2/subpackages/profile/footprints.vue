@@ -101,6 +101,7 @@ async function loadData() {
   try {
     const res = await commerceApi.footprints({ page: 1, page_size: 50 });
     items.value = pickListPayload(res);
+    await commerceApi.markViewed('footprints');
   } catch (error) {
     failed.value = true;
   } finally {

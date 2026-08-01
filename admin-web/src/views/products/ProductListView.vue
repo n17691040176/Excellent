@@ -458,41 +458,68 @@
 
             <template v-if="zoneConfigForm.custom_commission_enabled">
               <el-alert
-                title="专属规则启用后，仅触发当前商品的专属分润，不触发团队奖。"
+                title="普通会员、经销商按推荐链路中的实际等级匹配；区代理、市代理按订单收货区域匹配。未启用等级不参与此商品分润。"
                 type="warning"
                 :closable="false"
                 show-icon
                 class="commission-rule-alert"
               />
-              <el-form-item label="计算方式">
-                <el-radio-group v-model="zoneConfigForm.custom_commission_method">
-                  <el-radio-button value="RATE">按利润比例</el-radio-button>
-                  <el-radio-button value="FIXED_AMOUNT">每件固定金额</el-radio-button>
-                </el-radio-group>
-              </el-form-item>
-
-              <div v-if="zoneConfigForm.custom_commission_method === 'RATE'" class="commission-value-grid">
-                <el-form-item v-for="level in 3" :key="`rate-${level}`" :label="`${levelText[level]}比例（%）`">
-                  <el-input-number
-                    v-model="zoneConfigForm[`custom_commission_level${level}_rate`]"
-                    :min="0"
-                    :max="100"
-                    :step="0.5"
-                    :precision="2"
-                    controls-position="right"
-                  />
+              <div class="commission-method-row">
+                <el-form-item label="计算方式" class="commission-method-field">
+                  <el-radio-group v-model="zoneConfigForm.custom_commission_method">
+                    <el-radio-button value="RATE">按利润比例</el-radio-button>
+                    <el-radio-button value="FIXED_AMOUNT">每件固定金额</el-radio-button>
+                  </el-radio-group>
                 </el-form-item>
+                <div class="commission-budget" aria-live="polite">
+                  <div>
+                    <span>已启用等级</span>
+                    <strong>{{ enabledCommissionLevelCount }} / {{ commissionMemberLevels.length }}</strong>
+                  </div>
+                  <div>
+                    <span>{{ customCommissionTotalLabel }}</span>
+                    <strong :class="{ danger: customCommissionTotalExceeded }">{{ customCommissionTotalText }}</strong>
+                  </div>
+                </div>
               </div>
-              <div v-else class="commission-value-grid">
-                <el-form-item v-for="level in 3" :key="`amount-${level}`" :label="`${levelText[level]}金额（元/件）`">
-                  <el-input-number
-                    v-model="zoneConfigForm[`custom_commission_level${level}_amount`]"
-                    :min="0"
-                    :step="1"
-                    :precision="2"
-                    controls-position="right"
-                  />
-                </el-form-item>
+
+              <div class="member-commission-table">
+                <div class="member-commission-header" aria-hidden="true">
+                  <span>会员等级与发放对象</span>
+                  <span>启用</span>
+                  <span>{{ zoneConfigForm.custom_commission_method === 'RATE' ? '分润比例' : '固定金额' }}</span>
+                </div>
+                <div
+                  v-for="level in commissionMemberLevels"
+                  :key="level.key"
+                  class="member-commission-row"
+                  :class="{ disabled: !zoneConfigForm[`custom_commission_${level.key}_enabled`] }"
+                >
+                  <div class="member-level-cell">
+                    <span class="member-level-mark" :class="`is-${level.tone}`">{{ level.mark }}</span>
+                    <div>
+                      <div class="member-level-name">{{ level.label }}</div>
+                      <div class="member-level-meta">{{ level.description }}</div>
+                    </div>
+                  </div>
+                  <div class="member-level-switch">
+                    <el-switch v-model="zoneConfigForm[`custom_commission_${level.key}_enabled`]" />
+                  </div>
+                  <div class="member-level-value">
+                    <el-input-number
+                      v-model="zoneConfigForm[`custom_commission_${level.key}_${customCommissionValueField}`]"
+                      :min="0"
+                      :max="zoneConfigForm.custom_commission_method === 'RATE' ? 100 : undefined"
+                      :step="zoneConfigForm.custom_commission_method === 'RATE' ? 0.5 : 1"
+                      :precision="2"
+                      :disabled="!zoneConfigForm[`custom_commission_${level.key}_enabled`]"
+                      controls-position="right"
+                    />
+                    <span class="commission-value-unit">
+                      {{ zoneConfigForm.custom_commission_method === 'RATE' ? '%' : '元/件' }}
+                    </span>
+                  </div>
+                </div>
               </div>
             </template>
           </div>
@@ -551,7 +578,6 @@ import { PageHeader, MetricCard, FilterBar, StatusTag } from '@/components/commo
 
 const userStore = useUserStore()
 const canAuditProducts = computed(() => hasPermission(userStore.role, 'products:audit', userStore.permissions))
-const levelText = { 1: '一级', 2: '二级', 3: '三级' }
 const canEditProducts = computed(() => hasPermission(userStore.role, 'products:edit', userStore.permissions))
 const canShelfProducts = computed(() => hasPermission(userStore.role, 'products:shelf', userStore.permissions))
 const router = useRouter()
@@ -663,12 +689,18 @@ function createDefaultZoneConfig() {
     device_revenue_enabled: false,
     custom_commission_enabled: false,
     custom_commission_method: 'RATE',
+    custom_commission_level1_enabled: false,
+    custom_commission_level2_enabled: false,
+    custom_commission_county_agent_enabled: false,
+    custom_commission_city_agent_enabled: false,
     custom_commission_level1_rate: 0,
     custom_commission_level2_rate: 0,
-    custom_commission_level3_rate: 0,
+    custom_commission_county_agent_rate: 0,
+    custom_commission_city_agent_rate: 0,
     custom_commission_level1_amount: 0,
     custom_commission_level2_amount: 0,
-    custom_commission_level3_amount: 0
+    custom_commission_county_agent_amount: 0,
+    custom_commission_city_agent_amount: 0
   }
 }
 
@@ -753,6 +785,59 @@ const zoneDescription = computed(() => {
   }[zoneConfigForm.value.zone_type] || ''
 })
 const selectedIds = computed(() => selectedRows.value.map((item) => item.id))
+
+const commissionMemberLevels = [
+  {
+    key: 'level1',
+    label: '普通会员',
+    mark: '普',
+    tone: 'normal',
+    description: '推荐链路内符合资格的普通会员'
+  },
+  {
+    key: 'level2',
+    label: '经销商',
+    mark: '经',
+    tone: 'dealer',
+    description: '推荐链路内会员等级为经销商的用户'
+  },
+  {
+    key: 'county_agent',
+    label: '区代理',
+    mark: '区',
+    tone: 'county',
+    description: '按订单收货区县匹配已生效代理'
+  },
+  {
+    key: 'city_agent',
+    label: '市代理',
+    mark: '市',
+    tone: 'city',
+    description: '按订单收货城市匹配已生效代理'
+  }
+]
+
+const customCommissionValueField = computed(() => (
+  zoneConfigForm.value.custom_commission_method === 'FIXED_AMOUNT' ? 'amount' : 'rate'
+))
+const enabledCommissionLevels = computed(() => commissionMemberLevels.filter(
+  (level) => zoneConfigForm.value[`custom_commission_${level.key}_enabled`]
+))
+const enabledCommissionLevelCount = computed(() => enabledCommissionLevels.value.length)
+const customCommissionTotal = computed(() => enabledCommissionLevels.value.reduce((sum, level) => (
+  sum + Number(zoneConfigForm.value[`custom_commission_${level.key}_${customCommissionValueField.value}`] || 0)
+), 0))
+const customCommissionTotalLabel = computed(() => (
+  customCommissionValueField.value === 'rate' ? '比例合计' : '单件合计'
+))
+const customCommissionTotalText = computed(() => (
+  customCommissionValueField.value === 'rate'
+    ? `${customCommissionTotal.value.toFixed(2)}%`
+    : `¥${customCommissionTotal.value.toFixed(2)}`
+))
+const customCommissionTotalExceeded = computed(() => (
+  customCommissionValueField.value === 'rate' && customCommissionTotal.value > 100
+))
 
 function firstFilled(values) {
   return values.map((item) => String(item || '').trim()).find(Boolean) || ''
@@ -878,8 +963,10 @@ function buildZoneSummary(config = {}) {
     const fixed = config.custom_commission_method === 'FIXED_AMOUNT'
     const suffix = fixed ? '元/件' : '%'
     const field = fixed ? 'amount' : 'rate'
-    const values = [1, 2, 3].map((level) => Number(config[`custom_commission_level${level}_${field}`] || 0))
-    commissionBadges.push(`专属分润 ${values.join('/')} ${suffix}`)
+    const values = commissionMemberLevels
+      .filter((level) => config[`custom_commission_${level.key}_enabled`])
+      .map((level) => `${level.mark}${Number(config[`custom_commission_${level.key}_${field}`] || 0)}`)
+    commissionBadges.push(values.length ? `专属分润 ${values.join('/')} ${suffix}` : '专属分润待配置')
   } else {
     commissionBadges.push('未配置分润')
   }
@@ -1054,12 +1141,18 @@ function normalizeZoneConfig(data = {}) {
     per_user_limit: data.per_user_limit ?? null,
     merchant_commission_rule_id: data.merchant_commission_rule_id ?? null,
     custom_commission_method: data.custom_commission_method || 'RATE',
+    custom_commission_level1_enabled: Boolean(data.custom_commission_level1_enabled),
+    custom_commission_level2_enabled: Boolean(data.custom_commission_level2_enabled),
+    custom_commission_county_agent_enabled: Boolean(data.custom_commission_county_agent_enabled),
+    custom_commission_city_agent_enabled: Boolean(data.custom_commission_city_agent_enabled),
     custom_commission_level1_rate: Number(data.custom_commission_level1_rate || 0),
     custom_commission_level2_rate: Number(data.custom_commission_level2_rate || 0),
-    custom_commission_level3_rate: Number(data.custom_commission_level3_rate || 0),
+    custom_commission_county_agent_rate: Number(data.custom_commission_county_agent_rate || 0),
+    custom_commission_city_agent_rate: Number(data.custom_commission_city_agent_rate || 0),
     custom_commission_level1_amount: Number(data.custom_commission_level1_amount || 0),
     custom_commission_level2_amount: Number(data.custom_commission_level2_amount || 0),
-    custom_commission_level3_amount: Number(data.custom_commission_level3_amount || 0),
+    custom_commission_county_agent_amount: Number(data.custom_commission_county_agent_amount || 0),
+    custom_commission_city_agent_amount: Number(data.custom_commission_city_agent_amount || 0),
     points_purchase_enabled: Boolean(data.points_purchase_enabled),
     balance_purchase_enabled: Boolean(data.balance_purchase_enabled),
     alipay_purchase_enabled: data.alipay_purchase_enabled == null ? true : Boolean(data.alipay_purchase_enabled),
@@ -1261,9 +1354,18 @@ async function saveZoneConfig() {
   if (zoneConfigForm.value.custom_commission_enabled) {
     const fixed = zoneConfigForm.value.custom_commission_method === 'FIXED_AMOUNT'
     const field = fixed ? 'amount' : 'rate'
-    const values = [1, 2, 3].map((level) => Number(zoneConfigForm.value[`custom_commission_level${level}_${field}`] || 0))
+    const enabledLevels = commissionMemberLevels.filter(
+      (level) => zoneConfigForm.value[`custom_commission_${level.key}_enabled`]
+    )
+    if (!enabledLevels.length) {
+      ElMessage.warning('请至少启用一个会员等级')
+      return
+    }
+    const values = enabledLevels.map(
+      (level) => Number(zoneConfigForm.value[`custom_commission_${level.key}_${field}`] || 0)
+    )
     if (values.every((value) => value <= 0)) {
-      ElMessage.warning('专属分润至少填写一个大于 0 的值')
+      ElMessage.warning('已启用等级至少填写一个大于 0 的分润值')
       return
     }
     if (!fixed && values.reduce((sum, value) => sum + value, 0) > 100) {
@@ -1289,12 +1391,18 @@ async function saveZoneConfig() {
       device_revenue_enabled: zoneConfigForm.value.device_revenue_enabled,
       custom_commission_enabled: zoneConfigForm.value.custom_commission_enabled,
       custom_commission_method: zoneConfigForm.value.custom_commission_method,
+      custom_commission_level1_enabled: zoneConfigForm.value.custom_commission_level1_enabled,
+      custom_commission_level2_enabled: zoneConfigForm.value.custom_commission_level2_enabled,
+      custom_commission_county_agent_enabled: zoneConfigForm.value.custom_commission_county_agent_enabled,
+      custom_commission_city_agent_enabled: zoneConfigForm.value.custom_commission_city_agent_enabled,
       custom_commission_level1_rate: zoneConfigForm.value.custom_commission_level1_rate,
       custom_commission_level2_rate: zoneConfigForm.value.custom_commission_level2_rate,
-      custom_commission_level3_rate: zoneConfigForm.value.custom_commission_level3_rate,
+      custom_commission_county_agent_rate: zoneConfigForm.value.custom_commission_county_agent_rate,
+      custom_commission_city_agent_rate: zoneConfigForm.value.custom_commission_city_agent_rate,
       custom_commission_level1_amount: zoneConfigForm.value.custom_commission_level1_amount,
       custom_commission_level2_amount: zoneConfigForm.value.custom_commission_level2_amount,
-      custom_commission_level3_amount: zoneConfigForm.value.custom_commission_level3_amount
+      custom_commission_county_agent_amount: zoneConfigForm.value.custom_commission_county_agent_amount,
+      custom_commission_city_agent_amount: zoneConfigForm.value.custom_commission_city_agent_amount
     })
     ElMessage.success('专区规则已保存')
     zoneConfigVisible.value = false
@@ -1895,14 +2003,158 @@ onMounted(loadData)
   margin-bottom: var(--space-4);
 }
 
-.commission-value-grid {
+.commission-method-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.commission-method-field {
+  margin-bottom: 0;
+}
+
+.commission-budget {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  gap: var(--space-2);
+  min-width: 220px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--neutral-50);
+}
+
+.commission-budget > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.commission-budget span {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.commission-budget strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+}
+
+.commission-budget strong.danger {
+  color: var(--danger-600);
+}
+
+.member-commission-table {
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.member-commission-header,
+.member-commission-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 60px minmax(150px, 0.75fr);
+  align-items: center;
   gap: var(--space-3);
 }
 
-.commission-value-grid :deep(.el-input-number) {
+.member-commission-header {
+  min-height: 38px;
+  padding: 0 var(--space-3);
+  color: var(--text-muted);
+  background: var(--neutral-50);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.member-commission-row {
+  min-height: 72px;
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.member-commission-row + .member-commission-row {
+  border-top: 1px solid var(--border-light);
+}
+
+.member-commission-row.disabled {
+  background: var(--neutral-50);
+}
+
+.member-level-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.member-level-mark {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--neutral-700);
+  background: var(--neutral-100);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+}
+
+.member-level-mark.is-dealer {
+  color: var(--success-700);
+  background: var(--success-100);
+}
+
+.member-level-mark.is-county {
+  color: var(--warning-700);
+  background: var(--warning-100);
+}
+
+.member-level-mark.is-city {
+  color: var(--info-700);
+  background: var(--info-100);
+}
+
+.member-level-name {
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+}
+
+.member-level-meta {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.member-level-switch {
+  display: flex;
+  align-items: center;
+}
+
+.member-level-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.member-level-value :deep(.el-input-number) {
+  min-width: 0;
   width: 100%;
+}
+
+.commission-value-unit {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 .payment-method-label {
@@ -1946,7 +2198,6 @@ onMounted(loadData)
 
 @media (max-width: 960px) {
   .form-split,
-  .commission-value-grid,
   .product-image-field,
   .product-cell,
   .mobile-card {
@@ -1956,6 +2207,34 @@ onMounted(loadData)
   .batch-toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  .commission-method-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .commission-budget {
+    min-width: 0;
+  }
+
+  .member-commission-header {
+    display: none;
+  }
+
+  .member-commission-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 0;
+  }
+
+  .member-level-switch {
+    justify-content: flex-end;
+  }
+
+  .member-level-value {
+    grid-column: 1 / -1;
   }
 }
 </style>
