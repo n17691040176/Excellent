@@ -118,6 +118,14 @@ const emit = defineEmits(['update:modelValue', 'search', 'reset'])
 const localFilters = ref({ ...props.modelValue })
 const isCollapsed = ref(true)
 
+const hasSameFilterValues = (left = {}, right = {}) => {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && Object.is(left[key], right[key]))
+}
+
 const visibleFields = computed(() => {
   if (!props.collapsible || !isCollapsed.value) {
     return props.fields
@@ -128,7 +136,9 @@ const visibleFields = computed(() => {
 watch(
   () => props.modelValue,
   (val) => {
-    localFilters.value = { ...val }
+    if (!hasSameFilterValues(val, localFilters.value)) {
+      localFilters.value = { ...val }
+    }
   },
   { deep: true, immediate: true }
 )
@@ -136,7 +146,9 @@ watch(
 watch(
   localFilters,
   (val) => {
-    emit('update:modelValue', { ...val })
+    if (!hasSameFilterValues(val, props.modelValue)) {
+      emit('update:modelValue', { ...val })
+    }
   },
   { deep: true }
 )
