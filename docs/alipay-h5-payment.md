@@ -24,6 +24,7 @@ ALIPAY_RETURN_URL=https://your-domain.example/#/subpackages/order/detail
 ALIPAY_GATEWAY_URL=https://openapi.alipay.com/gateway.do
 ALIPAY_PAYMENT_METHOD=alipay.trade.wap.pay
 ALIPAY_SIGN_TYPE=RSA2
+ALIPAY_SANDBOX_ALLOW_UNVERIFIED_QUERY_RESPONSE=false
 ALIPAY_SELLER_ID=
 ```
 
@@ -34,6 +35,20 @@ The current sandbox template uses:
 ```dotenv
 ALIPAY_GATEWAY_URL=https://openapi-sandbox.dl.alipaydev.com/gateway.do
 ```
+
+If the Alipay sandbox returns a response signed by a key that does not match
+its downloaded sandbox platform certificate, the server-side trade query can
+use this temporary fallback:
+
+```dotenv
+ALIPAY_SANDBOX_ALLOW_UNVERIFIED_QUERY_RESPONSE=true
+```
+
+The fallback is accepted only with the exact sandbox gateway URL above. It
+applies only to the server-initiated HTTPS trade query; production responses
+and inbound notifications still require RSA2 verification. The query result
+must still match the local transaction number, amount, and status; the signed
+outbound query remains bound to the configured APP-ID.
 
 ## Runtime flow
 

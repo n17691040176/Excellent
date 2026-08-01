@@ -25,6 +25,7 @@ from app.core.payment_config import (
     WechatPayConfig,
     alipay_certificate_sn,
     alipay_root_certificate_sn,
+    alipay_sandbox_query_bypass_enabled,
     load_alipay_certificates,
     payment_config,
 )
@@ -312,7 +313,13 @@ class PaymentService:
                 padding.PKCS1v15(),
                 hashes.SHA256(),
             )
-        except (binascii.Error, InvalidSignature, ValueError) as exc:
+        except InvalidSignature as exc:
+            if alipay_sandbox_query_bypass_enabled(config):
+                response = dict(response)
+                response['_signature_verification'] = 'sandbox_https_bypass'
+                return response
+            raise ForbiddenError('Alipay query response signature is invalid') from exc
+        except (binascii.Error, ValueError) as exc:
             raise ForbiddenError('Alipay query response signature is invalid') from exc
         return response
 
@@ -646,7 +653,16 @@ class PaymentService:
         if not config.enabled:
             raise ConflictError('Alipay payment is not enabled')
 
-        PaymentService._alipay_verify_signature(payload, config)
+        try:
+            PaymentService._alipay_verify_signature(payload, config)
+        except ForbiddenError:
+            if not alipay_sandbox_query_bypass_enabled(config):
+                raise
+            return PaymentService.reconcile_alipay_payment(
+                db,
+                order,
+                str(payload.get('out_trade_no') or '').strip(),
+            )
         if str(payload.get('method') or '').strip() != 'alipay.trade.wap.pay.return':
             raise ConflictError('Alipay return method mismatch')
 

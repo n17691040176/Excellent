@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     alipay_payment_method: str | None = None
     alipay_charset: str | None = None
     alipay_sign_type: str | None = None
+    alipay_sandbox_allow_unverified_query_response: bool | None = None
     alipay_seller_id: str | None = None
     alipay_app_subject_prefix: str | None = None
 

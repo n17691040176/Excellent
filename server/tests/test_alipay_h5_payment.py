@@ -198,6 +198,50 @@ class AlipayH5PaymentTest(TestCase):
                 self.config,
             )
 
+    def test_sandbox_can_bypass_invalid_trade_query_signature_when_explicitly_enabled(self):
+        response = {'code': '40004', 'sub_code': 'ACQ.TRADE_NOT_EXIST'}
+        response_body = json.dumps(response, separators=(',', ':'))
+        raw_body = (
+            f'{{"alipay_trade_query_response":{response_body},'
+            f'"sign":"{base64.b64encode(b"invalid-signature").decode()}"}}'
+        )
+        config = AlipayConfig(
+            **{
+                **self.config.__dict__,
+                'gateway_url': 'https://openapi-sandbox.dl.alipaydev.com/gateway.do',
+                'sandbox_allow_unverified_query_response': True,
+            }
+        )
+
+        result = PaymentService._alipay_verify_api_response(
+            raw_body,
+            'alipay_trade_query_response',
+            config,
+        )
+
+        self.assertEqual(result['sub_code'], 'ACQ.TRADE_NOT_EXIST')
+        self.assertEqual(result['_signature_verification'], 'sandbox_https_bypass')
+
+    def test_production_gateway_never_bypasses_invalid_trade_query_signature(self):
+        response_body = json.dumps({'code': '10000'}, separators=(',', ':'))
+        raw_body = (
+            f'{{"alipay_trade_query_response":{response_body},'
+            f'"sign":"{base64.b64encode(b"invalid-signature").decode()}"}}'
+        )
+        config = AlipayConfig(
+            **{
+                **self.config.__dict__,
+                'sandbox_allow_unverified_query_response': True,
+            }
+        )
+
+        with self.assertRaisesRegex(ForbiddenError, 'signature is invalid'):
+            PaymentService._alipay_verify_api_response(
+                raw_body,
+                'alipay_trade_query_response',
+                config,
+            )
+
     def test_trade_query_sends_charset_in_gateway_url(self):
         response = {
             'code': '10000',
@@ -355,6 +399,41 @@ class AlipayH5PaymentTest(TestCase):
             PaymentService.reconcile_alipay_return(db, self.build_order(), payload)
         confirm_paid.assert_not_called()
 
+    def test_sandbox_invalid_signed_return_falls_back_to_trade_query(self):
+        tx = self.build_transaction()
+        order = self.build_order()
+        payload = {
+            'out_trade_no': tx.out_trade_no,
+            'sign_type': 'RSA2',
+            'sign': base64.b64encode(b'invalid-signature').decode(),
+        }
+        config = AlipayConfig(
+            **{
+                **self.config.__dict__,
+                'gateway_url': 'https://openapi-sandbox.dl.alipaydev.com/gateway.do',
+                'sandbox_allow_unverified_query_response': True,
+            }
+        )
+        expected = {'provider_status': 'TRADE_SUCCESS'}
+        db = MagicMock()
+
+        with (
+            patch.object(
+                payment_module,
+                'payment_config',
+                PaymentConfig(mock_external_payment=False, alipay=config),
+            ),
+            patch.object(
+                PaymentService,
+                'reconcile_alipay_payment',
+                return_value=expected,
+            ) as reconcile_payment,
+        ):
+            result = PaymentService.reconcile_alipay_return(db, order, payload)
+
+        self.assertIs(result, expected)
+        reconcile_payment.assert_called_once_with(db, order, tx.out_trade_no)
+
     def test_loads_public_key_only_from_x509_certificate(self):
         loaded_key = PaymentService._load_certificate_public_key(str(self.alipay_cert_path))
 
@@ -467,6 +546,24 @@ class AlipayH5PaymentTest(TestCase):
         config = AlipayConfig(**{**self.config.__dict__, 'alipay_public_cert_path': ''})
 
         with self.assertRaisesRegex(RuntimeError, 'ALIPAY_PUBLIC_CERT_PATH is required'):
+            validate_payment_config(
+                'production',
+                PaymentConfig(mock_external_payment=False, alipay=config),
+            )
+
+    def test_rejects_sandbox_signature_bypass_with_non_sandbox_gateway(self):
+        config = AlipayConfig(
+            **{
+                **self.config.__dict__,
+                'gateway_url': 'https://openapi.alipay.com/gateway.do',
+                'sandbox_allow_unverified_query_response': True,
+            }
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            'ALIPAY_SANDBOX_ALLOW_UNVERIFIED_QUERY_RESPONSE is only allowed',
+        ):
             validate_payment_config(
                 'production',
                 PaymentConfig(mock_external_payment=False, alipay=config),

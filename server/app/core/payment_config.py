@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 UNPAID_ORDER_EXPIRE_MINUTES = 30
+ALIPAY_SANDBOX_GATEWAY_URL = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do'
 
 
 def _settings_value(name: str) -> str | None:
@@ -84,6 +85,10 @@ class AlipayConfig:
     payment_method: str = _env('ALIPAY_PAYMENT_METHOD', 'alipay.trade.wap.pay') or 'alipay.trade.wap.pay'
     charset: str = _env('ALIPAY_CHARSET', 'utf-8') or 'utf-8'
     sign_type: str = _env('ALIPAY_SIGN_TYPE', 'RSA2') or 'RSA2'
+    sandbox_allow_unverified_query_response: bool = _env_bool(
+        'ALIPAY_SANDBOX_ALLOW_UNVERIFIED_QUERY_RESPONSE',
+        False,
+    )
     seller_id: str = _env('ALIPAY_SELLER_ID')
     app_pay_subject_prefix: str = _env('ALIPAY_APP_SUBJECT_PREFIX', 'Excellent') or 'Excellent'
 
@@ -138,6 +143,13 @@ def alipay_root_certificate_sn(certificates: list[x509.Certificate]) -> str:
     return '_'.join(serial_numbers)
 
 
+def alipay_sandbox_query_bypass_enabled(config: AlipayConfig) -> bool:
+    return (
+        config.sandbox_allow_unverified_query_response
+        and config.gateway_url == ALIPAY_SANDBOX_GATEWAY_URL
+    )
+
+
 def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -> None:
     active_config = config or payment_config
     production = app_env.strip().lower() == 'production'
@@ -166,6 +178,14 @@ def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -
 
         if alipay.sign_type.upper() != 'RSA2':
             errors.append('ALIPAY_SIGN_TYPE must be RSA2')
+        if (
+            alipay.sandbox_allow_unverified_query_response
+            and alipay.gateway_url != ALIPAY_SANDBOX_GATEWAY_URL
+        ):
+            errors.append(
+                'ALIPAY_SANDBOX_ALLOW_UNVERIFIED_QUERY_RESPONSE is only allowed '
+                f'with ALIPAY_GATEWAY_URL={ALIPAY_SANDBOX_GATEWAY_URL}'
+            )
 
         key_paths = {
             'ALIPAY_PRIVATE_KEY_PATH': alipay.private_key_path,
