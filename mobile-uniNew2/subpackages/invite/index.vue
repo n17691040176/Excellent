@@ -118,7 +118,14 @@
       <view class="poster-modal" @click.stop>
         <view class="modal-header">
           <text class="modal-title">邀请海报</text>
-          <button class="close-btn" aria-label="关闭" @click="closePoster">×</button>
+          <button
+            class="close-btn"
+            aria-label="关闭"
+            hover-class="close-btn--pressed"
+            @click="closePoster"
+          >
+            <view class="close-icon" aria-hidden="true" />
+          </button>
         </view>
         <view class="poster-preview">
           <image
@@ -144,7 +151,14 @@
       <view class="bind-modal" @click.stop>
         <view class="modal-header">
           <text class="modal-title">输入邀请码</text>
-          <button class="close-btn" aria-label="关闭" @click="closeManualBind">×</button>
+          <button
+            class="close-btn"
+            aria-label="关闭"
+            hover-class="close-btn--pressed"
+            @click="closeManualBind"
+          >
+            <view class="close-icon" aria-hidden="true" />
+          </button>
         </view>
         <input
           v-model="manualInviteCode"
@@ -154,7 +168,12 @@
           confirm-type="done"
           @confirm="submitManualBind"
         />
-        <button class="bind-confirm" :disabled="binding" @click="submitManualBind">
+        <button
+          class="bind-confirm"
+          hover-class="bind-confirm--pressed"
+          :disabled="binding || !manualInviteCode.trim()"
+          @click="submitManualBind"
+        >
           {{ binding ? '绑定中...' : '确认绑定' }}
         </button>
       </view>
@@ -902,7 +921,7 @@ onPullDownRefresh(async () => {
 
 .modal-mask {
   position: fixed;
-  z-index: 1000;
+  z-index: 998;
   inset: 0;
   display: flex;
   align-items: center;
@@ -922,26 +941,66 @@ onPullDownRefresh(async () => {
 }
 
 .modal-header {
-  justify-content: space-between;
+  position: relative;
+  align-items: flex-start;
+  min-height: 56rpx;
   margin-bottom: 24rpx;
 }
 
 .modal-title {
+  padding-top: 8rpx;
+  padding-right: 72rpx;
   color: var(--text);
   font-size: 30rpx;
   font-weight: 700;
+  line-height: 1.35;
 }
 
 .close-btn {
+  position: absolute;
+  top: -6rpx;
+  right: -6rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64rpx;
-  height: 64rpx;
-  color: var(--text-muted);
-  font-size: 44rpx;
-  font-weight: 300;
+  width: 56rpx;
+  height: 56rpx;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  line-height: 1;
+  box-sizing: border-box;
 }
+
+.close-btn::after { border: none; }
+
+.close-btn--pressed { background: #F0F3F1; }
+
+.close-icon {
+  position: relative;
+  display: block;
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.close-icon::before,
+.close-icon::after {
+  position: absolute;
+  top: 13rpx;
+  left: 2rpx;
+  width: 24rpx;
+  height: 2rpx;
+  border-radius: 1rpx;
+  background: #68736D;
+  content: '';
+  transform: rotate(45deg);
+  transform-origin: center;
+}
+
+.close-icon::after { transform: rotate(-45deg); }
 
 .poster-preview {
   display: flex;
@@ -1005,12 +1064,27 @@ onPullDownRefresh(async () => {
 }
 
 .bind-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  height: 84rpx;
+  height: 88rpx;
   margin-top: 24rpx;
+  padding: 0 24rpx;
   border-radius: var(--radius-md);
   font-size: 27rpx;
   font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  box-shadow: 0 8rpx 18rpx rgba(15, 107, 70, 0.16);
+  box-sizing: border-box;
+}
+
+.bind-confirm--pressed { background: #0B5438; }
+
+.bind-confirm[disabled] {
+  box-shadow: none;
+  opacity: 0.5;
 }
 
 /* Refined invite layout */
