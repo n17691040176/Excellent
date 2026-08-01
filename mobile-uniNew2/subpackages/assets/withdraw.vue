@@ -134,6 +134,7 @@ import { computed, ref } from 'vue';
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import { assetApi, commissionApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
+import { formatDateTime as formatTime } from '@/utils/format';
 
 const BALANCE_WITHDRAW_VOUCHER_RATE = 0.2;
 
@@ -203,11 +204,6 @@ function getStatusClass(status) {
     rejected: 'status-rejected',
     paid: 'status-paid'
   }[normalizeStatus(status)] || 'status-pending';
-}
-
-function formatTime(value) {
-  if (!value) return '--';
-  return String(value).replace('T', ' ').slice(0, 16);
 }
 
 function goBack() {

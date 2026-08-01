@@ -27,7 +27,9 @@
       <el-table :data="members" border>
         <el-table-column prop="user_id" label="用户 ID" width="100" />
         <el-table-column prop="team_role" label="团队角色" width="140" />
-        <el-table-column prop="joined_at" label="加入时间" min-width="180" />
+        <el-table-column label="加入时间" min-width="180">
+          <template #default="{ row }">{{ formatDateTime(row.joined_at) }}</template>
+        </el-table-column>
       </el-table>
     </div>
   </div>
@@ -39,6 +41,7 @@ import { computed, onMounted, ref } from 'vue'
 import { teamApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
 import { PageHeader } from '@/components/common'
+import { formatDateTime } from '@/utils/datetime'
 
 const userStore = useUserStore()
 const team = ref(null)

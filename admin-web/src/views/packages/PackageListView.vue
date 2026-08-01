@@ -50,7 +50,9 @@
         <el-table-column prop="paid_amount" label="支付金额" width="120" />
         <el-table-column prop="grants_product_quota" label="上架额度" width="100" />
         <el-table-column prop="order_status" label="订单状态" width="120" />
-        <el-table-column prop="paid_at" label="支付时间" min-width="180" />
+        <el-table-column label="支付时间" min-width="180">
+          <template #default="{ row }">{{ formatDateTime(row.paid_at) }}</template>
+        </el-table-column>
       </el-table>
     </div>
 
@@ -108,6 +110,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { packageApi } from '@/api/modules'
 import { PageHeader, StatusTag } from '@/components/common'
+import { formatDateTime } from '@/utils/datetime'
 
 const packages = ref([])
 const qualifications = ref([])

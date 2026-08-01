@@ -136,6 +136,7 @@ import { computed, ref } from 'vue';
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app';
 import { assetApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
+import { formatDateTime as formatDetailTime } from '@/utils/format';
 
 const DETAIL_PAGE_SIZE = 12;
 
@@ -194,11 +195,6 @@ function goBack() {
 
 function goWithdraw() {
   uni.navigateTo({ url: '/subpackages/assets/withdraw' });
-}
-
-function formatDetailTime(value) {
-  if (!value) return '--';
-  return String(value).replace('T', ' ').slice(0, 16);
 }
 
 function formatLedgerBizName(item) {

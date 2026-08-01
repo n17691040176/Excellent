@@ -545,6 +545,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Document } from '@element-plus/icons-vue'
 
 import { userApi } from '@/api/modules'
+import { formatDateTime } from '@/utils/datetime'
 import { useUserStore } from '@/stores/user'
 import { hasPermission } from '@/utils/permission'
 import { PageHeader, FilterBar, StatusTag } from '@/components/common'
@@ -682,8 +683,7 @@ function formatAmount(value) {
 }
 
 function formatDate(value) {
-  if (!value) return '--'
-  return String(value).replace('T', ' ').slice(0, 19)
+  return formatDateTime(value)
 }
 
 function zoneLabel(value) {

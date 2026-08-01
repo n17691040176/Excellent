@@ -56,7 +56,9 @@
             <span class="amount">¥{{ row.amount?.toFixed(2) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="下单时间" width="170" />
+        <el-table-column label="下单时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="viewDetail(row)">
@@ -103,7 +105,7 @@
             </div>
             <div class="detail-item">
               <span class="detail-label">下单时间</span>
-              <span class="detail-value">{{ detail.created_at }}</span>
+              <span class="detail-value">{{ formatDateTime(detail.created_at) }}</span>
             </div>
           </div>
         </div>
@@ -175,6 +177,7 @@ import { ref, onMounted } from 'vue'
 import { Search, Warning } from '@element-plus/icons-vue'
 import { shipmentApi } from '@/api/modules'
 import { ElMessage } from 'element-plus'
+import { formatDateTime } from '@/utils/datetime'
 
 const loading = ref(false)
 const shipments = ref([])

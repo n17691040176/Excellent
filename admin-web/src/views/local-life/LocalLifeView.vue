@@ -317,7 +317,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/datetime'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { localLifeApi } from '@/api/modules'
@@ -399,7 +399,7 @@ function merchantStatusLabel(status) {
 }
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 function joinAddress(row) {

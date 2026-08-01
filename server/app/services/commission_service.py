@@ -23,7 +23,7 @@ from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 from app.services.catalog_service import ProductService
 from app.services.earning_rule_service import EarningRuleService
-from app.utils.helpers import now, quantize_amount
+from app.utils.helpers import iso_datetime, now, quantize_amount
 
 BALANCE_WITHDRAW_VOUCHER_RATE = Decimal('0.20')
 TEAM_REWARD_FLOW_LEVEL = 100
@@ -64,7 +64,7 @@ class CommissionService:
             'frozen_amount': float(item.frozen_amount),
             'withdrawn_amount': float(item.withdrawn_amount),
             'total_amount': float(item.total_amount),
-            'updated_at': item.updated_at,
+            'updated_at': iso_datetime(item.updated_at),
         }
 
     @staticmethod
@@ -300,7 +300,7 @@ class CommissionService:
             'level2_amount': float(config.custom_commission_level2_amount or 0),
             'county_agent_amount': float(config.custom_commission_county_agent_amount or 0),
             'city_agent_amount': float(config.custom_commission_city_agent_amount or 0),
-            'updated_at': config.updated_at,
+            'updated_at': iso_datetime(config.updated_at),
         }
 
     @staticmethod
@@ -379,8 +379,8 @@ class CommissionService:
             'base_amount': float(flow.base_amount),
             'commission_amount': float(flow.commission_amount),
             'status': flow.status.value,
-            'settled_at': flow.settled_at,
-            'created_at': flow.created_at,
+            'settled_at': iso_datetime(flow.settled_at),
+            'created_at': iso_datetime(flow.created_at),
         }
 
     @staticmethod

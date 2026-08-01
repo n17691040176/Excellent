@@ -177,7 +177,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/datetime'
 
 import { commissionApi } from '@/api/modules'
 import { PageHeader, MetricCard, StatusTag } from '@/components/common'
@@ -241,7 +241,7 @@ function formatRate(value) {
 }
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 function zoneLabel(value) {

@@ -182,7 +182,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/datetime'
 import StatusTag from './StatusTag.vue'
 
 defineOptions({
@@ -327,7 +327,7 @@ function formatMoney(value) {
 
 // 格式化日期
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 // 获取选项标签

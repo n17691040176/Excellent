@@ -11,13 +11,19 @@ export function formatMoney(value, options = {}) {
 
 export function formatDateTime(value, fallback = '--') {
   if (!value) return fallback;
-  const d = new Date(value);
+  const raw = typeof value === 'string' ? value.trim() : value;
+  const hasOffset = typeof raw === 'string' && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const looksLikeServerTime = typeof raw === 'string'
+    && /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$/.test(raw);
+  const normalized = looksLikeServerTime && !hasOffset ? `${raw.replace(' ', 'T')}Z` : raw;
+  const d = new Date(normalized);
   if (Number.isNaN(d.getTime())) return fallback;
 
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const hour = String(d.getHours()).padStart(2, '0');
-  const minute = String(d.getMinutes()).padStart(2, '0');
+  const shanghai = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  const year = shanghai.getUTCFullYear();
+  const month = String(shanghai.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shanghai.getUTCDate()).padStart(2, '0');
+  const hour = String(shanghai.getUTCHours()).padStart(2, '0');
+  const minute = String(shanghai.getUTCMinutes()).padStart(2, '0');
   return `${year}-${month}-${day} ${hour}:${minute}`;
 }

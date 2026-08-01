@@ -25,6 +25,7 @@ from app.schemas.product import (
 )
 from app.services.catalog_service import ProductService
 from app.services.cos_storage_service import CosStorageService
+from app.utils.helpers import iso_datetime
 
 app_router = APIRouter(prefix='/app')
 admin_router = APIRouter(prefix='/admin')
@@ -157,8 +158,8 @@ def _serialize_category(category: ProductCategory, product_count: int = 0) -> di
         'sort_order': category.sort_order,
         'status': category.status,
         'product_count': product_count,
-        'created_at': category.created_at.isoformat() if category.created_at else None,
-        'updated_at': category.updated_at.isoformat() if category.updated_at else None,
+        'created_at': iso_datetime(category.created_at),
+        'updated_at': iso_datetime(category.updated_at),
     }
 
 

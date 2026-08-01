@@ -149,7 +149,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/datetime'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminAccountApi, roleApi } from '@/api/modules'
@@ -193,7 +193,7 @@ function teamLabel(teamId) {
 }
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 function defaultTeamId() {

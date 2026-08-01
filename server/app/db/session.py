@@ -5,6 +5,7 @@ from app.core.config import settings
 
 engine = create_engine(
     settings.database_url,
+    connect_args={'init_command': "SET time_zone = '+00:00'"},
     pool_pre_ping=True,
     pool_size=settings.mysql_pool_size,
     max_overflow=settings.mysql_max_overflow,

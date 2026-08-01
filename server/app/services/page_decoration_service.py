@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,6 +9,7 @@ from app.core.exceptions import AppError
 from app.models.page_decoration import PageDecoration
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
+from app.utils.helpers import iso_datetime
 
 MOBILE_UNI_HOME_KEY = 'mobile_uni_home'
 MOBILE_UNI_HOME_TITLE = 'uni 首页装修'
@@ -492,7 +493,7 @@ class PageDecorationService:
         if suffix not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
             suffix = PageDecorationService.IMAGE_SUFFIX_MAP.get(content_type, '.jpg')
 
-        month_dir = datetime.utcnow().strftime('%Y%m')
+        month_dir = datetime.now(UTC).strftime('%Y%m')
         target_dir = PageDecorationService.upload_root() / 'decorations' / 'mobile-home' / month_dir
         target_dir.mkdir(parents=True, exist_ok=True)
         target_name = f'{uuid4().hex}{suffix}'
@@ -589,7 +590,7 @@ class PageDecorationService:
             'title': MOBILE_UNI_HOME_TITLE,
             'team_id': team_id,
             'payload': payload,
-            'updated_at': record.updated_at.isoformat() if record and record.updated_at else None,
+            'updated_at': iso_datetime(record.updated_at) if record else None,
         }
 
     @staticmethod

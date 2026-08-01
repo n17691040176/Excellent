@@ -9,7 +9,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.models.earning_rule import EarningRule
 from app.models.user import User
 from app.schemas.earning_rule import EarningRuleCreateRequest, EarningRuleUpdateRequest
-from app.utils.helpers import quantize_amount
+from app.utils.helpers import iso_datetime, now, quantize_amount, utc_naive
 
 RULE_TYPE_VALUES = {
     'MEMBER_LEVEL',
@@ -56,12 +56,12 @@ class EarningRuleService:
             'is_active': rule.is_active,
             'compliance_note': rule.compliance_note,
             'remark': rule.remark,
-            'valid_from': rule.valid_from.isoformat() if rule.valid_from else None,
-            'valid_to': rule.valid_to.isoformat() if rule.valid_to else None,
+            'valid_from': iso_datetime(rule.valid_from),
+            'valid_to': iso_datetime(rule.valid_to),
             'created_by': rule.created_by,
             'updated_by': rule.updated_by,
-            'created_at': rule.created_at.isoformat() if rule.created_at else None,
-            'updated_at': rule.updated_at.isoformat() if rule.updated_at else None,
+            'created_at': iso_datetime(rule.created_at),
+            'updated_at': iso_datetime(rule.updated_at),
         }
 
     @staticmethod
@@ -236,7 +236,7 @@ class EarningRuleService:
 
     @staticmethod
     def _active_rate_query(db: Session):
-        current = datetime.now()
+        current = now()
         return db.query(EarningRule).filter(
             EarningRule.is_active.is_(True),
             EarningRule.calculation_method == 'RATE',
@@ -331,8 +331,9 @@ class EarningRuleService:
         if not value:
             return None
         if isinstance(value, datetime):
-            return value
+            return utc_naive(value)
         try:
-            return datetime.fromisoformat(str(value).replace('Z', '+00:00')).replace(tzinfo=None)
+            parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+            return utc_naive(parsed)
         except ValueError as exc:
             raise ConflictError('Datetime format invalid') from exc

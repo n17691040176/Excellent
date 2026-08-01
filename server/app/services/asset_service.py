@@ -17,7 +17,7 @@ from app.models.asset import (
 from app.models.enums import AssetDirection, AssetType, PowerBankStatus
 from app.models.user import User
 from app.services.earning_rule_service import PB_OWNER_DAILY_RULE, PB_REFERRAL_DAILY_RULE, EarningRuleService
-from app.utils.helpers import now, quantize_amount, today
+from app.utils.helpers import iso_datetime, now, quantize_amount, today
 
 DEFAULT_ASSET_TYPES = [AssetType.BALANCE, AssetType.POINTS, AssetType.VOUCHER, AssetType.AI_COUPON, AssetType.POWER_BANK]
 VISIBLE_ASSET_TOTAL_TYPES = {AssetType.BALANCE, AssetType.POINTS, AssetType.VOUCHER}
@@ -402,13 +402,13 @@ class AssetService:
             'device_code': power_bank.device_code,
             'device_name': power_bank.device_name,
             'status': power_bank.status.value,
-            'bound_at': power_bank.bound_at.isoformat(),
+            'bound_at': iso_datetime(power_bank.bound_at),
             'last_income_date': power_bank.last_income_date.isoformat() if power_bank.last_income_date else None,
             'total_income_amount': float(power_bank.total_income_amount),
             'total_referral_income_amount': float(power_bank.total_referral_income_amount),
             'remark': power_bank.remark,
-            'created_at': power_bank.created_at.isoformat(),
-            'updated_at': power_bank.updated_at.isoformat(),
+            'created_at': iso_datetime(power_bank.created_at),
+            'updated_at': iso_datetime(power_bank.updated_at),
         }
 
     @staticmethod

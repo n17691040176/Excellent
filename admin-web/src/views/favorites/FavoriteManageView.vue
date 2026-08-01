@@ -27,7 +27,9 @@
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="product_id" label="商品ID" width="100" />
         <el-table-column prop="product_name" label="商品名称" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="created_at" label="收藏时间" width="170" />
+        <el-table-column label="收藏时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-popconfirm
@@ -64,6 +66,7 @@ import { ref, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { favoriteApi } from '@/api/modules'
+import { formatDateTime } from '@/utils/datetime'
 
 const loading = ref(false)
 const favorites = ref([])

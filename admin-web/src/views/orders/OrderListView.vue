@@ -247,7 +247,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/datetime'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, ArrowDown } from '@element-plus/icons-vue'
 
@@ -331,7 +331,7 @@ const metrics = computed(() => {
 })
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 function formatMoney(value) {

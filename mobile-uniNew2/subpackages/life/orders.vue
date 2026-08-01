@@ -55,6 +55,7 @@ import { ref } from 'vue';
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app';
 import { localLifeApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
+import { formatDateTime } from '@/utils/format';
 import { trackPageView } from '@/utils/track';
 
 const loading = ref(false);
@@ -69,7 +70,7 @@ const toLifeOrderView = (item = {}, index = 0) => {
   return {
     no: item.order_no || item.no || `LIFE-${Date.now()}-${index}`,
     name: item.service_name || item.title || '未命名服务订单',
-    time: item.appointment_time || item.time || item.created_at || '--',
+    time: formatDateTime(item.appointment_time || item.time || item.created_at),
     status,
     badge: status === '已完成' ? 'done' : status === '已取消' ? 'cancel' : 'pending'
   };

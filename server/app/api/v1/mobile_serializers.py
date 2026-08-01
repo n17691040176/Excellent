@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC
 from decimal import Decimal
 from typing import Any
 
@@ -20,6 +19,7 @@ from app.models.product import Product, ProductCategory, ProductZoneConfig
 from app.models.supplier import Supplier
 from app.models.team import Team
 from app.models.user import User
+from app.utils.helpers import iso_datetime
 
 
 def enum_value(value: Any) -> Any:
@@ -32,16 +32,6 @@ def money(value: Any) -> float:
     if isinstance(value, Decimal):
         return float(value)
     return float(value)
-
-
-def iso_datetime(value: Any) -> str | None:
-    if not value:
-        return None
-    if isinstance(value, str):
-        return value
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.isoformat()
 
 
 TAG_RE = re.compile(r'<[^>]+>')

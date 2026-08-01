@@ -14,7 +14,7 @@ from app.models.user import User
 from app.schemas.region_agent import RegionAgentCreateRequest, RegionAgentUpdateRequest
 from app.services.admin_scope import AdminScopeService
 from app.services.region_dividend_service import RegionDividendService
-from app.utils.helpers import now
+from app.utils.helpers import iso_datetime, now
 
 router = APIRouter(prefix='/admin/region-agents', tags=['后台区域代理配置'])
 
@@ -213,8 +213,8 @@ def list_region_dividends(
         'dividend_rate': float(flow.dividend_rate),
         'dividend_amount': float(flow.dividend_amount),
         'status': flow.status,
-        'settled_at': flow.settled_at.isoformat() if flow.settled_at else None,
-        'created_at': flow.created_at.isoformat() if flow.created_at else None,
+        'settled_at': iso_datetime(flow.settled_at),
+        'created_at': iso_datetime(flow.created_at),
     } for flow, user in rows]
     return {'code': 0, 'message': 'success', 'data': {
         'items': items,

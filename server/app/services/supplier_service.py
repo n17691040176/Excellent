@@ -20,7 +20,7 @@ from app.models.product import Product, ProductQualification
 from app.models.supplier import AgentLevel, AgentQualification, Supplier, SupplierAgreement, SupplierEntryOrder
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
-from app.utils.helpers import generate_order_no, now, quantize_amount
+from app.utils.helpers import generate_order_no, iso_datetime, now, quantize_amount
 
 
 class SupplierService:
@@ -109,13 +109,13 @@ class SupplierService:
             'entry_fee_paid': bool(supplier.entry_fee_paid),
             'referral_user_id': supplier.referral_user_id,
             'status': supplier.status.value,
-            'created_at': supplier.created_at.isoformat() if getattr(supplier, 'created_at', None) else None,
-            'updated_at': supplier.updated_at.isoformat() if getattr(supplier, 'updated_at', None) else None,
+            'created_at': iso_datetime(getattr(supplier, 'created_at', None)),
+            'updated_at': iso_datetime(getattr(supplier, 'updated_at', None)),
             'active_agreement': bool(active_agreement),
             'agreement_type': active_agreement.agreement_type if active_agreement else None,
-            'agreement_signed_at': active_agreement.signed_at.isoformat() if active_agreement and active_agreement.signed_at else None,
+            'agreement_signed_at': iso_datetime(active_agreement.signed_at) if active_agreement else None,
             'latest_entry_order_status': latest_entry_order.status if latest_entry_order else None,
-            'latest_entry_order_paid_at': latest_entry_order.paid_at.isoformat() if latest_entry_order and latest_entry_order.paid_at else None,
+            'latest_entry_order_paid_at': iso_datetime(latest_entry_order.paid_at) if latest_entry_order else None,
             'approved_qualification_count': approved_qualification_count,
             'pending_qualification_count': pending_qualification_count,
         }
@@ -465,8 +465,8 @@ class SupplierService:
                 'quota_remaining': max(quota_total - quota_used, 0),
                 'agreement_active': bool(agent_qualification and agent_qualification.agreement_signed),
                 'summary': f"{agent_level.level_name if agent_level else '代理资格'} / 剩余 {max(quota_total - quota_used, 0)}/{quota_total}",
-                'effective_at': agent_qualification.effective_at.isoformat() if agent_qualification and agent_qualification.effective_at else None,
-                'expired_at': agent_qualification.expired_at.isoformat() if agent_qualification and agent_qualification.expired_at else None,
+                'effective_at': iso_datetime(agent_qualification.effective_at) if agent_qualification else None,
+                'expired_at': iso_datetime(agent_qualification.expired_at) if agent_qualification else None,
             }
         )
         if applicant and agent_level:
@@ -494,8 +494,8 @@ class SupplierService:
             'audit_status': row.audit_status.value,
             'audit_remark': row.audit_remark,
             'audited_by': row.audited_by,
-            'audited_at': row.audited_at.isoformat() if row.audited_at else None,
-            'created_at': row.created_at.isoformat() if row.created_at else None,
+            'audited_at': iso_datetime(row.audited_at),
+            'created_at': iso_datetime(row.created_at),
             'source_snapshot': source_snapshot,
             'source_summary': source_snapshot['summary'],
             'source_status': source_snapshot['source_status_text'],
@@ -536,8 +536,8 @@ class SupplierService:
             'occupancy_status': occupancy_status,
             'occupancy_status_label': occupancy_status_label,
             'occupancy_active': occupancy_active,
-            'occupied_at': row.created_at.isoformat() if row.created_at else None,
-            'released_at': row.audited_at.isoformat() if row.audit_status == QualificationStatus.REJECTED and row.audited_at else None,
+            'occupied_at': iso_datetime(row.created_at),
+            'released_at': iso_datetime(row.audited_at) if row.audit_status == QualificationStatus.REJECTED else None,
             'release_reason': row.audit_remark if row.audit_status == QualificationStatus.REJECTED else None,
             'owner_bound': owner_bound,
             'owner_bound_label': '已绑定归属' if owner_bound else '未绑定归属',

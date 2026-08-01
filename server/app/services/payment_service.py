@@ -32,7 +32,7 @@ from app.core.payment_config import (
 from app.models.enums import OrderType, PaymentChannel, PaymentStatus, PayStatus
 from app.models.order import Order
 from app.models.payment import PaymentTransaction
-from app.utils.helpers import now, quantize_amount
+from app.utils.helpers import business_now, now, quantize_amount, unix_timestamp
 
 
 class PaymentService:
@@ -176,7 +176,7 @@ class PaymentService:
     def _wechat_request_json(url: str, body: dict[str, Any], config: WechatPayConfig) -> dict[str, Any]:
         payload = json.dumps(body, ensure_ascii=False, separators=(',', ':'))
         nonce = uuid4().hex
-        timestamp = str(int(now().timestamp()))
+        timestamp = str(unix_timestamp())
         parsed = urlparse(url)
         canonical_url = parsed.path or '/'
         if parsed.query:
@@ -237,7 +237,7 @@ class PaymentService:
             raise ConflictError('WeChat payment prepay_id is missing')
 
         nonce = uuid4().hex
-        timestamp = str(int(now().timestamp()))
+        timestamp = str(unix_timestamp())
         private_key = PaymentService._load_private_key(config.merchant_private_key_path)
         sign_message = f'{config.app_id}\n{config.mchid}\n{prepay_id}\nSign=WXPay\n{nonce}\n{timestamp}\n'
         sign = PaymentService._rsa_sign(private_key, sign_message)
@@ -332,7 +332,7 @@ class PaymentService:
             'format': 'JSON',
             'charset': config.charset,
             'sign_type': config.sign_type,
-            'timestamp': now().strftime('%Y-%m-%d %H:%M:%S'),
+            'timestamp': business_now().strftime('%Y-%m-%d %H:%M:%S'),
             'version': '1.0',
             'biz_content': json.dumps(biz_content, ensure_ascii=False, separators=(',', ':')),
         }
@@ -404,7 +404,7 @@ class PaymentService:
             'format': 'JSON',
             'charset': config.charset,
             'sign_type': config.sign_type,
-            'timestamp': now().strftime('%Y-%m-%d %H:%M:%S'),
+            'timestamp': business_now().strftime('%Y-%m-%d %H:%M:%S'),
             'version': '1.0',
             'notify_url': config.notify_url,
             'biz_content': json.dumps(biz_content, ensure_ascii=False, separators=(',', ':')),
@@ -464,7 +464,7 @@ class PaymentService:
                 'prepayid': f'mock-prepay-{tx.out_trade_no}',
                 'package': 'Sign=WXPay',
                 'noncestr': uuid4().hex,
-                'timestamp': str(int(now().timestamp())),
+                'timestamp': str(unix_timestamp()),
                 'sign': 'MOCK-WECHAT-SIGN',
             }
         else:

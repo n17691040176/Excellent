@@ -216,10 +216,10 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { earningRuleApi } from '@/api/modules'
+import { formatDateTime, serverDateTimeToDate, shanghaiDateTimeToUtcISOString } from '@/utils/datetime'
 
 const rules = ref([])
 const loading = ref(false)
@@ -328,7 +328,7 @@ function amountText(value) {
 }
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 function toPayload() {
@@ -346,8 +346,8 @@ function toPayload() {
   payload.product_id = payload.product_id || null
   payload.commission_level = payload.commission_level || null
   payload.cap_amount = payload.cap_amount === '' ? null : payload.cap_amount
-  payload.valid_from = payload.valid_from ? new Date(payload.valid_from).toISOString() : null
-  payload.valid_to = payload.valid_to ? new Date(payload.valid_to).toISOString() : null
+  payload.valid_from = shanghaiDateTimeToUtcISOString(payload.valid_from)
+  payload.valid_to = shanghaiDateTimeToUtcISOString(payload.valid_to)
   return payload
 }
 
@@ -392,8 +392,8 @@ function openEdit(row) {
     member_level: row.member_level || '',
     commission_level: row.commission_level ?? null,
     cap_amount: row.cap_amount ?? null,
-    valid_from: row.valid_from ? new Date(row.valid_from) : null,
-    valid_to: row.valid_to ? new Date(row.valid_to) : null
+    valid_from: serverDateTimeToDate(row.valid_from),
+    valid_to: serverDateTimeToDate(row.valid_to)
   }
   drawerVisible.value = true
 }

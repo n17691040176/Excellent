@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.utils.helpers import now
 
 
 class RegionAgent(Base):
@@ -92,7 +93,7 @@ class RegionAgent(Base):
             return False
         if not self.agreement_signed:
             return False
-        now = datetime.now()
-        if self.effective_at and self.effective_at > now:
+        current = now()
+        if self.effective_at and self.effective_at > current:
             return False
-        return not (self.expired_at and self.expired_at < now)
+        return not (self.expired_at and self.expired_at < current)

@@ -15,7 +15,7 @@ from app.services.admin_permission_service import (
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import init_user_assets
 from app.models.commission import UserCommission
-from app.utils.helpers import generate_code, now
+from app.utils.helpers import generate_code, iso_datetime, now
 
 
 class AdminRbacService:
@@ -89,8 +89,8 @@ class AdminRbacService:
             'is_system': role.is_system,
             'permissions': AdminRbacService._role_permissions(db, role.id),
             'user_count': int(db.query(func.count(User.id)).filter(User.admin_role_id == role.id).scalar() or 0),
-            'created_at': role.created_at,
-            'updated_at': role.updated_at,
+            'created_at': iso_datetime(role.created_at),
+            'updated_at': iso_datetime(role.updated_at),
         }
 
     @staticmethod
@@ -199,8 +199,8 @@ class AdminRbacService:
             'team_id': user.team_id,
             'status': user.status.value,
             'permissions': AdminPermissionService.effective_permissions(db, user),
-            'last_login_at': user.last_login_at,
-            'created_at': user.created_at,
+            'last_login_at': iso_datetime(user.last_login_at),
+            'created_at': iso_datetime(user.created_at),
         }
 
     @staticmethod

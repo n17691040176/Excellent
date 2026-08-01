@@ -6,6 +6,7 @@ from app.api.deps.auth import require_roles
 from app.db.session import get_db
 from app.models.enums import GlobalRole
 from app.models.user import User
+from app.utils.helpers import iso_datetime
 
 admin_router = APIRouter(prefix='/admin/invites')
 
@@ -102,7 +103,7 @@ def list_users_with_invites(
             'level2_count': level2,
             'total_invites': level1 + level2,
             'inviter': inviter,
-            'created_at': user.created_at.isoformat() if user.created_at else None,
+            'created_at': iso_datetime(user.created_at),
         })
 
     return {
@@ -171,7 +172,7 @@ def list_invite_records(
             'invite_level': 1 if user.grandparent_id is None else 2,
             'inviter': inviter,
             'grand_inviter': grand_inviter,
-            'created_at': user.created_at.isoformat() if user.created_at else None,
+            'created_at': iso_datetime(user.created_at),
         })
 
     return {
@@ -210,7 +211,7 @@ def get_user_invite_tree(
             'id': u.id,
             'username': u.nickname,
             'phone': u.phone or '',
-            'created_at': u.created_at.isoformat() if u.created_at else None,
+            'created_at': iso_datetime(u.created_at),
         }
 
     return {

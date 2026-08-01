@@ -9,6 +9,7 @@ from app.models.enums import GlobalRole, OrderStatus
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import User
+from app.utils.helpers import iso_datetime
 
 admin_router = APIRouter(prefix='/admin/commerce')
 
@@ -62,7 +63,7 @@ def list_all_favorites(
             'username': row[1],
             'product_id': row[0].product_id,
             'product_name': row[2],
-            'created_at': row[0].created_at.isoformat() if row[0].created_at else None,
+            'created_at': iso_datetime(row[0].created_at),
         })
 
     return {
@@ -123,8 +124,8 @@ def list_all_footprints(
             'product_id': row[0].product_id,
             'product_name': row[2],
             'view_count': row[0].view_count,
-            'first_viewed_at': row[0].first_viewed_at.isoformat() if row[0].first_viewed_at else None,
-            'last_viewed_at': row[0].last_viewed_at.isoformat() if row[0].last_viewed_at else None,
+            'first_viewed_at': iso_datetime(row[0].first_viewed_at),
+            'last_viewed_at': iso_datetime(row[0].last_viewed_at),
         })
 
     return {
@@ -196,8 +197,8 @@ def list_all_shipments(
             'carrier_name': order.legacy_logistics_name or '',
             'carrier_phone': '',
             'amount': float(order.total_amount or 0),
-            'created_at': order.created_at.isoformat() if order.created_at else None,
-            'updated_at': order.updated_at.isoformat() if order.updated_at else None,
+            'created_at': iso_datetime(order.created_at),
+            'updated_at': iso_datetime(order.updated_at),
         })
 
     return {
@@ -244,8 +245,8 @@ def shipment_admin_detail(
             'delivery_mode_text': _get_delivery_mode_text('express'),
             'amount': float(order.total_amount or 0),
             'progress_percent': _get_shipping_progress(shipment_status),
-            'created_at': order.created_at.isoformat() if order.created_at else None,
-            'updated_at': order.updated_at.isoformat() if order.updated_at else None,
+            'created_at': iso_datetime(order.created_at),
+            'updated_at': iso_datetime(order.updated_at),
         }
     }
 

@@ -98,7 +98,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/datetime'
 
 import { assetApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
@@ -168,7 +168,7 @@ const pagedLedgers = computed(() => {
 })
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 async function loadCurrentAsset() {

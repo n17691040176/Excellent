@@ -69,7 +69,9 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="注册时间" width="170" />
+            <el-table-column label="注册时间" width="170">
+              <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+            </el-table-column>
             <el-table-column label="操作" width="120" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="viewTree(row)">
@@ -138,7 +140,9 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="注册时间" width="170" />
+            <el-table-column label="注册时间" width="170">
+              <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+            </el-table-column>
           </el-table>
 
           <div class="pagination-wrap">
@@ -170,7 +174,7 @@
           <div v-for="u in treeData.level1" :key="u.id" class="tree-item">
             <span class="tree-item-name">{{ u.username }}</span>
             <span class="tree-item-phone">{{ u.phone }}</span>
-            <span class="tree-item-time">{{ u.created_at }}</span>
+            <span class="tree-item-time">{{ formatDateTime(u.created_at) }}</span>
           </div>
         </div>
         <el-empty v-else description="暂无一级下线" :image-size="60" />
@@ -182,7 +186,7 @@
           <div v-for="u in treeData.level2" :key="u.id" class="tree-item">
             <span class="tree-item-name">{{ u.username }}</span>
             <span class="tree-item-phone">{{ u.phone }}</span>
-            <span class="tree-item-time">{{ u.created_at }}</span>
+            <span class="tree-item-time">{{ formatDateTime(u.created_at) }}</span>
           </div>
         </div>
         <el-empty v-else description="暂无二级下线" :image-size="60" />
@@ -195,6 +199,7 @@
 import { ref, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { inviteApi } from '@/api/modules'
+import { formatDateTime } from '@/utils/datetime'
 
 const activeTab = ref('users')
 const loading = ref(false)

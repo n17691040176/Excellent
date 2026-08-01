@@ -223,10 +223,10 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { regionApi, userApi } from '@/api/modules'
+import { formatDateTime, formatDateTimeInput, shanghaiDateTimeToUtcISOString } from '@/utils/datetime'
 import { findRegionPath, regionOptions } from '@/utils/region-options'
 
 const loadingAgents = ref(false)
@@ -277,7 +277,7 @@ function createEmptyForm() {
 }
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 function formatExpiry(value) {
@@ -377,8 +377,8 @@ function openEditDialog(row) {
     userId: row.user_id,
     agentType: row.agent_type,
     region: findRegionPath(row.province, row.city, row.district),
-    effectiveAt: row.effective_at ? dayjs(row.effective_at).format('YYYY-MM-DDTHH:mm:ss') : null,
-    expiredAt: row.expired_at ? dayjs(row.expired_at).format('YYYY-MM-DDTHH:mm:ss') : null,
+    effectiveAt: formatDateTimeInput(row.effective_at),
+    expiredAt: formatDateTimeInput(row.expired_at),
     remark: row.audit_remark || ''
   }
   agentDialogVisible.value = true
@@ -404,8 +404,8 @@ async function saveAgent() {
     province,
     city,
     district: form.agentType === 'COUNTY_AGENT' ? district : '',
-    effective_at: form.effectiveAt || null,
-    expired_at: form.expiredAt || null,
+    effective_at: shanghaiDateTimeToUtcISOString(form.effectiveAt),
+    expired_at: shanghaiDateTimeToUtcISOString(form.expiredAt),
     remark: form.remark || null
   }
   savingAgent.value = true

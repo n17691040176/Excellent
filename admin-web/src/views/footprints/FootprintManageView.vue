@@ -32,8 +32,12 @@
             <el-badge :value="row.view_count" :max="99" type="primary" />
           </template>
         </el-table-column>
-        <el-table-column prop="first_viewed_at" label="首次浏览" width="170" />
-        <el-table-column prop="last_viewed_at" label="最近浏览" width="170" />
+        <el-table-column prop="first_viewed_at" label="首次浏览" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.first_viewed_at) }}</template>
+        </el-table-column>
+        <el-table-column prop="last_viewed_at" label="最近浏览" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.last_viewed_at) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-popconfirm
@@ -70,6 +74,7 @@ import { ref, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { footprintApi } from '@/api/modules'
+import { formatDateTime } from '@/utils/datetime'
 
 const loading = ref(false)
 const footprints = ref([])

@@ -13,7 +13,7 @@ from app.models.product import Product, ProductZoneConfig
 from app.models.region_agent import RegionAgent
 from app.models.region_dividend import RegionDividendFlow
 from app.models.user import User
-from app.utils.helpers import now, quantize_amount
+from app.utils.helpers import iso_datetime, now, quantize_amount, utc_naive
 
 
 class RegionDividendService:
@@ -340,14 +340,14 @@ class RegionDividendService:
             'status': agent.status,
             'total_orders': int(agent.total_orders or 0),
             'total_dividend': float(agent.total_dividend or 0),
-            'effective_at': agent.effective_at.isoformat() if agent.effective_at else None,
-            'expired_at': agent.expired_at.isoformat() if agent.expired_at else None,
+            'effective_at': iso_datetime(agent.effective_at),
+            'expired_at': iso_datetime(agent.expired_at),
             'agreement_signed': bool(agent.agreement_signed),
             'agreement_url': agent.agreement_url,
             'resource_proof_url': agent.resource_proof_url,
             'audit_remark': agent.audit_remark,
-            'audited_at': agent.audited_at.isoformat() if agent.audited_at else None,
-            'created_at': agent.created_at.isoformat() if agent.created_at else None,
+            'audited_at': iso_datetime(agent.audited_at),
+            'created_at': iso_datetime(agent.created_at),
         }
 
     @staticmethod
@@ -363,6 +363,8 @@ class RegionDividendService:
         expired_at=None,
         remark: str | None = None,
     ) -> RegionAgent:
+        effective_at = utc_naive(effective_at)
+        expired_at = utc_naive(expired_at)
         user = db.get(User, user_id)
         if not user:
             raise NotFoundError('代理用户不存在')
@@ -418,6 +420,8 @@ class RegionDividendService:
         expired_at=None,
         remark: str | None = None,
     ) -> RegionAgent:
+        effective_at = utc_naive(effective_at)
+        expired_at = utc_naive(expired_at)
         agent = db.get(RegionAgent, agent_id)
         if not agent:
             raise NotFoundError('区域代理不存在')

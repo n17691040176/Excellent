@@ -152,11 +152,11 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { commissionApi } from '@/api/modules'
 import { useUserStore } from '@/stores/user'
+import { formatDateTime, isDateTimeInShanghaiDateRange } from '@/utils/datetime'
 import { PageHeader, MetricCard, FilterBar, StatusTag } from '@/components/common'
 
 const userStore = useUserStore()
@@ -232,7 +232,7 @@ const filteredRows = computed(() => {
     const hitType = !filters.value.withdraw_type || item.withdraw_type === filters.value.withdraw_type
     const hitDate =
       !filters.value.dateRange?.length ||
-      (item.created_at >= filters.value.dateRange[0] && item.created_at <= filters.value.dateRange[1] + ' 23:59:59')
+      isDateTimeInShanghaiDateRange(item.created_at, filters.value.dateRange[0], filters.value.dateRange[1])
     return hitKeyword && hitStatus && hitType && hitDate
   })
 })
@@ -243,7 +243,7 @@ const pagedRows = computed(() => {
 })
 
 function formatDate(value) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '--'
+  return formatDateTime(value)
 }
 
 function formatMoney(value) {

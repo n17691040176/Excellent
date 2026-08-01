@@ -29,7 +29,7 @@ from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 from app.services.user_service import UserService
-from app.utils.helpers import generate_order_no, now, quantize_amount
+from app.utils.helpers import generate_order_no, iso_datetime, now, quantize_amount
 from app.utils.spreadsheet import load_tabular_rows
 
 
@@ -143,7 +143,7 @@ class PackageService:
                 'package_id': package.id,
                 'package_name': package.package_name,
                 'paid_amount': float(order.paid_amount),
-                'paid_at': order.paid_at.isoformat() if order.paid_at else None,
+                'paid_at': iso_datetime(order.paid_at),
                 'order_status': order.order_status.value,
                 'grants_product_quota': package.grants_product_quota,
             }
@@ -861,12 +861,12 @@ class ProductService:
             'hehuoren_price': float(product.hehuoren_price) if product.hehuoren_price is not None else None,
             'xiaofeijin_price': float(product.xiaofeijin_price) if product.xiaofeijin_price is not None else None,
             'create_by': product.create_by,
-            'create_time': product.create_time.isoformat() if product.create_time else None,
+            'create_time': iso_datetime(product.create_time),
             'update_by': product.update_by,
-            'update_time': product.update_time.isoformat() if product.update_time else None,
+            'update_time': iso_datetime(product.update_time),
             'verify_state': product.verify_state,
             'verify_by': product.verify_by,
-            'verify_time': product.verify_time.isoformat() if product.verify_time else None,
+            'verify_time': iso_datetime(product.verify_time),
             'verify_remark': product.verify_remark,
             'dept_id': product.dept_id,
             'is_delete': product.is_delete,
@@ -908,8 +908,8 @@ class ProductService:
             'balance_only_enabled': bool(zone_config.get('balance_only_enabled')),
             'balance_points_enabled': bool(zone_config.get('balance_points_enabled')),
             'zone_rule_summary': ProductService._zone_config_summary(zone_config),
-            'created_at': product.created_at.isoformat() if product.created_at else None,
-            'updated_at': product.updated_at.isoformat() if product.updated_at else None,
+            'created_at': iso_datetime(product.created_at),
+            'updated_at': iso_datetime(product.updated_at),
             'publish_guard': ProductService._build_supplier_publish_guard(db, product),
         }
 

@@ -6,7 +6,7 @@
 import hashlib
 import hmac
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy.orm import Session
@@ -37,7 +37,7 @@ class DypnsService:
     @classmethod
     def _request_api(cls, action: str, params: dict) -> dict:
         """发送请求到阿里云"""
-        timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        timestamp = datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         common_params = {
             'Format': 'JSON',

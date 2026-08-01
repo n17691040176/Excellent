@@ -18,7 +18,7 @@ from app.models.user import InviteRecord, User, UserLegacyProfile
 from app.services.admin_permission_service import AdminPermissionService
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
-from app.utils.helpers import now
+from app.utils.helpers import iso_datetime, now
 
 
 class UserService:
@@ -191,9 +191,9 @@ class UserService:
             'grandparent_id': user.grandparent_id,
             'team_id': user.team_id,
             'real_name': user.real_name,
-            'last_login_at': user.last_login_at,
-            'created_at': user.created_at,
-            'updated_at': user.updated_at,
+            'last_login_at': iso_datetime(user.last_login_at),
+            'created_at': iso_datetime(user.created_at),
+            'updated_at': iso_datetime(user.updated_at),
             'is_legacy_user': UserService.is_legacy_user(db, user),
             'is_legacy_imported': UserService.is_legacy_user(db, user),
             'permissions': AdminPermissionService.effective_permissions(db, user),
@@ -222,9 +222,9 @@ class UserService:
             'grandparent_id': user.grandparent_id,
             'team_id': user.team_id,
             'real_name': user.real_name,
-            'last_login_at': user.last_login_at,
-            'created_at': user.created_at,
-            'updated_at': user.updated_at,
+            'last_login_at': iso_datetime(user.last_login_at),
+            'created_at': iso_datetime(user.created_at),
+            'updated_at': iso_datetime(user.updated_at),
             'is_legacy_imported': legacy_profile is not None,
             'legacy_user_id': legacy_profile.legacy_user_id if legacy_profile else None,
         }
@@ -378,13 +378,13 @@ class UserService:
                     'device_code': item.device_code,
                     'device_name': item.device_name,
                     'status': item.status.value,
-                    'bound_at': item.bound_at,
+                    'bound_at': iso_datetime(item.bound_at),
                     'last_income_date': item.last_income_date,
                     'total_income_amount': float(item.total_income_amount),
                     'total_referral_income_amount': float(item.total_referral_income_amount),
                     'remark': item.remark,
-                    'created_at': item.created_at,
-                    'updated_at': item.updated_at,
+                    'created_at': iso_datetime(item.created_at),
+                    'updated_at': iso_datetime(item.updated_at),
                 }
                 for item in power_banks
             ],
@@ -400,7 +400,7 @@ class UserService:
                     'source_id': item.source_id,
                     'source_no': item.source_no,
                     'remark': item.remark,
-                    'created_at': item.created_at,
+                    'created_at': iso_datetime(item.created_at),
                 }
                 for item in asset_ledger_rows
             ],
@@ -415,8 +415,8 @@ class UserService:
                     'paid_amount': float(item.paid_amount),
                     'pay_status': item.pay_status.value,
                     'order_status': item.order_status.value,
-                    'created_at': item.created_at,
-                    'paid_at': item.paid_at,
+                    'created_at': iso_datetime(item.created_at),
+                    'paid_at': iso_datetime(item.paid_at),
                 }
                 for item in recent_orders
             ],

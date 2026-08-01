@@ -79,6 +79,7 @@ import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { commerceApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
+import { formatDateTime as formatTime } from '@/utils/format';
 import { trackEvent, trackPageView } from '@/utils/track';
 
 const loading = ref(false);
@@ -87,11 +88,6 @@ const items = ref([]);
 
 function money(value) {
   return Number(value || 0).toFixed(2);
-}
-
-function formatTime(value) {
-  if (!value) return '--';
-  return String(value).replace('T', ' ').slice(0, 16);
 }
 
 async function loadData() {
