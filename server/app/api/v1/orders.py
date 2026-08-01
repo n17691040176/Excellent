@@ -72,6 +72,11 @@ def unread_order_counts(db: Session = Depends(get_db), current_user: User = Depe
     return {'code': 0, 'message': 'success', 'data': OrderService.order_unread_counts(db, current_user.id)}
 
 
+@app_router.get('/status-counts')
+def order_status_counts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return {'code': 0, 'message': 'success', 'data': OrderService.order_status_counts(db, current_user.id)}
+
+
 @app_router.post('/viewed')
 def mark_orders_viewed(
     payload: MarkOrdersViewedRequest,

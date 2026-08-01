@@ -147,7 +147,12 @@ const loadMoreText = computed(() => {
 });
 
 function goBack() {
-  uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/profile/index' }) });
+  const pages = getCurrentPages();
+  if (pages.length <= 1) {
+    uni.switchTab({ url: '/pages/profile/index' });
+    return;
+  }
+  uni.navigateBack();
 }
 
 async function fetchOrders({ reset = false } = {}) {

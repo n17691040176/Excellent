@@ -808,6 +808,15 @@ class OrderService:
         return db.query(Order).filter(Order.user_id == user_id).order_by(Order.id.desc()).all()
 
     @staticmethod
+    def order_status_counts(db: Session, user_id: int) -> dict[str, int]:
+        counts = dict.fromkeys(ORDER_STATUS_BUCKETS, 0)
+        for order in OrderService.list_orders(db, user_id):
+            status_key = ORDER_STATUS_BUCKET_MAP.get(order.order_status)
+            if status_key:
+                counts[status_key] += 1
+        return counts
+
+    @staticmethod
     def order_unread_counts(db: Session, user_id: int) -> dict[str, int]:
         orders = OrderService.list_orders(db, user_id)
         views = db.query(OrderStatusView).filter(OrderStatusView.user_id == user_id).all()

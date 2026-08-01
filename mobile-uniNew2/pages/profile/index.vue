@@ -274,7 +274,7 @@ const goLogin = () => {
 
 const loadProfile = async () => {
   try {
-    const [profileRes, teamRes, assetRes, commissionRes, inviteRes, favoritesRes, cartRes, footprintsRes, shipmentsRes, unreadCountsRes] = await Promise.allSettled([
+    const [profileRes, teamRes, assetRes, commissionRes, inviteRes, favoritesRes, cartRes, footprintsRes, shipmentsRes, statusCountsRes] = await Promise.allSettled([
       userApi.profile(),
       userApi.teamSummary(),
       assetApi.summary(),
@@ -284,7 +284,7 @@ const loadProfile = async () => {
       commerceApi.cart(),
       commerceApi.footprints({ page: 1, page_size: 100 }),
       commerceApi.shipments(),
-      orderApi.unreadCounts()
+      orderApi.statusCounts()
     ]);
 
     if (profileRes.status === 'fulfilled') {
@@ -315,8 +315,8 @@ const loadProfile = async () => {
       shippingCount.value = shipments.length > 0 ? String(shipments.length) : '';
     }
 
-    if (unreadCountsRes.status === 'fulfilled') {
-      const counts = unreadCountsRes.value || {};
+    if (statusCountsRes.status === 'fulfilled') {
+      const counts = statusCountsRes.value || {};
       pendingCount.value = formatOrderBadge(counts.pending_payment);
       pendingShipCount.value = formatOrderBadge(counts.pending_ship);
       shippedCount.value = formatOrderBadge(counts.shipped);

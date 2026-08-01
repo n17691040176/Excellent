@@ -109,6 +109,9 @@ export const orderApi = {
   unreadCounts() {
     return request.get('/api/v1/app/orders/unread-counts', { hideLoading: true });
   },
+  statusCounts() {
+    return request.get('/api/v1/app/orders/status-counts', { hideLoading: true });
+  },
   markViewed(status = 'all') {
     return request.post('/api/v1/app/orders/viewed', { status }, { hideLoading: true });
   },

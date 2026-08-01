@@ -41,6 +41,29 @@ def test_unread_counts_only_include_orders_newer_than_status_view():
     }
 
 
+def test_status_counts_include_all_current_orders_even_when_viewed():
+    updated_at = datetime(2026, 7, 21, 10, 0)
+    orders = [
+        make_order(OrderStatus.PENDING_PAYMENT, updated_at),
+        make_order(OrderStatus.PENDING_SHIP, updated_at),
+        make_order(OrderStatus.PENDING_SHIP, updated_at),
+        make_order(OrderStatus.SHIPPED, updated_at),
+        make_order(OrderStatus.COMPLETED, updated_at),
+        make_order(OrderStatus.REFUND, updated_at),
+    ]
+
+    with patch.object(OrderService, 'list_orders', return_value=orders):
+        counts = OrderService.order_status_counts(MagicMock(), user_id=7)
+
+    assert counts == {
+        'pending_payment': 1,
+        'pending_ship': 2,
+        'shipped': 1,
+        'completed': 1,
+        'refund': 1,
+    }
+
+
 def test_marking_all_statuses_viewed_creates_each_marker():
     db = MagicMock()
     db.query.return_value.filter.return_value.all.return_value = []
