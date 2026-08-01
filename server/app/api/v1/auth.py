@@ -113,39 +113,12 @@ def app_login(payload: AppLoginRequest, db: Session = Depends(get_db)):
     1. 手机号已存在 → 直接登录返回token
     2. 手机号不存在 → 自动创建用户并登录（免注册）
     """
-    phone = payload.phone.strip()
-
-    # 查询用户
-    user = db.query(User).filter(User.phone == phone).first()
-
-    if user:
-        # 已存在但尚未绑定上级的用户，也可通过邀请二维码补绑。
-        if payload.invite_code and not user.parent_id:
-            UserService.bind_inviter(db, user, payload.invite_code)
-        token, user = AuthService.finalize_login(db, user)
-        return {
-            'code': 0,
-            'message': 'success',
-            'data': {
-                'access_token': token,
-                'token_type': 'bearer',
-                'user': UserService.serialize_app_user(db, user),
-                'is_new_user': False
-            }
-        }
-
-    # 新用户，自动注册
-    user = AuthService.create_passwordless_user(
+    token, user, is_new_user = AuthService.login_or_register_app_user(
         db,
-        phone,
-        payload.nickname or f"用户{phone[-4:]}",
+        payload.phone,
+        payload.nickname,
         payload.invite_code,
     )
-    user.is_phone_verified = True
-    db.commit()
-    db.refresh(user)
-
-    token = AuthService.issue_token(user)
     return {
         'code': 0,
         'message': 'success',
@@ -153,7 +126,7 @@ def app_login(payload: AppLoginRequest, db: Session = Depends(get_db)):
             'access_token': token,
             'token_type': 'bearer',
             'user': UserService.serialize_app_user(db, user),
-            'is_new_user': True
+            'is_new_user': is_new_user,
         }
     }
 

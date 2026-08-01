@@ -1,4 +1,6 @@
-from pydantic import Field
+import re
+
+from pydantic import Field, field_validator
 
 from app.schemas.common import AppBaseModel
 
@@ -52,3 +54,11 @@ class AppLoginRequest(AppBaseModel):
     phone: str = Field(min_length=11, max_length=11, description="手机号（App端已验证）")
     nickname: str | None = Field(default=None, max_length=64, description="昵称（首次登录时可选）")
     invite_code: str | None = Field(default=None, max_length=32, description="邀请码")
+
+    @field_validator('phone', mode='before')
+    @classmethod
+    def validate_phone(cls, value) -> str:
+        phone = str(value or '').strip()
+        if not re.fullmatch(r'1[3-9]\d{9}', phone):
+            raise ValueError('手机号格式不正确')
+        return phone

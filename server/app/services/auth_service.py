@@ -5,6 +5,7 @@ from string import digits
 from typing import cast
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -109,6 +110,41 @@ class AuthService:
         invite_code: str | None = None,
     ) -> User:
         return AuthService._create_user(db, phone, generate_code(length=12), nickname, invite_code)
+
+    @staticmethod
+    def login_or_register_app_user(
+        db: Session,
+        phone: str,
+        nickname: str | None = None,
+        invite_code: str | None = None,
+    ) -> tuple[str, User, bool]:
+        user = db.query(User).filter(User.phone == phone).first()
+        is_new_user = user is None
+
+        if user is None:
+            try:
+                user = AuthService.create_passwordless_user(
+                    db,
+                    phone,
+                    nickname or f'用户{phone[-4:]}',
+                    invite_code,
+                )
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                user = db.query(User).filter(User.phone == phone).first()
+                if user is None:
+                    raise
+                is_new_user = False
+
+        if not is_new_user and invite_code and not user.parent_id:
+            from app.services.user_service import UserService
+
+            UserService.bind_inviter(db, user, invite_code)
+
+        user.is_phone_verified = True
+        token, user = AuthService._finalize_login(db, user)
+        return token, user, is_new_user
 
     @staticmethod
     def _login_code_key(phone: str) -> str:
