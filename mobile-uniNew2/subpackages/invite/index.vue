@@ -5,6 +5,7 @@
         <AppBackButton @click="goBack" />
         <text class="page-title">邀请好友</text>
         <view
+          v-if="scanBindingEnabled"
           class="header-scan"
           :class="{ disabled: scanning || binding }"
           role="button"
@@ -38,10 +39,15 @@
       </button>
 
       <view class="secondary-actions">
-        <button class="secondary-btn" :disabled="binding || scanning" @click="scanInvite">
+        <button
+          v-if="scanBindingEnabled"
+          class="secondary-btn"
+          :disabled="binding || scanning"
+          @click="scanInvite"
+        >
           {{ scanning ? '识别中...' : (binding ? '绑定中...' : '扫一扫绑定上级') }}
         </button>
-        <view class="action-divider" />
+        <view v-if="scanBindingEnabled" class="action-divider" />
         <button class="secondary-btn" @click="openManualBind">输入邀请码</button>
       </view>
     </view>
@@ -196,6 +202,7 @@ import { trackPageView } from '@/utils/track';
 const POSTER_WIDTH = 600;
 const POSTER_HEIGHT = 840;
 const POSTER_CANVAS_ID = 'invitePosterCanvas';
+const scanBindingEnabled = false;
 
 const loading = ref(false);
 const failed = ref(false);
