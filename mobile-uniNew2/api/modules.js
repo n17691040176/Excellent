@@ -93,6 +93,27 @@ export const commissionApi = {
   },
   createWithdraw(data) {
     return request.post('/api/v1/app/withdraws', data);
+  },
+  withdrawConfig() {
+    return request.get('/api/v1/app/withdraws/config', { hideLoading: true });
+  }
+};
+
+export const bankCardApi = {
+  list() {
+    return request.get('/api/v1/app/bank-cards', { hideLoading: true });
+  },
+  create(data) {
+    return request.post('/api/v1/app/bank-cards', data);
+  },
+  update(id, data) {
+    return request.put(`/api/v1/app/bank-cards/${id}`, data);
+  },
+  setDefault(id) {
+    return request.patch(`/api/v1/app/bank-cards/${id}/default`, {});
+  },
+  remove(id) {
+    return request.delete(`/api/v1/app/bank-cards/${id}`);
   }
 };
 

@@ -26,7 +26,6 @@
       <view class="balance-card">
         <view class="balance-header">
           <text class="balance-label">账户余额</text>
-          <view v-if="activeAssetType === 'balance'" class="withdraw-btn" @click="goWithdraw">提现</view>
         </view>
         <text class="balance-amount">¥{{ money(activeBalance) }}</text>
         <view class="balance-strip">
@@ -193,9 +192,6 @@ function goBack() {
   uni.navigateBack();
 }
 
-function goWithdraw() {
-  uni.navigateTo({ url: '/subpackages/assets/withdraw' });
-}
 
 function formatLedgerBizName(item) {
   const businessType = String(item.business_type || '').trim().toUpperCase();

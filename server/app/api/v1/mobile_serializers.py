@@ -569,12 +569,8 @@ def serialize_commission_flow(flow: CommissionFlow) -> dict[str, Any]:
 def serialize_withdraw_request(record: WithdrawRequest) -> dict[str, Any]:
     amount = money(record.amount)
     withdraw_type = enum_value(record.withdraw_type)
-    voucher_amount = 0.0
-    net_amount = amount
-
-    if withdraw_type == 'BALANCE':
-        voucher_amount = round(amount * 0.2, 2)
-        net_amount = round(amount - voucher_amount, 2)
+    fee_amount = money(record.fee_amount or 0)
+    net_amount = money(record.net_amount or record.amount)
 
     return {
         'id': record.id,
@@ -585,10 +581,17 @@ def serialize_withdraw_request(record: WithdrawRequest) -> dict[str, Any]:
         'amount': amount,
         'gross_amount': amount,
         'net_amount': net_amount,
-        'voucher_amount': voucher_amount,
+        'fee_rate': money(record.fee_rate or 0),
+        'fee_amount': fee_amount,
+        'bank_holder_name': record.bank_holder_name,
+        'bank_name': record.bank_name,
+        'bank_branch_name': record.bank_branch_name,
+        'bank_card_last_four': record.bank_card_last_four,
+        'masked_bank_card_number': f'**** **** **** {record.bank_card_last_four}' if record.bank_card_last_four else None,
         'status': enum_value(record.status),
         'status_text': enum_value(record.status),
         'remark': record.remark,
+        'review_remark': record.review_remark,
         'reviewed_by': record.reviewed_by,
         'reviewed_at': iso_datetime(record.reviewed_at),
         'paid_by': record.paid_by,

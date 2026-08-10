@@ -95,10 +95,34 @@ def apply_schema_migrations() -> None:
                 )
 
         withdraw_columns = _column_names('withdraw_requests')
-        if 'paid_by' not in withdraw_columns:
-            connection.execute(text('ALTER TABLE withdraw_requests ADD COLUMN paid_by BIGINT NULL'))
-        if 'paid_at' not in withdraw_columns:
-            connection.execute(text('ALTER TABLE withdraw_requests ADD COLUMN paid_at DATETIME NULL'))
+        withdraw_column_definitions = {
+            'paid_by': 'BIGINT NULL',
+            'paid_at': 'DATETIME NULL',
+            'fee_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 0',
+            'fee_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
+            'net_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
+            'bank_card_id': 'BIGINT NULL',
+            'bank_holder_name': 'VARCHAR(64) NULL',
+            'bank_name': 'VARCHAR(128) NULL',
+            'bank_branch_name': 'VARCHAR(255) NULL',
+            'bank_card_number_encrypted': 'TEXT NULL',
+            'bank_card_last_four': 'VARCHAR(4) NULL',
+            'review_remark': 'VARCHAR(500) NULL',
+        }
+        for column_name, column_type in withdraw_column_definitions.items():
+            if column_name not in withdraw_columns:
+                connection.execute(text(f'ALTER TABLE withdraw_requests ADD COLUMN {column_name} {column_type}'))
+        connection.execute(text('UPDATE withdraw_requests SET net_amount = amount WHERE net_amount = 0'))
+
+        commission_config_columns = _column_names('commission_configs')
+        commission_config_definitions = {
+            'withdraw_fee_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 0',
+            'withdraw_min_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 1',
+            'withdraw_max_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 50000',
+        }
+        for column_name, column_type in commission_config_definitions.items():
+            if column_name not in commission_config_columns:
+                connection.execute(text(f'ALTER TABLE commission_configs ADD COLUMN {column_name} {column_type}'))
 
         zone_config_columns = _column_names('product_zone_configs')
         payment_columns_added = False

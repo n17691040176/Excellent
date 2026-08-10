@@ -5,6 +5,7 @@ import io
 import zipfile
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree as ET
+from xml.sax.saxutils import escape
 
 from app.core.exceptions import ConflictError
 
@@ -14,6 +15,70 @@ XML_NS = {
     'package': 'http://schemas.openxmlformats.org/package/2006/relationships',
 }
 TEXT_ENCODINGS = ('utf-8-sig', 'utf-8', 'gb18030', 'gbk')
+
+
+def build_xlsx(headers: list[str], rows: list[list[object]], sheet_name: str = 'Sheet1') -> bytes:
+    """Build a compact standards-compliant xlsx file without an extra runtime dependency."""
+
+    def column_name(index: int) -> str:
+        value = index + 1
+        result = ''
+        while value:
+            value, remainder = divmod(value - 1, 26)
+            result = chr(65 + remainder) + result
+        return result
+
+    all_rows = [headers, *rows]
+    sheet_rows: list[str] = []
+    for row_index, row in enumerate(all_rows, start=1):
+        cells = []
+        for column_index, value in enumerate(row):
+            ref = f'{column_name(column_index)}{row_index}'
+            text_value = escape('' if value is None else str(value))
+            style = ' s="1"' if row_index == 1 else ''
+            cells.append(f'<c r="{ref}" t="inlineStr"{style}><is><t>{text_value}</t></is></c>')
+        sheet_rows.append(f'<row r="{row_index}">{"".join(cells)}</row>')
+
+    safe_sheet_name = ''.join(char for char in sheet_name if char not in '[]:*?/\\')[:31] or 'Sheet1'
+    sheet_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<sheetData>' + ''.join(sheet_rows) + '</sheetData></worksheet>'
+    )
+    files = {
+        '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        '</Types>',
+        '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        '</Relationships>',
+        'xl/workbook.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        f'<sheets><sheet name="{escape(safe_sheet_name)}" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        'xl/_rels/workbook.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        '</Relationships>',
+        'xl/styles.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<fonts count="2"><font/><font><b/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
+        '<borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs>'
+        '<cellXfs count="2"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/></cellXfs></styleSheet>',
+        'xl/worksheets/sheet1.xml': sheet_xml,
+    }
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as workbook:
+        for name, content in files.items():
+            workbook.writestr(name, content.encode('utf-8'))
+    return output.getvalue()
 
 
 def load_tabular_rows(filename: str, data: bytes) -> list[dict[str, str]]:

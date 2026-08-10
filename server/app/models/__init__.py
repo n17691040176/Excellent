@@ -9,8 +9,15 @@ from app.models.asset import (
     UserPowerBank,
     UserPowerBankIncomeRecord,
 )
+from app.models.bank_card import UserBankCard
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
-from app.models.commission import CommissionConfig, CommissionFlow, UserCommission, WithdrawRequest
+from app.models.commission import (
+    CommissionAccountLedger,
+    CommissionConfig,
+    CommissionFlow,
+    UserCommission,
+    WithdrawRequest,
+)
 from app.models.earning_rule import EarningRule
 from app.models.local_life import (
     AdRevenueFlow,
@@ -41,7 +48,7 @@ from app.models.user import AdminUserPermission, InviteRecord, User, UserLegacyP
 
 __all__ = [
     'Base', 'User', 'UserLegacyProfile', 'AdminUserPermission', 'AdminRole', 'AdminRolePermission', 'InviteRecord', 'Team', 'TeamMember', 'CommissionConfig', 'UserCommission',
-    'CommissionFlow', 'WithdrawRequest', 'Package', 'PackageBenefit', 'Product', 'ProductCategory', 'ProductSku',
+    'CommissionFlow', 'WithdrawRequest', 'CommissionAccountLedger', 'UserBankCard', 'Package', 'PackageBenefit', 'Product', 'ProductCategory', 'ProductSku',
     'ProductZoneConfig', 'ProductQualification', 'UserAssetAccount', 'UserAssetLedger',
     'DailySigninRecord', 'UserPowerBank', 'UserPowerBankIncomeRecord', 'UserFavoriteProduct', 'UserProductFootprint', 'ShoppingCartItem',
     'Order', 'OrderItem', 'OrderAssetDeduction', 'OrderStatusView', 'PaymentTransaction', 'UserAddress', 'Supplier',

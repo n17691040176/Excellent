@@ -1,13 +1,19 @@
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import String, and_, cast, func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.core.exceptions import ConflictError, NotFoundError
-from app.models.asset import UserAssetLedger
-from app.models.commission import CommissionFlow, UserCommission, WithdrawRequest
+from app.models.bank_card import UserBankCard
+from app.models.commission import (
+    CommissionAccountLedger,
+    CommissionConfig,
+    CommissionFlow,
+    UserCommission,
+    WithdrawRequest,
+)
 from app.models.enums import (
-    AssetType,
     CommissionStatus,
     MemberLevel,
     OrderStatus,
@@ -18,22 +24,22 @@ from app.models.enums import (
 )
 from app.models.order import Order, OrderItem
 from app.models.product import Product, ProductZoneConfig
+from app.models.team import Team
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
-from app.services.asset_service import AssetService
 from app.services.catalog_service import ProductService
 from app.services.earning_rule_service import EarningRuleService
 from app.utils.helpers import iso_datetime, now, quantize_amount
+from app.utils.sensitive_data import decrypt_sensitive, mask_bank_card
 
-BALANCE_WITHDRAW_VOUCHER_RATE = Decimal('0.20')
 TEAM_REWARD_FLOW_LEVEL = 100
-BALANCE_WITHDRAW_APPLY = 'BALANCE_WITHDRAW_APPLY'
-BALANCE_WITHDRAW_REJECT = 'BALANCE_WITHDRAW_REJECT'
-POINTS_WITHDRAW_APPLY = 'POINTS_WITHDRAW_APPLY'
-POINTS_WITHDRAW_REJECT = 'POINTS_WITHDRAW_REJECT'
 
 
 class CommissionService:
+    DEFAULT_WITHDRAW_FEE_RATE = Decimal('0.00')
+    DEFAULT_WITHDRAW_MIN_AMOUNT = Decimal('1.00')
+    DEFAULT_WITHDRAW_MAX_AMOUNT = Decimal('50000.00')
+
     @staticmethod
     def _admin_user_commission_query(
         db: Session,
@@ -144,30 +150,88 @@ class CommissionService:
         db.flush()
 
     @staticmethod
-    def create_withdraw(db: Session, user_id: int, withdraw_type: WithdrawType, amount: float, remark: str | None = None) -> WithdrawRequest:
+    def withdraw_config(db: Session) -> dict:
+        config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).first()
+        return {
+            'fee_rate': float(config.withdraw_fee_rate if config else CommissionService.DEFAULT_WITHDRAW_FEE_RATE),
+            'min_amount': float(config.withdraw_min_amount if config else CommissionService.DEFAULT_WITHDRAW_MIN_AMOUNT),
+            'max_amount': float(config.withdraw_max_amount if config else CommissionService.DEFAULT_WITHDRAW_MAX_AMOUNT),
+        }
+
+    @staticmethod
+    def update_withdraw_config(db: Session, fee_rate: float, min_amount: float, max_amount: float, operator_id: int) -> dict:
+        rate = quantize_amount(fee_rate)
+        minimum = quantize_amount(min_amount)
+        maximum = quantize_amount(max_amount)
+        if rate < 0 or rate > 100:
+            raise ConflictError('Withdraw fee rate must be between 0 and 100')
+        if minimum <= 0 or maximum < minimum:
+            raise ConflictError('Withdraw amount range is invalid')
+        config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).with_for_update().first()
+        if not config:
+            config = CommissionConfig(level1_rate=0, level2_rate=0, is_active=False, updated_at=now())
+            db.add(config)
+        config.withdraw_fee_rate = rate
+        config.withdraw_min_amount = minimum
+        config.withdraw_max_amount = maximum
+        config.updated_by = operator_id
+        config.updated_at = now()
+        db.commit()
+        return CommissionService.withdraw_config(db)
+
+    @staticmethod
+    def create_withdraw(
+        db: Session,
+        user_id: int,
+        withdraw_type: WithdrawType,
+        amount: float,
+        bank_card_id: int,
+        remark: str | None = None,
+    ) -> WithdrawRequest:
         quantized = quantize_amount(amount)
         if quantized <= Decimal('0.00'):
             raise ConflictError('Withdraw amount must be greater than 0')
+        if withdraw_type != WithdrawType.COMMISSION:
+            raise ConflictError('Only commission can be withdrawn')
         user = db.get(User, user_id)
         if not user:
             raise NotFoundError('User not found')
 
-        summary = None
-        if withdraw_type == WithdrawType.COMMISSION:
-            summary = db.query(UserCommission).filter(UserCommission.user_id == user_id).first()
-            if not summary or quantize_amount(summary.available_amount) < quantized:
-                raise ConflictError('Commission amount insufficient')
-        else:
-            asset_type, _, _ = CommissionService._asset_withdraw_meta(withdraw_type)
-            account = AssetService.get_account(db, user_id, asset_type)
-            if quantize_amount(account.available_amount) < quantized:
-                raise ConflictError('Asset amount insufficient')
+        config = CommissionService.withdraw_config(db)
+        minimum = quantize_amount(config['min_amount'])
+        maximum = quantize_amount(config['max_amount'])
+        if quantized < minimum or quantized > maximum:
+            raise ConflictError(f'Withdraw amount must be between {minimum} and {maximum}')
+        fee_rate = quantize_amount(config['fee_rate'])
+        fee_amount = quantize_amount(quantized * fee_rate / Decimal('100'))
+        net_amount = quantized - fee_amount
+        if net_amount <= 0:
+            raise ConflictError('Withdraw net amount must be greater than 0')
+
+        card = db.query(UserBankCard).filter(
+            UserBankCard.id == bank_card_id,
+            UserBankCard.user_id == user_id,
+        ).with_for_update().first()
+        if not card:
+            raise NotFoundError('Bank card not found')
+        summary = db.query(UserCommission).filter(UserCommission.user_id == user_id).with_for_update().first()
+        if not summary or quantize_amount(summary.available_amount) < quantized:
+            raise ConflictError('Commission amount insufficient')
 
         record = WithdrawRequest(
             user_id=user_id,
             team_id=user.team_id,
             withdraw_type=withdraw_type,
             amount=quantized,
+            fee_rate=fee_rate,
+            fee_amount=fee_amount,
+            net_amount=net_amount,
+            bank_card_id=card.id,
+            bank_holder_name=card.holder_name,
+            bank_name=card.bank_name,
+            bank_branch_name=card.branch_name,
+            bank_card_number_encrypted=card.card_number_encrypted,
+            bank_card_last_four=card.card_last_four,
             status=WithdrawStatus.PENDING,
             remark=remark,
             created_at=now(),
@@ -175,23 +239,11 @@ class CommissionService:
         db.add(record)
         db.flush()
 
-        source_no = CommissionService._withdraw_source_no(record.id)
-        if withdraw_type == WithdrawType.COMMISSION:
-            assert summary is not None
-            summary.available_amount = quantize_amount(summary.available_amount) - quantized
-            summary.frozen_amount = quantize_amount(summary.frozen_amount) + quantized
-            summary.updated_at = now()
-        else:
-            asset_type, apply_business_type, _ = CommissionService._asset_withdraw_meta(withdraw_type)
-            AssetService.freeze_amount(
-                db,
-                user_id,
-                asset_type,
-                quantized,
-                apply_business_type,
-                source_id=record.id,
-                source_no=source_no,
-            )
+        before = CommissionService._commission_balances(summary)
+        summary.available_amount = before['available'] - quantized
+        summary.frozen_amount = before['frozen'] + quantized
+        summary.updated_at = now()
+        CommissionService._record_withdraw_ledger(db, summary, record, 'APPLY', before, user_id)
 
         db.commit()
         db.refresh(record)
@@ -199,7 +251,10 @@ class CommissionService:
 
     @staticmethod
     def list_withdraws(db: Session, user_id: int) -> list[WithdrawRequest]:
-        return db.query(WithdrawRequest).filter(WithdrawRequest.user_id == user_id).order_by(WithdrawRequest.id.desc()).all()
+        return db.query(WithdrawRequest).filter(
+            WithdrawRequest.user_id == user_id,
+            WithdrawRequest.withdraw_type == WithdrawType.COMMISSION,
+        ).order_by(WithdrawRequest.id.desc()).all()
 
     @staticmethod
     def list_user_commissions_page_for_admin(
@@ -384,17 +439,150 @@ class CommissionService:
         }
 
     @staticmethod
-    def list_withdraws_for_admin(db: Session, current_user: User) -> list[WithdrawRequest]:
-        query = db.query(WithdrawRequest)
+    def _admin_withdraw_query(db: Session, current_user: User):
+        query = db.query(WithdrawRequest, User, Team).join(User, WithdrawRequest.user_id == User.id).outerjoin(
+            Team, WithdrawRequest.team_id == Team.id
+        ).filter(WithdrawRequest.withdraw_type == WithdrawType.COMMISSION)
         if not AdminScopeService.has_global_scope(current_user):
             team_id = AdminScopeService.require_team_id(current_user)
-            query = query.outerjoin(User, WithdrawRequest.user_id == User.id).filter(
+            query = query.filter(
                 or_(
                     WithdrawRequest.team_id == team_id,
                     and_(WithdrawRequest.team_id.is_(None), User.team_id == team_id),
                 )
             )
-        return query.order_by(WithdrawRequest.id.desc()).all()
+        return query
+
+    @staticmethod
+    def list_withdraws_for_admin(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+        status: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        query = CommissionService._admin_withdraw_query(db, current_user)
+        if keyword and keyword.strip():
+            value = f'%{keyword.strip()}%'
+            query = query.filter(or_(
+                cast(WithdrawRequest.id, String).ilike(value),
+                cast(User.id, String).ilike(value),
+                User.phone.ilike(value),
+                User.nickname.ilike(value),
+                WithdrawRequest.bank_holder_name.ilike(value),
+            ))
+        if status:
+            query = query.filter(WithdrawRequest.status == status)
+        if start_date:
+            query = query.filter(WithdrawRequest.created_at >= datetime.fromisoformat(start_date) - timedelta(hours=8))
+        if end_date:
+            query = query.filter(WithdrawRequest.created_at < datetime.fromisoformat(end_date) - timedelta(hours=8) + timedelta(days=1))
+        total = int(query.order_by(None).with_entities(func.count(WithdrawRequest.id)).scalar() or 0)
+        safe_page = max(page, 1)
+        safe_page_size = max(1, min(page_size, 100))
+        rows = query.order_by(WithdrawRequest.id.desc()).offset((safe_page - 1) * safe_page_size).limit(safe_page_size).all()
+        return {
+            'items': [CommissionService.serialize_admin_withdraw(record, user, team) for record, user, team in rows],
+            'total': total,
+            'page': safe_page,
+            'page_size': safe_page_size,
+        }
+
+    @staticmethod
+    def export_withdraws_for_admin(
+        db: Session,
+        current_user: User,
+        keyword: str | None = None,
+        status: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[dict]:
+        query = CommissionService._admin_withdraw_query(db, current_user)
+        if keyword and keyword.strip():
+            value = f'%{keyword.strip()}%'
+            query = query.filter(or_(
+                cast(WithdrawRequest.id, String).ilike(value),
+                cast(User.id, String).ilike(value),
+                User.phone.ilike(value),
+                User.nickname.ilike(value),
+                WithdrawRequest.bank_holder_name.ilike(value),
+            ))
+        if status:
+            query = query.filter(WithdrawRequest.status == status)
+        if start_date:
+            query = query.filter(WithdrawRequest.created_at >= datetime.fromisoformat(start_date) - timedelta(hours=8))
+        if end_date:
+            query = query.filter(WithdrawRequest.created_at < datetime.fromisoformat(end_date) - timedelta(hours=8) + timedelta(days=1))
+        return [CommissionService.serialize_admin_withdraw(record, user, team, include_card_number=True) for record, user, team in query.order_by(WithdrawRequest.id.desc()).all()]
+
+    @staticmethod
+    def serialize_admin_withdraw(record: WithdrawRequest, user: User, team: Team | None, include_card_number: bool = False) -> dict:
+        data = {
+            'id': record.id,
+            'source_no': CommissionService._withdraw_source_no(record.id),
+            'user_id': user.id,
+            'user_nickname': user.nickname,
+            'user_phone': user.phone,
+            'team_id': record.team_id,
+            'team_name': team.name if team else None,
+            'withdraw_type': record.withdraw_type.value,
+            'amount': float(record.amount),
+            'fee_rate': float(record.fee_rate or 0),
+            'fee_amount': float(record.fee_amount or 0),
+            'net_amount': float(record.net_amount or record.amount),
+            'bank_holder_name': record.bank_holder_name,
+            'bank_name': record.bank_name,
+            'bank_branch_name': record.bank_branch_name,
+            'bank_card_last_four': record.bank_card_last_four,
+            'masked_bank_card_number': mask_bank_card(record.bank_card_last_four) if record.bank_card_last_four else None,
+            'status': record.status.value,
+            'remark': record.remark,
+            'review_remark': record.review_remark,
+            'reviewed_by': record.reviewed_by,
+            'reviewed_at': iso_datetime(record.reviewed_at),
+            'paid_by': record.paid_by,
+            'paid_at': iso_datetime(record.paid_at),
+            'created_at': iso_datetime(record.created_at),
+        }
+        if include_card_number:
+            data['bank_card_number'] = decrypt_sensitive(record.bank_card_number_encrypted) if record.bank_card_number_encrypted else ''
+        return data
+
+    @staticmethod
+    def _commission_balances(summary: UserCommission) -> dict[str, Decimal]:
+        return {
+            'available': quantize_amount(summary.available_amount),
+            'frozen': quantize_amount(summary.frozen_amount),
+            'withdrawn': quantize_amount(summary.withdrawn_amount),
+        }
+
+    @staticmethod
+    def _record_withdraw_ledger(
+        db: Session,
+        summary: UserCommission,
+        record: WithdrawRequest,
+        action: str,
+        before: dict[str, Decimal],
+        operator_id: int | None,
+    ) -> None:
+        after = CommissionService._commission_balances(summary)
+        db.add(CommissionAccountLedger(
+            user_id=record.user_id,
+            withdraw_request_id=record.id,
+            action=action,
+            amount=quantize_amount(record.amount),
+            available_before=before['available'],
+            available_after=after['available'],
+            frozen_before=before['frozen'],
+            frozen_after=after['frozen'],
+            withdrawn_before=before['withdrawn'],
+            withdrawn_after=after['withdrawn'],
+            operator_id=operator_id,
+            created_at=now(),
+        ))
 
     @staticmethod
     def _ensure_withdraw_visible(db: Session, record: WithdrawRequest, current_user: User) -> None:
@@ -650,146 +838,74 @@ class CommissionService:
         ).first() is not None
 
     @staticmethod
-    def _asset_withdraw_meta(withdraw_type: WithdrawType) -> tuple[AssetType, str, str]:
-        if withdraw_type == WithdrawType.BALANCE:
-            return AssetType.BALANCE, BALANCE_WITHDRAW_APPLY, BALANCE_WITHDRAW_REJECT
-        if withdraw_type == WithdrawType.POINTS:
-            return AssetType.POINTS, POINTS_WITHDRAW_APPLY, POINTS_WITHDRAW_REJECT
-        raise ConflictError('Withdraw type invalid')
-
-    @staticmethod
-    def _asset_withdraw_reserved(db: Session, record: WithdrawRequest) -> bool:
-        if record.withdraw_type not in {WithdrawType.BALANCE, WithdrawType.POINTS}:
-            return False
-        _, apply_business_type, _ = CommissionService._asset_withdraw_meta(record.withdraw_type)
-        return db.query(UserAssetLedger.id).filter(
-            UserAssetLedger.user_id == record.user_id,
-            UserAssetLedger.source_id == record.id,
-            UserAssetLedger.business_type == apply_business_type,
-        ).first() is not None
-
-    @staticmethod
-    def approve_withdraw(db: Session, withdraw_id: int, current_user: User) -> WithdrawRequest:
-        record = db.get(WithdrawRequest, withdraw_id)
+    def approve_withdraw(db: Session, withdraw_id: int, current_user: User, remark: str | None = None) -> WithdrawRequest:
+        record = db.query(WithdrawRequest).filter(WithdrawRequest.id == withdraw_id).with_for_update().first()
         if not record:
             raise NotFoundError('Withdraw request not found')
         if record.status != WithdrawStatus.PENDING:
             raise ConflictError('Withdraw status invalid')
         CommissionService._ensure_withdraw_visible(db, record, current_user)
-
-        amount = quantize_amount(record.amount)
-        if record.withdraw_type == WithdrawType.COMMISSION:
-            summary = db.query(UserCommission).filter(UserCommission.user_id == record.user_id).first()
-            if not summary:
-                raise ConflictError('Commission amount insufficient')
-            reserved_amount = quantize_amount(summary.frozen_amount)
-            available_amount = quantize_amount(summary.available_amount)
-            if reserved_amount >= amount:
-                summary.frozen_amount = reserved_amount - amount
-            elif available_amount >= amount:
-                summary.available_amount = available_amount - amount
-            else:
-                raise ConflictError('Commission amount insufficient')
-            summary.withdrawn_amount = quantize_amount(summary.withdrawn_amount) + amount
-            summary.updated_at = now()
-        else:
-            asset_type, _, _ = CommissionService._asset_withdraw_meta(record.withdraw_type)
-            account_reserved = CommissionService._asset_withdraw_reserved(db, record)
-            source_no = CommissionService._withdraw_source_no(record.id)
-
-            if record.withdraw_type == WithdrawType.BALANCE:
-                voucher_amount = quantize_amount(amount * BALANCE_WITHDRAW_VOUCHER_RATE)
-                net_amount = quantize_amount(amount - voucher_amount)
-                if account_reserved:
-                    account = AssetService.consume_frozen_amount(db, record.user_id, asset_type, amount)
-                else:
-                    account = AssetService.consume_amount(
-                        db,
-                        record.user_id,
-                        asset_type,
-                        amount,
-                        'BALANCE_WITHDRAW_APPROVE',
-                        source_id=record.id,
-                        source_no=source_no,
-                    )
-                AssetService.add_amount(
-                    db,
-                    record.user_id,
-                    AssetType.VOUCHER,
-                    voucher_amount,
-                    'BALANCE_WITHDRAW_VOUCHER',
-                    source_id=record.id,
-                    source_no=source_no,
-                )
-                account.withdrawn_amount = quantize_amount(account.withdrawn_amount) + net_amount
-            else:
-                if account_reserved:
-                    account = AssetService.consume_frozen_amount(db, record.user_id, asset_type, amount)
-                else:
-                    account = AssetService.consume_amount(
-                        db,
-                        record.user_id,
-                        asset_type,
-                        amount,
-                        'POINTS_WITHDRAW_APPROVE',
-                        source_id=record.id,
-                        source_no=source_no,
-                    )
-                account.withdrawn_amount = quantize_amount(account.withdrawn_amount) + amount
-            account.updated_at = now()
+        if record.withdraw_type != WithdrawType.COMMISSION:
+            raise ConflictError('Only commission withdraw requests can be reviewed')
+        if not record.bank_card_number_encrypted:
+            raise ConflictError('Withdraw request does not contain bank card information')
 
         record.status = WithdrawStatus.APPROVED
         record.reviewed_by = current_user.id
         record.reviewed_at = now()
+        record.review_remark = remark
         db.commit()
         db.refresh(record)
         return record
 
     @staticmethod
     def reject_withdraw(db: Session, withdraw_id: int, current_user: User, remark: str | None = None) -> WithdrawRequest:
-        record = db.get(WithdrawRequest, withdraw_id)
+        record = db.query(WithdrawRequest).filter(WithdrawRequest.id == withdraw_id).with_for_update().first()
         if not record:
             raise NotFoundError('Withdraw request not found')
         if record.status != WithdrawStatus.PENDING:
             raise ConflictError('Withdraw status invalid')
         CommissionService._ensure_withdraw_visible(db, record, current_user)
 
+        if record.withdraw_type != WithdrawType.COMMISSION:
+            raise ConflictError('Only commission withdraw requests can be reviewed')
         amount = quantize_amount(record.amount)
-        if record.withdraw_type == WithdrawType.COMMISSION:
-            summary = db.query(UserCommission).filter(UserCommission.user_id == record.user_id).first()
-            if summary and quantize_amount(summary.frozen_amount) >= amount:
-                summary.frozen_amount = quantize_amount(summary.frozen_amount) - amount
-                summary.available_amount = quantize_amount(summary.available_amount) + amount
-                summary.updated_at = now()
-        elif CommissionService._asset_withdraw_reserved(db, record):
-            asset_type, _, reject_business_type = CommissionService._asset_withdraw_meta(record.withdraw_type)
-            AssetService.unfreeze_amount(
-                db,
-                record.user_id,
-                asset_type,
-                amount,
-                reject_business_type,
-                source_id=record.id,
-                source_no=CommissionService._withdraw_source_no(record.id),
-            )
+        summary = db.query(UserCommission).filter(UserCommission.user_id == record.user_id).with_for_update().first()
+        if not summary or quantize_amount(summary.frozen_amount) < amount:
+            raise ConflictError('Commission frozen amount insufficient')
+        before = CommissionService._commission_balances(summary)
+        summary.frozen_amount = before['frozen'] - amount
+        summary.available_amount = before['available'] + amount
+        summary.updated_at = now()
+        CommissionService._record_withdraw_ledger(db, summary, record, 'REJECT', before, current_user.id)
 
         record.status = WithdrawStatus.REJECTED
         record.reviewed_by = current_user.id
         record.reviewed_at = now()
-        if remark:
-            record.remark = remark
+        record.review_remark = remark
         db.commit()
         db.refresh(record)
         return record
 
     @staticmethod
     def pay_withdraw(db: Session, withdraw_id: int, current_user: User) -> WithdrawRequest:
-        record = db.get(WithdrawRequest, withdraw_id)
+        record = db.query(WithdrawRequest).filter(WithdrawRequest.id == withdraw_id).with_for_update().first()
         if not record:
             raise NotFoundError('Withdraw request not found')
         if record.status != WithdrawStatus.APPROVED:
             raise ConflictError('Only approved withdraw requests can be paid')
         CommissionService._ensure_withdraw_visible(db, record, current_user)
+        if record.withdraw_type != WithdrawType.COMMISSION:
+            raise ConflictError('Only commission withdraw requests can be paid')
+        amount = quantize_amount(record.amount)
+        summary = db.query(UserCommission).filter(UserCommission.user_id == record.user_id).with_for_update().first()
+        if not summary or quantize_amount(summary.frozen_amount) < amount:
+            raise ConflictError('Commission frozen amount insufficient')
+        before = CommissionService._commission_balances(summary)
+        summary.frozen_amount = before['frozen'] - amount
+        summary.withdrawn_amount = before['withdrawn'] + amount
+        summary.updated_at = now()
+        CommissionService._record_withdraw_ledger(db, summary, record, 'PAY', before, current_user.id)
         record.status = WithdrawStatus.PAID
         record.paid_by = current_user.id
         record.paid_at = now()

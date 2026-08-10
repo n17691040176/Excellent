@@ -133,22 +133,8 @@ const loadCommission = async () => {
   }
 };
 
-const withdraw = async () => {
-  const amount = Number(withdrawable.value) || 0;
-  if (amount <= 0) {
-    uni.showToast({ title: '暂无可提现佣金', icon: 'none' });
-    return;
-  }
-  try {
-    await commissionApi.createWithdraw({
-      withdraw_type: 'COMMISSION',
-      amount
-    });
-    uni.showToast({ title: '提现申请已提交', icon: 'none' });
-    loadCommission();
-  } catch (error) {
-    uni.showToast({ title: '提现申请失败，请稍后重试', icon: 'none' });
-  }
+const withdraw = () => {
+  uni.navigateTo({ url: '/subpackages/commission/withdraw' });
 };
 
 function goBack() {

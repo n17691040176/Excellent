@@ -15,6 +15,7 @@ def test_sensitive_admin_routes_use_distinct_permissions():
         ('PUT', '/api/v1/admin/region-agents/12'): 'region:manage',
         ('DELETE', '/api/v1/admin/region-agents/12'): 'region:manage',
         ('PATCH', '/api/v1/admin/withdraws/12/pay'): 'withdraws:pay',
+        ('GET', '/api/v1/admin/withdraws/export'): 'withdraws:export',
         ('PATCH', '/api/v1/admin/product-qualifications/12/audit'): 'suppliers:audit',
         ('GET', '/api/v1/admin/payments'): 'payments:view',
         ('GET', '/api/v1/admin/admins'): 'admins:view',

@@ -57,6 +57,7 @@ PERMISSION_GROUPS = [
             {'key': 'withdraws:view', 'label': '查看提现'},
             {'key': 'withdraws:review', 'label': '审核提现'},
             {'key': 'withdraws:pay', 'label': '提现打款'},
+            {'key': 'withdraws:export', 'label': '导出提现打款清单'},
             {'key': 'payments:view', 'label': '查看支付流水'},
             {'key': 'assets:view', 'label': '资产中心'},
             {'key': 'suppliers:view', 'label': '供应商管理'},
@@ -299,6 +300,8 @@ class AdminPermissionService:
         if clean_path.startswith('/commission'):
             return 'commission:view'
         if clean_path.startswith('/withdraws'):
+            if clean_path.endswith('/export'):
+                return 'withdraws:export'
             if clean_path.endswith('/pay'):
                 return 'withdraws:pay'
             if method in {'PUT', 'PATCH', 'POST'}:

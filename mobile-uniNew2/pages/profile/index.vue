@@ -248,7 +248,7 @@ const tools = computed(() => [
 ]);
 
 // Menu
-const DEV_MENU_LABELS = ['银行卡', '消息通知', '账号安全', '联系客服'];
+const DEV_MENU_LABELS = ['消息通知', '账号安全', '联系客服'];
 
 const menuItems = computed(() => [
   { icon: 'invite', iconBg: 'linear-gradient(135deg, var(--success), #16A34A)', label: '邀请有礼', value: inviteCode.value || '', path: '/subpackages/invite/index' },

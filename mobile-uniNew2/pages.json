@@ -108,12 +108,6 @@
           "style": {
             "navigationBarTitleText": "我的资产"
           }
-        },
-        {
-          "path": "withdraw",
-          "style": {
-            "navigationBarTitleText": "余额提现"
-          }
         }
       ]
     },
@@ -124,6 +118,12 @@
           "path": "index",
           "style": {
             "navigationBarTitleText": "佣金中心"
+          }
+        },
+        {
+          "path": "withdraw",
+          "style": {
+            "navigationBarTitleText": "佣金提现"
           }
         }
       ]
@@ -176,6 +176,18 @@
           "path": "address-edit",
           "style": {
             "navigationBarTitleText": "编辑地址"
+          }
+        },
+        {
+          "path": "bank",
+          "style": {
+            "navigationBarTitleText": "银行卡"
+          }
+        },
+        {
+          "path": "bank-edit",
+          "style": {
+            "navigationBarTitleText": "编辑银行卡"
           }
         },
         {

@@ -145,17 +145,26 @@ export const commissionApi = {
   productRules(params) {
     return request.get('/api/v1/admin/commission/product-rules', { params })
   },
-  withdraws() {
-    return request.get('/api/v1/admin/withdraws')
+  withdraws(params) {
+    return request.get('/api/v1/admin/withdraws', { params })
   },
-  approveWithdraw(id) {
-    return request.patch(`/api/v1/admin/withdraws/${id}/approve`)
+  approveWithdraw(id, remark = '') {
+    return request.patch(`/api/v1/admin/withdraws/${id}/approve`, { remark })
   },
   rejectWithdraw(id, remark = '') {
     return request.patch(`/api/v1/admin/withdraws/${id}/reject`, { remark })
   },
   payWithdraw(id) {
     return request.patch(`/api/v1/admin/withdraws/${id}/pay`)
+  },
+  withdrawConfig() {
+    return request.get('/api/v1/admin/commission/withdraw-config')
+  },
+  updateWithdrawConfig(data) {
+    return request.put('/api/v1/admin/commission/withdraw-config', data)
+  },
+  exportWithdraws(params) {
+    return request.get('/api/v1/admin/withdraws/export', { params, responseType: 'blob' })
   }
 }
 

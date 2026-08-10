@@ -9,6 +9,7 @@ from app.api.v1 import (
     admin_region_agents,
     assets,
     auth,
+    bank_cards,
     commerce,
     commission,
     dashboard,
@@ -33,6 +34,7 @@ api_router.include_router(suppliers.app_router, tags=['App Suppliers'])
 api_router.include_router(products.app_router, tags=['App Products'])
 api_router.include_router(commerce.app_router, tags=['App Commerce'])
 api_router.include_router(assets.app_router, tags=['App Assets'])
+api_router.include_router(bank_cards.app_router, tags=['App Bank Cards'])
 api_router.include_router(addresses.app_router, tags=['App Addresses'])
 api_router.include_router(orders.app_router, tags=['App Orders'])
 api_router.include_router(payments.app_router, tags=['App Payments'])
