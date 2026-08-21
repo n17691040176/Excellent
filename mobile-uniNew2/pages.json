@@ -149,6 +149,12 @@
           }
         },
         {
+          "path": "app-download",
+          "style": {
+            "navigationBarTitleText": "Ai物联网安全灶"
+          }
+        },
+        {
           "path": "favorites",
           "style": {
             "navigationBarTitleText": "我的收藏"

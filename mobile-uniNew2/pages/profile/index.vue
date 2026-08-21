@@ -139,6 +139,12 @@
             <path d="M20 8V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             <path d="M17 11H23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
+          <svg v-else-if="item.icon === 'app-download'" width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 7V15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M9 12L12 15L15 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 18H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
           <svg v-else-if="item.label === '我的团队'" width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
@@ -252,6 +258,7 @@ const DEV_MENU_LABELS = ['消息通知', '账号安全', '联系客服'];
 
 const menuItems = computed(() => [
   { icon: 'invite', iconBg: 'linear-gradient(135deg, var(--success), #16A34A)', label: '邀请有礼', value: inviteCode.value || '', path: '/subpackages/invite/index' },
+  { icon: 'app-download', iconBg: 'linear-gradient(135deg, #F97316, #EA580C)', label: '灶具APP下载', value: '', path: '/subpackages/profile/app-download' },
   { icon: 'team', iconBg: 'linear-gradient(135deg, #0EA5E9, #0284C7)', label: '我的团队', value: '', path: '/subpackages/team/index' },
   { icon: 'security', iconBg: 'linear-gradient(135deg, #10B981, #059669)', label: '收货地址', value: '', path: '/subpackages/profile/addresses' },
   { icon: 'bank', iconBg: 'linear-gradient(135deg, #6366F1, #4F46E5)', label: '银行卡', value: '', path: '/subpackages/profile/bank' },
