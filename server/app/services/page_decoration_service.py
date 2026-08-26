@@ -1,3 +1,5 @@
+import logging
+from contextlib import suppress
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,7 @@ from app.utils.helpers import iso_datetime
 
 MOBILE_UNI_HOME_KEY = 'mobile_uni_home'
 MOBILE_UNI_HOME_TITLE = 'uni 首页装修'
+logger = logging.getLogger(__name__)
 
 
 class PageDecorationService:
@@ -493,14 +496,28 @@ class PageDecorationService:
         if suffix not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
             suffix = PageDecorationService.IMAGE_SUFFIX_MAP.get(content_type, '.jpg')
 
-        month_dir = datetime.now(UTC).strftime('%Y%m')
-        target_dir = PageDecorationService.upload_root() / 'decorations' / 'mobile-home' / month_dir
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target_name = f'{uuid4().hex}{suffix}'
-        target_path = target_dir / target_name
-        target_path.write_bytes(data)
+        upload_root: Path | None = None
+        target_path: Path | None = None
+        try:
+            upload_root = PageDecorationService.upload_root()
+            month_dir = datetime.now(UTC).strftime('%Y%m')
+            target_dir = upload_root / 'decorations' / 'mobile-home' / month_dir
+            target_name = f'{uuid4().hex}{suffix}'
+            target_path = target_dir / target_name
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_path.write_bytes(data)
+        except OSError as exc:
+            # Do not leak a raw PermissionError/IOError as an opaque HTTP 500.
+            # The container entrypoint repairs the normal volume-permission case,
+            # while this response still gives operators a useful failure mode for
+            # a read-only mount, full disk, or other storage outage.
+            if target_path is not None:
+                with suppress(OSError):
+                    target_path.unlink(missing_ok=True)
+            logger.exception('Failed to persist mobile decoration image at %s', target_path or '<upload-root>')
+            raise AppError('图片存储暂时不可用，请稍后重试', code=50002, status_code=503) from exc
 
-        relative_path = target_path.relative_to(PageDecorationService.upload_root()).as_posix()
+        relative_path = target_path.relative_to(upload_root).as_posix()
         return {
             'path': relative_path,
             'url': f'/uploads/{relative_path}',

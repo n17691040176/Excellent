@@ -41,7 +41,7 @@ async def admin_upload_mobile_home_image(
 ):
     del current_user
     try:
-        data = await file.read()
+        data = await file.read(PageDecorationService.MAX_UPLOAD_SIZE + 1)
         result = PageDecorationService.store_mobile_home_image(file.filename or '', file.content_type or '', data)
         return {'code': 0, 'message': 'success', 'data': result}
     finally:

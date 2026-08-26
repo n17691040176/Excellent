@@ -268,7 +268,7 @@
 import { computed, ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { assetApi, commerceApi, packageApi } from '@/api/modules';
-import { getApiBaseUrl } from '@/config/index';
+import { getAssetBaseUrl } from '@/config/index';
 import { defaultPaymentOption, normalizePaymentOptions } from '@/utils/payment-options';
 import { trackEvent, trackPageView } from '@/utils/track';
 
@@ -346,7 +346,7 @@ const resolveImage = (value) => {
   if (!value) return '';
   if (/^https?:\/\//i.test(value)) return value;
   if (value.startsWith('/profile/')) return `${LEGACY_FILE_BASE_URL}${value}`;
-  if (value.startsWith('/')) return `${getApiBaseUrl()}${value}`;
+  if (value.startsWith('/')) return `${getAssetBaseUrl()}${value}`;
   return value;
 };
 

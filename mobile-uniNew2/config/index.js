@@ -167,6 +167,13 @@ export function getApiBaseUrl() {
 	return getApiBaseUrlConfig().value
 }
 
+// Uploaded files are served from the API host, but outside the /api prefix.
+export function getAssetBaseUrl() {
+	const apiBaseUrl = getApiBaseUrl()
+	if (!apiBaseUrl) return ''
+	return apiBaseUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
+}
+
 export function setApiBaseUrl(url) {
 	if (!url) {
 		uni.removeStorageSync(API_BASE_URL_KEY)

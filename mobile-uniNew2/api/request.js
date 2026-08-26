@@ -11,11 +11,21 @@ function buildQuery(params = {}) {
     .join('&');
 }
 
-function joinUrl(baseUrl, path) {
+export function joinUrl(baseUrl, path) {
   if (!path) return baseUrl;
   if (/^https?:\/\//i.test(path)) return path;
   if (!baseUrl) return path;
-  return `${baseUrl.replace(/\/$/, '')}/${String(path).replace(/^\//, '')}`;
+
+  const normalizedBase = String(baseUrl).replace(/\/+$/, '');
+  let normalizedPath = String(path).replace(/^\/+/, '');
+  // API modules use /api/v1 paths while deployments may expose the API base
+  // itself as /api. Avoid producing /api/api/v1 in that configuration.
+  if (normalizedBase.endsWith('/api') && (normalizedPath === 'api' || normalizedPath.startsWith('api/'))) {
+    normalizedPath = normalizedPath.slice(3).replace(/^\/+/, '');
+  }
+
+  if (!normalizedBase) return `/${normalizedPath}`;
+  return normalizedPath ? `${normalizedBase}/${normalizedPath}` : normalizedBase;
 }
 
 function handleUnauthorized() {

@@ -17,9 +17,7 @@ export const decorationApi = {
     const formData = new FormData()
     formData.append('file', file)
     return request.post('/api/v1/admin/decorations/mobile-home/upload-image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+      timeout: 60000
     })
   }
 }

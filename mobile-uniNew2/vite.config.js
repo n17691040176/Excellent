@@ -21,6 +21,7 @@ export default defineConfig(({
 	const env = loadEnv(mode || 'development', projectRoot, '')
 	const appEnv = env.VITE_APP_ENV || 'dev'
 	const apiBaseUrl = env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+	const apiProxyTarget = apiBaseUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '') || 'http://127.0.0.1:8000'
 	const inviteWebBaseUrl = env.VITE_INVITE_WEB_BASE_URL || 'http://127.0.0.1:5174'
 
 	return {
@@ -36,11 +37,11 @@ export default defineConfig(({
 			port: 5174,
 			proxy: {
 				'/api/v1': {
-					target: apiBaseUrl,
+					target: apiProxyTarget,
 					changeOrigin: true
 				},
 				'/uploads': {
-					target: apiBaseUrl,
+					target: apiProxyTarget,
 					changeOrigin: true
 				}
 			}

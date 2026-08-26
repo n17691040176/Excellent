@@ -142,7 +142,7 @@
 import { ref, onMounted } from 'vue';
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import { homeApi, packageApi } from '@/api/modules';
-import { getApiBaseUrl } from '@/config/index';
+import { getAssetBaseUrl } from '@/config/index';
 import { trackEvent, trackPageView } from '@/utils/track';
 
 const BASE_URL = 'https://file.h516.com/huohonghuo';
@@ -178,7 +178,7 @@ const resolveImage = (value) => {
   if (!value) return '';
   if (/^https?:\/\//i.test(value)) return value;
   if (value.startsWith('/profile/')) return `${BASE_URL}${value}`;
-  if (value.startsWith('/')) return `${getApiBaseUrl()}${value}`;
+  if (value.startsWith('/')) return `${getAssetBaseUrl()}${value}`;
   return value;
 };
 

@@ -33,7 +33,9 @@ WORKDIR /app
 
 # Security: create non-root user
 RUN groupadd --gid 1000 appgroup && \
-    useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser
+    useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser && \
+    mkdir -p /app/uploads && \
+    chown -R appuser:appgroup /app/uploads
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
@@ -41,8 +43,11 @@ COPY --from=builder /install /usr/local
 # Copy application code
 COPY --chown=appuser:appgroup app ./app
 
-# Switch to non-root user
-USER appuser
+# Repair mounted upload-volume ownership at startup, then drop to appuser.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE 8000
 
