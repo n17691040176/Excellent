@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import ConfigDict
 
 from app.models.enums import ProductOwnerType, ProductStatus, ProductType, ZoneType
@@ -32,11 +34,34 @@ class OrderPayRequest(AppBaseModel):
     pay_channel: str
     points_amount: float = 0
     auto_complete: bool = True
+    # Optional server-side context used by external providers (for example,
+    # WeChat's required payer_client_ip).  The HTTP endpoint overwrites the
+    # network-derived values before forwarding this object to the service.
+    request_payload: dict[str, Any] | None = None
 
 
 class OrderPaymentStatusRequest(AppBaseModel):
     out_trade_no: str | None = None
     return_params: dict[str, str] | None = None
+    pay_channel: str | None = None
+
+
+class OrderRefundRequest(AppBaseModel):
+    """Request a full refund for the order's completed external payment.
+
+    The provider-facing amount is intentionally not client controlled.  The
+    current refund flow only supports a full refund of the recorded payment
+    transaction; idempotency is supplied in the HTTP ``Idempotency-Key``
+    header rather than this body.
+    """
+
+    reason: str | None = None
+
+
+class OrderRefundStatusRequest(AppBaseModel):
+    """Refresh one order refund, or the latest refund when omitted."""
+
+    out_refund_no: str | None = None
 
 
 class ProductZoneConfigUpdateRequest(AppBaseModel):

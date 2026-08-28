@@ -345,8 +345,14 @@ async function submitOrder() {
     if (payment?.status === 'FAILED') {
       throw new Error(payment.message || '支付参数创建失败');
     }
+    let platformResult = null;
     if (payment && payment.status !== 'PAID') {
-      await requestPlatformPayment(payment);
+      platformResult = await requestPlatformPayment(payment);
+    }
+    // H5 provider pages navigate away and return through the configured
+    // callback URL. Do not replace that navigation with a local redirect.
+    if (platformResult?.redirected) {
+      return;
     }
     uni.showToast({ title: '订单提交成功', icon: 'success' });
     setTimeout(() => uni.redirectTo({ url: `/subpackages/order/detail?id=${orderId}` }), 400);

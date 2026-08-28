@@ -4,7 +4,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import cast
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
@@ -15,9 +15,19 @@ from app.core.payment_config import (
 )
 from app.models.address import UserAddress
 from app.models.asset import UserAssetLedger
-from app.models.enums import AssetType, OrderStatus, OrderType, PaymentStatus, PayStatus, ProductStatus, ZoneType
+from app.models.enums import (
+    AssetType,
+    OrderStatus,
+    OrderType,
+    PaymentChannel,
+    PaymentStatus,
+    PayStatus,
+    ProductStatus,
+    RefundStatus,
+    ZoneType,
+)
 from app.models.order import Order, OrderAssetDeduction, OrderItem, OrderStatusView
-from app.models.payment import PaymentTransaction
+from app.models.payment import PaymentRefund, PaymentTransaction
 from app.models.product import Product, ProductZoneConfig
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
@@ -138,9 +148,11 @@ class OrderService:
 
     @staticmethod
     def _restore_order_inventory(db: Session, order: Order) -> None:
-        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+        items = db.query(OrderItem).filter(
+            OrderItem.order_id == order.id
+        ).order_by(OrderItem.product_id.asc(), OrderItem.id.asc()).all()
         for item in items:
-            product = db.get(Product, item.product_id)
+            product = db.query(Product).filter(Product.id == item.product_id).with_for_update().first()
             if not product:
                 continue
             quantity = max(int(item.quantity or 0), 0)
@@ -150,7 +162,13 @@ class OrderService:
     @staticmethod
     def _refund_order_deductions(db: Session, order: Order) -> None:
         deductions = db.query(OrderAssetDeduction).filter(OrderAssetDeduction.order_id == order.id).all()
-        for deduction in deductions:
+        for deduction in sorted(
+            deductions,
+            key=lambda item: (
+                OrderService._asset_lock_key(item.asset_type),
+                int(getattr(item, 'id', 0) or 0),
+            ),
+        ):
             AssetService.refund_consumed_amount(
                 db,
                 order.user_id,
@@ -174,7 +192,14 @@ class OrderService:
             UserAssetLedger.business_type.in_(reward_business_types),
             UserAssetLedger.source_id == order.id,
         ).all()
-        for reward in rewards:
+        for reward in sorted(
+            rewards,
+            key=lambda item: (
+                int(getattr(item, 'user_id', 0) or 0),
+                OrderService._asset_lock_key(item.asset_type),
+                int(getattr(item, 'id', 0) or 0),
+            ),
+        ):
             AssetService.revoke_added_amount(
                 db,
                 reward.user_id,
@@ -200,14 +225,373 @@ class OrderService:
             transaction.failed_reason = 'Mock payment refunded'
 
     @staticmethod
-    def _close_pending_payment_transactions(db: Session, order: Order) -> None:
-        transactions = db.query(PaymentTransaction).filter(
-            PaymentTransaction.order_id == order.id,
+    def _close_pending_payment_transactions_after_cancellation(db: Session, order_id: int) -> None:
+        """Close only still-pending transactions after an order cancellation.
+
+        Payment callbacks lock a transaction before the order.  The order
+        cancellation transaction deliberately commits before this conditional
+        update, so it never waits on a callback's transaction row while
+        holding the order lock.  A callback which won the race sees the
+        committed refund state and records a provider refund requirement;
+        this update then leaves its non-pending transaction untouched.
+        """
+        db.query(PaymentTransaction).filter(
+            PaymentTransaction.order_id == order_id,
             PaymentTransaction.status == PaymentStatus.PENDING,
-        ).all()
-        for transaction in transactions:
-            transaction.status = PaymentStatus.CLOSED
-            transaction.failed_reason = 'Order canceled or expired'
+        ).update(
+            {
+                PaymentTransaction.status: PaymentStatus.CLOSED,
+                PaymentTransaction.failed_reason: 'Order canceled or expired',
+                PaymentTransaction.updated_at: now(),
+            },
+            synchronize_session=False,
+        )
+        db.commit()
+
+    @staticmethod
+    def _lock_order_for_transition(db: Session, order_id: int) -> Order:
+        """Reload an order under a row lock before changing its lifecycle."""
+        order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        if not order:
+            raise NotFoundError('Order not found')
+        db.refresh(order, with_for_update=True)
+        return order
+
+    @staticmethod
+    def _ensure_no_active_external_refund(db: Session, order_id: int) -> None:
+        """Prevent fulfillment transitions while a primary WeChat refund is unresolved."""
+        late_payment_refund = and_(
+            PaymentTransaction.status == PaymentStatus.FAILED,
+            func.lower(func.coalesce(PaymentTransaction.failed_reason, '')).like(
+                '%provider refund required%'
+            ),
+        )
+        active_refund = (
+            db.query(PaymentRefund.id)
+            .join(
+                PaymentTransaction,
+                PaymentTransaction.id == PaymentRefund.payment_transaction_id,
+            )
+            .filter(
+                PaymentRefund.order_id == order_id,
+                PaymentRefund.channel == PaymentChannel.WECHAT,
+                or_(
+                    PaymentRefund.status.in_((RefundStatus.PENDING, RefundStatus.PROCESSING)),
+                    and_(
+                        PaymentRefund.status == RefundStatus.SUCCESS,
+                        ~late_payment_refund,
+                    ),
+                ),
+            )
+            .first()
+        )
+        if active_refund:
+            raise ConflictError('Order refund is processing')
+
+    @staticmethod
+    def _validate_paid_refund_transition(db: Session, order: Order) -> None:
+        """Validate the local order state before asking a provider to refund."""
+        if order.order_type == OrderType.LOCAL_LIFE_ORDER:
+            raise ConflictError('Local-life orders use the verification workflow')
+        if order.pay_status != PayStatus.PAID:
+            raise ConflictError('Only paid orders can be refunded')
+        requires_shipping = OrderService.order_requires_shipping(db, order.id)
+        allowed_statuses = {OrderStatus.PENDING_SHIP, OrderStatus.SHIPPED}
+        if not requires_shipping:
+            allowed_statuses.add(OrderStatus.COMPLETED)
+        if order.order_status not in allowed_statuses:
+            raise ConflictError('Current order status cannot be refunded')
+
+    @staticmethod
+    def _apply_paid_refund_side_effects(db: Session, order: Order) -> None:
+        """Apply local effects after a paid refund has been confirmed.
+
+        The caller must hold the order lock and invoke this exactly once. The
+        final order state is the idempotency marker for inventory, asset,
+        commission, and dividend changes.
+        """
+        # Checkout locks product inventory before user assets. Preserve that
+        # global order here so a refund cannot hold an asset account while a
+        # concurrent checkout holds one of the same product rows.
+        OrderService._restore_order_inventory(db, order)
+        CommissionService.cancel_for_order(db, order.id)
+        RegionDividendService.reverse_order_dividend(db, order)
+        OrderService._revoke_order_rewards(db, order)
+        OrderService._refund_order_deductions(db, order)
+        order.order_status = OrderStatus.REFUND
+        order.pay_status = PayStatus.REFUNDED
+        order.payable_amount = Decimal('0.00')
+        order.confirmed_at = None
+
+    @staticmethod
+    def finalize_external_refund(
+        db: Session,
+        refund: PaymentRefund,
+        tx: PaymentTransaction,
+    ) -> Order:
+        """Finalize a verified provider refund in one local transaction.
+
+        Provider success is committed independently before this method runs,
+        because a timeout must not lose the provider idempotency number. This
+        method consequently uses the order's REFUND state as an idempotency
+        marker: retries after a failed local side effect safely resume until
+        the order transition commits.
+        """
+        if not getattr(refund, 'id', None) or not getattr(tx, 'id', None):
+            raise NotFoundError('Payment refund not found')
+
+        locked_tx = (
+            db.query(PaymentTransaction)
+            .filter(PaymentTransaction.id == tx.id)
+            .with_for_update()
+            .first()
+        )
+        if not locked_tx:
+            raise NotFoundError('Payment transaction not found')
+        db.refresh(locked_tx, with_for_update=True)
+        locked_order = (
+            db.query(Order)
+            .filter(Order.id == locked_tx.order_id)
+            .with_for_update()
+            .first()
+        )
+        if not locked_order:
+            raise NotFoundError('Order not found')
+        db.refresh(locked_order, with_for_update=True)
+        locked_refund = (
+            db.query(PaymentRefund)
+            .filter(PaymentRefund.id == refund.id)
+            .with_for_update()
+            .first()
+        )
+        if not locked_refund:
+            raise NotFoundError('Payment refund not found')
+        db.refresh(locked_refund, with_for_update=True)
+
+        if (
+            locked_tx.channel != PaymentChannel.WECHAT
+            or locked_refund.channel != PaymentChannel.WECHAT
+            or locked_refund.payment_transaction_id != locked_tx.id
+            or locked_refund.order_id != locked_order.id
+        ):
+            raise ConflictError('Payment refund does not match its payment transaction')
+        status = str(getattr(locked_refund.status, 'value', locked_refund.status)).upper()
+        if status != RefundStatus.SUCCESS.value:
+            raise ConflictError('WeChat refund has not completed')
+        if (
+            quantize_amount(locked_refund.original_amount) != quantize_amount(locked_tx.amount)
+            or quantize_amount(locked_refund.refund_amount) != quantize_amount(locked_tx.amount)
+        ):
+            raise ConflictError('WeChat refund amount does not match payment transaction')
+
+        locked_tx.refunded_amount = quantize_amount(locked_refund.refund_amount)
+        late_success_needing_refund = (
+            locked_tx.status == PaymentStatus.FAILED
+            and bool(str(locked_tx.provider_trade_no or '').strip())
+            and 'provider refund required' in str(locked_tx.failed_reason or '').lower()
+        )
+        if late_success_needing_refund:
+            if locked_order.order_status == OrderStatus.REFUND:
+                if locked_order.pay_status == PayStatus.UNPAID:
+                    # The order was already locally canceled before the
+                    # provider reported a late payment. Inventory and asset
+                    # effects were handled at cancellation time.
+                    locked_order.pay_status = PayStatus.REFUNDED
+                elif locked_order.pay_status != PayStatus.REFUNDED:
+                    raise ConflictError('Refunded order payment state is inconsistent')
+            elif locked_order.pay_status != PayStatus.PAID:
+                raise ConflictError('Late payment refund order state is inconsistent')
+            # When another transaction already paid the order, refund only
+            # this duplicate late charge and leave fulfillment untouched.
+            order_was_refunded = locked_order.order_status == OrderStatus.REFUND
+            db.commit()
+            if order_was_refunded:
+                OrderService._close_pending_payment_transactions_after_cancellation(db, locked_order.id)
+            db.refresh(locked_order)
+            return locked_order
+
+        if locked_order.order_status == OrderStatus.REFUND:
+            if locked_order.pay_status != PayStatus.REFUNDED:
+                raise ConflictError('Refunded order payment state is inconsistent')
+            db.commit()
+            OrderService._close_pending_payment_transactions_after_cancellation(db, locked_order.id)
+            db.refresh(locked_order)
+            return locked_order
+
+        OrderService._validate_paid_refund_transition(db, locked_order)
+        OrderService._apply_paid_refund_side_effects(db, locked_order)
+        db.commit()
+        OrderService._close_pending_payment_transactions_after_cancellation(db, locked_order.id)
+        db.refresh(locked_order)
+        return locked_order
+
+    @staticmethod
+    def refund_order_with_result(
+        db: Session,
+        order: Order,
+        *,
+        reason: str | None = None,
+        idempotency_key: str | None = None,
+        requested_by: int | None = None,
+    ) -> dict:
+        """Request an order refund and expose provider state to API callers."""
+        if order.order_status == OrderStatus.REFUND:
+            late_transactions = (
+                db.query(PaymentTransaction)
+                .filter(
+                    PaymentTransaction.order_id == order.id,
+                    PaymentTransaction.channel == PaymentChannel.WECHAT,
+                    PaymentTransaction.status == PaymentStatus.FAILED,
+                )
+                .order_by(PaymentTransaction.id.desc())
+                .all()
+            )
+            late_transactions = [
+                transaction
+                for transaction in late_transactions
+                if (
+                    str(transaction.provider_trade_no or '').strip()
+                    and 'provider refund required' in str(transaction.failed_reason or '').lower()
+                )
+            ]
+            if late_transactions:
+                from app.services.payment_service import PaymentService
+
+                refund = PaymentService.request_wechat_refund(
+                    db,
+                    order,
+                    late_transactions[0],
+                    reason=reason,
+                    idempotency_key=idempotency_key,
+                    requested_by=requested_by,
+                )
+                provider_status = PaymentService._refund_status_value(refund)
+                if provider_status == RefundStatus.SUCCESS.value:
+                    order = OrderService.finalize_external_refund(db, refund, late_transactions[0])
+                    completed = True
+                else:
+                    db.refresh(order)
+                    completed = False
+                return {
+                    'order': order,
+                    'refund': refund,
+                    'provider_status': provider_status,
+                    'completed': completed,
+                }
+            refund = (
+                db.query(PaymentRefund)
+                .filter(PaymentRefund.order_id == order.id)
+                .order_by(PaymentRefund.id.desc())
+                .first()
+            )
+            return {
+                'order': order,
+                'refund': refund,
+                'provider_status': 'SUCCESS' if refund else 'LOCAL_SUCCESS',
+                'completed': True,
+            }
+
+        OrderService._validate_paid_refund_transition(db, order)
+        paid_transactions = (
+            db.query(PaymentTransaction)
+            .filter(
+                PaymentTransaction.order_id == order.id,
+                PaymentTransaction.status == PaymentStatus.PAID,
+            )
+            .order_by(PaymentTransaction.id.desc())
+            .all()
+        )
+        wechat_transactions = [
+            transaction
+            for transaction in paid_transactions
+            if transaction.channel == PaymentChannel.WECHAT
+        ]
+        if wechat_transactions:
+            if len(wechat_transactions) != 1 or len(paid_transactions) != 1:
+                raise ConflictError('Order has conflicting completed payment transactions')
+            from app.services.payment_service import PaymentService
+
+            refund = PaymentService.request_wechat_refund(
+                db,
+                order,
+                wechat_transactions[0],
+                reason=reason,
+                idempotency_key=idempotency_key,
+                requested_by=requested_by,
+            )
+            provider_status = PaymentService._refund_status_value(refund)
+            if provider_status == RefundStatus.SUCCESS.value:
+                order = OrderService.finalize_external_refund(db, refund, wechat_transactions[0])
+                return {
+                    'order': order,
+                    'refund': refund,
+                    'provider_status': provider_status,
+                    'completed': True,
+                }
+            # PROCESSING/FAILED are provider states, not a local refund. The
+            # order remains paid and can be reconciled through the sync API.
+            db.refresh(order)
+            return {
+                'order': order,
+                'refund': refund,
+                'provider_status': provider_status,
+                'completed': False,
+            }
+
+        for transaction in paid_transactions:
+            payload = transaction.notify_payload if isinstance(transaction.notify_payload, dict) else {}
+            if not bool(payload.get('mocked')):
+                raise ConflictError('External payment refund must be completed through the payment provider')
+
+        # Preserve the historical local path for mock Alipay and fully
+        # internal orders. Mock WeChat deliberately takes the provider-style
+        # path above so its refund idempotency behavior is testable.
+        order = OrderService._cancel_order_instance(db, order, refunded=True)
+        return {
+            'order': order,
+            'refund': None,
+            'provider_status': 'LOCAL_SUCCESS',
+            'completed': True,
+        }
+
+    @staticmethod
+    def sync_wechat_refund_for_order(
+        db: Session,
+        order: Order,
+        *,
+        out_refund_no: str | None = None,
+    ) -> dict:
+        """Reconcile one of an order's WeChat refunds with the provider."""
+        query = db.query(PaymentRefund).filter(
+            PaymentRefund.order_id == order.id,
+            PaymentRefund.channel == PaymentChannel.WECHAT,
+        )
+        normalized_refund_no = str(out_refund_no or '').strip()
+        if normalized_refund_no:
+            query = query.filter(PaymentRefund.out_refund_no == normalized_refund_no)
+        refund = query.order_by(PaymentRefund.id.desc()).first()
+        if not refund:
+            raise NotFoundError('Payment refund not found')
+        tx = db.get(PaymentTransaction, refund.payment_transaction_id)
+        if not tx or tx.order_id != order.id:
+            raise NotFoundError('Payment transaction not found')
+
+        from app.services.payment_service import PaymentService
+
+        refund = PaymentService.sync_wechat_refund(db, refund, tx)
+        provider_status = PaymentService._refund_status_value(refund)
+        if provider_status == RefundStatus.SUCCESS.value:
+            order = OrderService.finalize_external_refund(db, refund, tx)
+            completed = True
+        else:
+            db.refresh(order)
+            completed = False
+        return {
+            'order': order,
+            'refund': refund,
+            'provider_status': provider_status,
+            'completed': completed,
+        }
 
     @staticmethod
     def _cancel_order_instance(
@@ -216,8 +600,19 @@ class OrderService:
         *,
         refunded: bool,
         commit: bool = True,
-    ) -> Order:
+        skip_if_state_changed: bool = False,
+    ) -> Order | None:
+        # Payment callbacks take PaymentTransaction -> Order locks.  This
+        # path locks only the order, commits the lifecycle transition, then
+        # closes still-pending transactions in a separate transaction.
+        order = OrderService._lock_order_for_transition(db, order.id)
         if order.order_status == OrderStatus.REFUND:
+            if commit:
+                # Release the order lock before touching payment rows. A
+                # retry may still need to close a pre-existing pending row.
+                db.commit()
+                OrderService._close_pending_payment_transactions_after_cancellation(db, order.id)
+                db.refresh(order)
             return order
         if order.order_type == OrderType.LOCAL_LIFE_ORDER:
             raise ConflictError('Local-life orders use the verification workflow')
@@ -232,17 +627,23 @@ class OrderService:
                 allowed_statuses.add(OrderStatus.COMPLETED)
             if order.order_status not in allowed_statuses:
                 raise ConflictError('Current order status cannot be refunded')
+            OrderService._restore_order_inventory(db, order)
             OrderService._close_refunded_payment_transactions(db, order)
             CommissionService.cancel_for_order(db, order.id)
             RegionDividendService.reverse_order_dividend(db, order)
             OrderService._revoke_order_rewards(db, order)
         else:
             if order.pay_status != PayStatus.UNPAID or order.order_status != OrderStatus.PENDING_PAYMENT:
+                if skip_if_state_changed:
+                    if commit:
+                        # The expiry scanner may continue with another order;
+                        # do not retain this row lock after a payment won.
+                        db.commit()
+                    return None
                 raise ConflictError('Only unpaid pending orders can be canceled')
+            OrderService._restore_order_inventory(db, order)
 
-        OrderService._close_pending_payment_transactions(db, order)
         OrderService._refund_order_deductions(db, order)
-        OrderService._restore_order_inventory(db, order)
         order.order_status = OrderStatus.REFUND
         order.pay_status = PayStatus.REFUNDED if refunded else PayStatus.UNPAID
         order.payable_amount = Decimal('0.00')
@@ -252,6 +653,7 @@ class OrderService:
 
         if commit:
             db.commit()
+            OrderService._close_pending_payment_transactions_after_cancellation(db, order.id)
             db.refresh(order)
         else:
             db.flush()
@@ -269,11 +671,17 @@ class OrderService:
         if user_id is not None:
             query = query.filter(Order.user_id == user_id)
         rows = query.all()
+        expired_count = 0
         for order in rows:
-            OrderService._cancel_order_instance(db, order, refunded=False, commit=False)
-        if rows:
-            db.commit()
-        return len(rows)
+            canceled_order = OrderService._cancel_order_instance(
+                db,
+                order,
+                refunded=False,
+                skip_if_state_changed=True,
+            )
+            if canceled_order:
+                expired_count += 1
+        return expired_count
 
     @staticmethod
     def _confirm_order_instance(db: Session, order: Order) -> Order:
@@ -299,7 +707,12 @@ class OrderService:
         return order
 
     @staticmethod
-    def _process_region_dividend(db: Session, order: Order) -> None:
+    def _process_region_dividend(
+        db: Session,
+        order: Order,
+        *,
+        commit: bool = True,
+    ) -> None:
         address_id = getattr(order, 'legacy_address_id', None)
         if not address_id:
             return
@@ -309,11 +722,13 @@ class OrderService:
                 'province': address.province,
                 'city': address.city,
                 'district': address.district,
-            })
+            }, commit=commit)
 
     @staticmethod
     def confirm_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
-        order = OrderService.get_order_for_admin(db, order_id, current_user)
+        OrderService.get_order_for_admin(db, order_id, current_user)
+        order = OrderService._lock_order_for_transition(db, order_id)
+        OrderService._ensure_no_active_external_refund(db, order.id)
         return OrderService._confirm_order_instance(db, order)
 
     @staticmethod
@@ -322,9 +737,23 @@ class OrderService:
         return OrderService._cancel_order_instance(db, order, refunded=False)
 
     @staticmethod
-    def refund_order_for_admin(db: Session, order_id: int, current_user: User) -> Order:
+    def refund_order_for_admin(
+        db: Session,
+        order_id: int,
+        current_user: User,
+        *,
+        reason: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> Order:
         order = OrderService.get_order_for_admin(db, order_id, current_user)
-        return OrderService._cancel_order_instance(db, order, refunded=True)
+        result = OrderService.refund_order_with_result(
+            db,
+            order,
+            reason=reason,
+            idempotency_key=idempotency_key,
+            requested_by=current_user.id,
+        )
+        return result['order']
 
     @staticmethod
     def mark_paid_for_admin(db: Session, order_id: int, current_user: User) -> Order:
@@ -341,11 +770,13 @@ class OrderService:
         tracking_no: str | None = None,
         tracking_company: str | None = None
     ) -> Order:
-        order = OrderService.get_order_for_admin(db, order_id, current_user)
-        if order.order_status not in (OrderStatus.PENDING_SHIP,):
-            raise ConflictError('Only pending-ship orders can be shipped')
         if not str(tracking_no or '').strip():
             raise ConflictError('Tracking number is required')
+        OrderService.get_order_for_admin(db, order_id, current_user)
+        order = OrderService._lock_order_for_transition(db, order_id)
+        OrderService._ensure_no_active_external_refund(db, order.id)
+        if order.order_status not in (OrderStatus.PENDING_SHIP,):
+            raise ConflictError('Only pending-ship orders can be shipped')
         order.order_status = OrderStatus.SHIPPED
         order.legacy_logistics_no = str(tracking_no).strip()
         if tracking_company:
@@ -577,7 +1008,7 @@ class OrderService:
 
         if pay_channel in EXTERNAL_PAY_CHANNELS and pay_channel not in enabled_external_payment_channels():
             if pay_channel == 'WECHAT':
-                raise ConflictError('Wechat payment is under development')
+                raise ConflictError('Wechat payment is not enabled')
             raise ConflictError('Alipay payment is not enabled')
 
         if pay_channel == 'BALANCE' and not all(
@@ -589,6 +1020,11 @@ class OrderService:
             bool(OrderService._config_value(config, zone_type, 'alipay_purchase_enabled')) for config in configs
         ):
             raise ConflictError('Alipay payment is disabled for current product')
+
+        if pay_channel == 'WECHAT' and not all(
+            bool(OrderService._config_value(config, zone_type, 'wechat_purchase_enabled')) for config in configs
+        ):
+            raise ConflictError('Wechat payment is disabled for current product')
 
         points_amount = deductions_by_type.get(AssetType.POINTS, Decimal('0'))
         if points_amount > total_amount:
@@ -602,6 +1038,66 @@ class OrderService:
         purchase_mode = OrderService._purchase_mode(total_amount, deductions_by_type, pay_channel)
         if purchase_mode != 'CASH_ONLY':
             OrderService._validate_purchase_mode(zone_type, configs, purchase_mode)
+
+    @staticmethod
+    def _validate_existing_order_external_channel(
+        db: Session,
+        order: Order,
+        pay_channel: str,
+    ) -> None:
+        """Re-check provider switches and, when needed, product switches.
+
+        Orders can remain pending for several minutes while an administrator
+        changes a product's payment switches.  A transaction that was already
+        created remains retryable while the provider is globally enabled;
+        product switches apply to new transactions only.
+        """
+        if pay_channel not in EXTERNAL_PAY_CHANNELS:
+            return
+        if pay_channel not in enabled_external_payment_channels():
+            if pay_channel == 'WECHAT':
+                raise ConflictError('Wechat payment is not enabled')
+            raise ConflictError('Alipay payment is not enabled')
+
+        # A provider transaction may remain pending while an administrator
+        # changes the product-level switch.  Keep that already-created
+        # checkout retryable as long as the provider itself is still globally
+        # enabled; the product switch applies to creating a new transaction.
+        existing_pending = (
+            db.query(PaymentTransaction)
+            .filter(
+                PaymentTransaction.order_id == order.id,
+                PaymentTransaction.channel == pay_channel,
+                PaymentTransaction.status == PaymentStatus.PENDING,
+            )
+            .first()
+        )
+        pending_channel = str(
+            getattr(getattr(existing_pending, 'channel', None), 'value', getattr(existing_pending, 'channel', ''))
+            or ''
+        ).strip().upper()
+        pending_status = str(
+            getattr(getattr(existing_pending, 'status', None), 'value', getattr(existing_pending, 'status', ''))
+            or ''
+        ).strip().upper()
+        if pending_channel == pay_channel and pending_status == PaymentStatus.PENDING.value:
+            return
+
+        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+        if not items:
+            return
+        configs = [
+            OrderService._get_zone_config(db, item.product_id, order.zone_type)
+            for item in items
+        ]
+        field = 'wechat_purchase_enabled' if pay_channel == 'WECHAT' else 'alipay_purchase_enabled'
+        if not all(bool(OrderService._config_value(config, order.zone_type, field)) for config in configs):
+            label = 'Wechat' if pay_channel == 'WECHAT' else 'Alipay'
+            raise ConflictError(f'{label} payment is disabled for current product')
+
+    @staticmethod
+    def _asset_lock_key(asset_type: AssetType | str) -> str:
+        return str(getattr(asset_type, 'value', asset_type)).upper()
 
     @staticmethod
     def build_payment_plan(
@@ -682,7 +1178,10 @@ class OrderService:
         products_data: list[dict] = []
         zone_types: set[ZoneType] = set()
 
-        for item in items_payload:
+        # Product rows are locked in a deterministic order, matching refund
+        # inventory restoration, so multi-item checkout cannot deadlock with
+        # a concurrent cancellation/refund.
+        for item in sorted(items_payload, key=lambda value: int(value['product_id'])):
             product = db.query(Product).filter(Product.id == item['product_id']).with_for_update().first()
             if not product:
                 raise NotFoundError('Product not found')
@@ -777,7 +1276,10 @@ class OrderService:
                 )
             )
 
-        for asset_type, amount in payment_plan['deductions_by_type'].items():
+        for asset_type, amount in sorted(
+            payment_plan['deductions_by_type'].items(),
+            key=lambda item: OrderService._asset_lock_key(item[0]),
+        ):
             AssetService.consume_amount(
                 db,
                 current_user.id,
@@ -878,6 +1380,7 @@ class OrderService:
 
     @staticmethod
     def _mark_paid(db: Session, order: Order, external_paid_amount: Decimal | None = None) -> Order:
+        order = OrderService._lock_order_for_transition(db, order.id)
         if order.pay_status == PayStatus.PAID:
             if order.order_status == OrderStatus.COMPLETED:
                 OrderService._process_region_dividend(db, order)
@@ -907,12 +1410,15 @@ class OrderService:
 
             PackageService.handle_paid_package_order(db, order)
 
+        if not requires_shipping:
+            # Keep automatic completion and its monetary side effects in the
+            # same transaction. A provider refund can only acquire the order
+            # lock after this commit, so it cannot reverse the order and then
+            # let an older payment callback settle rewards afterwards.
+            CommissionService.settle_for_order(db, order.id, commit=False)
+            OrderService._process_region_dividend(db, order, commit=False)
         db.commit()
         db.refresh(order)
-        if not requires_shipping:
-            CommissionService.settle_for_order(db, order.id)
-            OrderService._process_region_dividend(db, order)
-            db.refresh(order)
         return order
 
     @staticmethod
@@ -931,7 +1437,9 @@ class OrderService:
 
     @staticmethod
     def confirm_order(db: Session, user_id: int, order_id: int) -> Order:
-        order = OrderService.get_order(db, user_id, order_id)
+        OrderService.get_order(db, user_id, order_id)
+        order = OrderService._lock_order_for_transition(db, order_id)
+        OrderService._ensure_no_active_external_refund(db, order.id)
         return OrderService._confirm_order_instance(db, order)
 
     @staticmethod
@@ -940,9 +1448,23 @@ class OrderService:
         return OrderService._cancel_order_instance(db, order, refunded=False)
 
     @staticmethod
-    def refund_order(db: Session, user_id: int, order_id: int) -> Order:
+    def refund_order(
+        db: Session,
+        user_id: int,
+        order_id: int,
+        *,
+        reason: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> Order:
         order = OrderService.get_order(db, user_id, order_id)
-        return OrderService._cancel_order_instance(db, order, refunded=True)
+        result = OrderService.refund_order_with_result(
+            db,
+            order,
+            reason=reason,
+            idempotency_key=idempotency_key,
+            requested_by=user_id,
+        )
+        return result['order']
 
     @staticmethod
     def preview_order_payment(
@@ -997,7 +1519,11 @@ class OrderService:
         alipay_product_enabled = all(
             bool(OrderService._config_value(config, actual_zone_type, 'alipay_purchase_enabled')) for config in configs
         )
+        wechat_product_enabled = all(
+            bool(OrderService._config_value(config, actual_zone_type, 'wechat_purchase_enabled')) for config in configs
+        )
         alipay_provider_ready = 'ALIPAY' in enabled_external_payment_channels()
+        wechat_provider_ready = 'WECHAT' in enabled_external_payment_channels()
         return {
             'zone_type': actual_zone_type.value,
             'address_id': plan['address_id'],
@@ -1019,7 +1545,18 @@ class OrderService:
                     'available': balance_available,
                     'unavailable_reason': '' if balance_available else '后台未开启余额支付',
                 },
-                {'value': 'WECHAT', 'label': '微信支付', 'available': False, 'desc': '正在开发'},
+                {
+                    'value': 'WECHAT',
+                    'label': '微信支付',
+                    'available': wechat_product_enabled and wechat_provider_ready,
+                    'unavailable_reason': (
+                        ''
+                        if wechat_product_enabled and wechat_provider_ready
+                        else '后台未开启微信支付'
+                        if not wechat_product_enabled
+                        else '微信全局配置未就绪'
+                    ),
+                },
                 {
                     'value': 'ALIPAY',
                     'label': '支付宝支付',
@@ -1043,6 +1580,7 @@ class OrderService:
         pay_channel: str,
         points_amount: float = 0,
         auto_complete: bool = True,
+        request_payload: dict | None = None,
     ) -> dict:
         order = OrderService.get_order(db, current_user.id, order_id)
         if order.order_status == OrderStatus.REFUND:
@@ -1051,6 +1589,7 @@ class OrderService:
             return {'order': order, 'payment': {'status': 'PAID', 'message': 'Order already paid'}}
 
         resolved_channel = OrderService._resolve_pay_channel(pay_channel)
+        OrderService._validate_existing_order_external_channel(db, order, resolved_channel)
         points_amount_decimal = quantize_amount(points_amount)
 
         if points_amount_decimal > 0:
@@ -1064,7 +1603,12 @@ class OrderService:
 
         from app.services.payment_service import PaymentService
 
-        payment_result = PaymentService.prepare_external_payment(db, order, resolved_channel)
+        payment_result = PaymentService.prepare_external_payment(
+            db,
+            order,
+            resolved_channel,
+            request_payload=request_payload,
+        )
         payment = payment_result['payment']
         if auto_complete and payment.get('mocked'):
             order = PaymentService.confirm_paid_order(db, payment_result['transaction'], notify_payload={'mocked': True})

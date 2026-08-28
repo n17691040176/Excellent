@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     wechat_pay_merchant_private_key_path: str | None = None
     wechat_pay_platform_cert_path: str | None = None
     wechat_pay_notify_url: str | None = None
+    wechat_pay_refund_notify_url: str | None = None
+    wechat_pay_h5_type: str | None = None
+    wechat_pay_h5_info_type: str | None = None
+    wechat_pay_h5_return_url: str | None = None
+    wechat_pay_h5_redirect_url: str | None = None
     wechat_pay_app_pay_subject_prefix: str | None = None
     alipay_enabled: bool | None = None
     alipay_app_id: str | None = None

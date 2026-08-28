@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.asset import UserAssetAccount, UserAssetLedger
-from app.models.enums import AssetDirection, AssetType, MemberLevel
+from app.models.enums import AssetDirection, AssetType, MemberLevel, OrderStatus, PayStatus
 from app.models.order import Order, OrderItem
 from app.models.product import Product, ProductZoneConfig
 from app.models.region_agent import RegionAgent
@@ -25,15 +25,32 @@ class RegionDividendService:
     }
 
     @staticmethod
-    def process_order_dividend(db: Session, order: Order, address: dict) -> list[RegionDividendFlow]:
+    def process_order_dividend(
+        db: Session,
+        order: Order,
+        address: dict,
+        *,
+        commit: bool = True,
+    ) -> list[RegionDividendFlow]:
         province = str(address.get('province') or '').strip()
         city = str(address.get('city') or '').strip()
         district = str(address.get('district') or '').strip()
         if not province or not city:
             return []
 
-        # Serialize concurrent completion/payment callbacks for the same order.
-        db.query(Order.id).filter(Order.id == order.id).with_for_update().first()
+        # Serialize concurrent completion/payment callbacks for the same order
+        # and re-read the lifecycle state while the lock is held. A stale
+        # payment callback must never award a refund-completed order.
+        locked_order = db.query(Order).filter(Order.id == order.id).with_for_update().first()
+        if not locked_order:
+            return []
+        db.refresh(locked_order, with_for_update=True)
+        if (
+            locked_order.pay_status != PayStatus.PAID
+            or locked_order.order_status != OrderStatus.COMPLETED
+        ):
+            return []
+        order = locked_order
 
         rewards = RegionDividendService._product_region_rewards(db, order.id)
         if not any(item['amount'] > 0 for item in rewards.values()):
@@ -48,21 +65,6 @@ class RegionDividendService:
             district=district,
         ) if district else None
         county_reward = rewards['COUNTY_AGENT']
-        if county_agent and county_reward['amount'] > 0:
-            flow = RegionDividendService._allocate_reward(
-                db,
-                order,
-                county_agent,
-                county_reward['base_amount'],
-                county_reward['amount'],
-                county_reward['product_count'],
-                province,
-                city,
-                district,
-            )
-            if flow:
-                awarded.append(flow)
-
         city_agent = RegionDividendService._active_agent(
             db,
             agent_type='CITY_AGENT',
@@ -71,14 +73,23 @@ class RegionDividendService:
             district='',
         )
         city_reward = rewards['CITY_AGENT']
+        reward_candidates = []
+        if county_agent and county_reward['amount'] > 0:
+            reward_candidates.append((county_agent, county_reward))
         if city_agent and city_reward['amount'] > 0:
+            reward_candidates.append((city_agent, city_reward))
+
+        # A payment and a refund can touch the same city/county agents from
+        # different orders. Lock agents by primary key in both paths before
+        # locking their balance accounts to avoid inversion-based deadlocks.
+        for agent, reward in sorted(reward_candidates, key=lambda item: int(item[0].id)):
             flow = RegionDividendService._allocate_reward(
                 db,
                 order,
-                city_agent,
-                city_reward['base_amount'],
-                city_reward['amount'],
-                city_reward['product_count'],
+                agent,
+                reward['base_amount'],
+                reward['amount'],
+                reward['product_count'],
                 province,
                 city,
                 district,
@@ -87,7 +98,10 @@ class RegionDividendService:
                 awarded.append(flow)
 
         if awarded:
-            db.commit()
+            if commit:
+                db.commit()
+            else:
+                db.flush()
         return awarded
 
     @staticmethod
@@ -134,6 +148,16 @@ class RegionDividendService:
         reward_amount = quantize_amount(reward_amount)
         if reward_amount <= 0:
             return None
+
+        # Refresh the aggregate row as well as taking its lock: a long-lived
+        # SQLAlchemy identity map otherwise permits a stale total to overwrite
+        # a concurrent award or reversal after the lock is acquired.
+        locked_agent = db.query(RegionAgent).filter(
+            RegionAgent.id == agent.id,
+        ).populate_existing().with_for_update().first()
+        if not locked_agent:
+            return None
+        agent = locked_agent
 
         reward_district = district if agent.agent_type == 'COUNTY_AGENT' else ''
         flow = RegionDividendFlow(
@@ -242,7 +266,7 @@ class RegionDividendService:
         account = db.query(UserAssetAccount).filter(
             UserAssetAccount.user_id == user_id,
             UserAssetAccount.asset_type == AssetType.BALANCE,
-        ).with_for_update().first()
+        ).populate_existing().with_for_update().first()
         current_time = now()
         if account:
             before_amount = quantize_amount(account.available_amount or 0)
@@ -284,13 +308,21 @@ class RegionDividendService:
         flows = db.query(RegionDividendFlow).filter(
             RegionDividendFlow.order_id == order.id,
             RegionDividendFlow.status == 'SETTLED',
-        ).all()
+        ).order_by(
+            RegionDividendFlow.agent_id.asc(),
+            RegionDividendFlow.id.asc(),
+        ).with_for_update().all()
         for flow in flows:
             amount = quantize_amount(flow.dividend_amount)
+            # Keep the same RegionAgent -> UserAssetAccount lock order used
+            # by _allocate_reward and refresh aggregate values before update.
+            agent = db.query(RegionAgent).filter(
+                RegionAgent.id == flow.agent_id,
+            ).populate_existing().with_for_update().first()
             account = db.query(UserAssetAccount).filter(
                 UserAssetAccount.user_id == flow.agent_user_id,
                 UserAssetAccount.asset_type == AssetType.BALANCE,
-            ).with_for_update().first()
+            ).populate_existing().with_for_update().first()
             if not account or quantize_amount(account.available_amount) < amount:
                 raise ConflictError('区域订单奖励余额不足，无法完成退款')
 
@@ -316,7 +348,6 @@ class RegionDividendService:
             ))
             flow.status = 'EXPIRED'
             flow.remark = '订单退款，奖励已收回'
-            agent = db.get(RegionAgent, flow.agent_id)
             if agent:
                 agent.total_orders = max(int(agent.total_orders or 0) - 1, 0)
                 agent.total_dividend = float(max(

@@ -31,7 +31,7 @@ from app.models.local_life import (
 from app.models.order import Order, OrderAssetDeduction, OrderItem, OrderStatusView
 from app.models.package import Package, PackageBenefit
 from app.models.page_decoration import PageDecoration
-from app.models.payment import PaymentTransaction
+from app.models.payment import PaymentRefund, PaymentTransaction
 from app.models.product import Product, ProductCategory, ProductQualification, ProductSku, ProductZoneConfig
 from app.models.region_agent import RegionAgent
 from app.models.region_dividend import RegionDividendFlow
@@ -51,7 +51,7 @@ __all__ = [
     'CommissionFlow', 'WithdrawRequest', 'CommissionAccountLedger', 'UserBankCard', 'Package', 'PackageBenefit', 'Product', 'ProductCategory', 'ProductSku',
     'ProductZoneConfig', 'ProductQualification', 'UserAssetAccount', 'UserAssetLedger',
     'DailySigninRecord', 'UserPowerBank', 'UserPowerBankIncomeRecord', 'UserFavoriteProduct', 'UserProductFootprint', 'ShoppingCartItem',
-    'Order', 'OrderItem', 'OrderAssetDeduction', 'OrderStatusView', 'PaymentTransaction', 'UserAddress', 'Supplier',
+    'Order', 'OrderItem', 'OrderAssetDeduction', 'OrderStatusView', 'PaymentTransaction', 'PaymentRefund', 'UserAddress', 'Supplier',
     'SupplierEntryOrder', 'SupplierAgreement', 'SupplierReferralReward', 'AgentLevel',
     'AgentQualification', 'LocalLifeMerchant', 'MerchantStore', 'LocalLifeService',
     'LocalLifeOrder', 'MerchantCommissionRule', 'DeviceRevenueFlow', 'AdRevenueFlow',

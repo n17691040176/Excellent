@@ -150,6 +150,23 @@ class PaymentStatus(StrEnum):
     CLOSED = 'CLOSED'
 
 
+class RefundStatus(StrEnum):
+    """Local state for a provider refund request.
+
+    ``PENDING`` means a local refund row exists but has not been submitted;
+    ``PROCESSING`` mirrors the provider's asynchronous state.  Keeping refund
+    state separate from the payment transaction prevents a provider response
+    from being mistaken for a second payment settlement.
+    """
+
+    PENDING = 'PENDING'
+    PROCESSING = 'PROCESSING'
+    SUCCESS = 'SUCCESS'
+    FAILED = 'FAILED'
+    CLOSED = 'CLOSED'
+    ABNORMAL = 'ABNORMAL'
+
+
 class QualificationStatus(StrEnum):
     PENDING = 'PENDING'
     APPROVED = 'APPROVED'

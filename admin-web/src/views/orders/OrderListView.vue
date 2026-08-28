@@ -306,6 +306,9 @@ const zoneTypeOptions = [
   { label: '本地生活', value: 'LOCAL_LIFE' }
 ]
 
+const refundFailureStatuses = new Set(['FAILED', 'CLOSED', 'ABNORMAL'])
+const refundProcessingStatuses = new Set(['PENDING', 'PROCESSING'])
+
 // 筛选字段配置
 const filterFields = [
   { key: 'keyword', type: 'input', placeholder: '搜索订单号 / 用户昵称 / 手机号', width: 240 },
@@ -377,6 +380,22 @@ function deliveryTagType(status) {
   }[status] || 'default'
 }
 
+function showRefundResult(result) {
+  const providerStatus = String(result?.provider_status || '').trim().toUpperCase()
+
+  if (refundFailureStatuses.has(providerStatus)) {
+    ElMessage.error('退款失败，请稍后重试')
+    return
+  }
+
+  if (refundProcessingStatuses.has(providerStatus) || result?.completed !== true) {
+    ElMessage.warning('退款申请已提交，正在处理中')
+    return
+  }
+
+  ElMessage.success('订单已退款')
+}
+
 function buildParams() {
   return {
     page: page.value,
@@ -441,8 +460,12 @@ async function handleAction(row, action) {
   const target = actionMap[action]
   if (!target) return
   await ElMessageBox.confirm(`确认${target.label} ${row.order_no} 吗？`, '订单操作', { type: 'warning' })
-  await target.request()
-  ElMessage.success(`${target.label}成功`)
+  const result = await target.request()
+  if (action === 'refund') {
+    showRefundResult(result)
+  } else {
+    ElMessage.success(`${target.label}成功`)
+  }
   await loadData()
   if (detailVisible.value && detail.value?.id === row.id) {
     await loadDetail(row.id)
@@ -475,8 +498,8 @@ async function handleClose() {
 async function handleRefund() {
   if (!detail.value) return
   await ElMessageBox.confirm(`确认退款订单 ${detail.value.order_no} 吗？`, '订单退款', { type: 'warning' })
-  await orderApi.refund(detail.value.id)
-  ElMessage.success('订单已退款')
+  const result = await orderApi.refund(detail.value.id)
+  showRefundResult(result)
   await loadData()
   await loadDetail(detail.value.id)
 }

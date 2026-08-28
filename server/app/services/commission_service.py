@@ -108,13 +108,21 @@ class CommissionService:
         CommissionService._freeze_direct_team_reward(db, order, buyer, standard_profit_items)
 
     @staticmethod
-    def settle_for_order(db: Session, order_id: int) -> None:
+    def settle_for_order(db: Session, order_id: int, *, commit: bool = True) -> None:
+        order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        if not order:
+            return
+        db.refresh(order, with_for_update=True)
+        if order.pay_status != PayStatus.PAID or order.order_status != OrderStatus.COMPLETED:
+            return
         flows = db.query(CommissionFlow).filter(
             CommissionFlow.order_id == order_id,
             CommissionFlow.status == CommissionStatus.FROZEN,
-        ).all()
+        ).order_by(CommissionFlow.id.asc()).with_for_update().all()
         for flow in flows:
-            summary = db.query(UserCommission).filter(UserCommission.user_id == flow.beneficiary_user_id).first()
+            summary = db.query(UserCommission).filter(
+                UserCommission.user_id == flow.beneficiary_user_id
+            ).with_for_update().first()
             if not summary:
                 continue
             amount = quantize_amount(flow.commission_amount)
@@ -123,16 +131,21 @@ class CommissionService:
             summary.updated_at = now()
             flow.status = CommissionStatus.SETTLED
             flow.settled_at = now()
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
     @staticmethod
     def cancel_for_order(db: Session, order_id: int) -> None:
         flows = db.query(CommissionFlow).filter(
             CommissionFlow.order_id == order_id,
             CommissionFlow.status.in_([CommissionStatus.FROZEN, CommissionStatus.SETTLED]),
-        ).all()
+        ).order_by(CommissionFlow.id.asc()).with_for_update().all()
         for flow in flows:
-            summary = db.query(UserCommission).filter(UserCommission.user_id == flow.beneficiary_user_id).first()
+            summary = db.query(UserCommission).filter(
+                UserCommission.user_id == flow.beneficiary_user_id
+            ).with_for_update().first()
             if not summary:
                 flow.status = CommissionStatus.CANCELED
                 continue
@@ -722,7 +735,21 @@ class CommissionService:
             amount = quantize_amount(commission_amount)
         if amount <= Decimal('0'):
             return
-        commission = db.query(UserCommission).filter(UserCommission.user_id == beneficiary.id).first()
+        locked_beneficiary_id = (
+            db.query(User.id)
+            .filter(User.id == beneficiary.id)
+            .with_for_update()
+            .scalar()
+        )
+        if locked_beneficiary_id is None:
+            return
+        commission = (
+            db.query(UserCommission)
+            .filter(UserCommission.user_id == beneficiary.id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
         if not commission:
             commission = UserCommission(user_id=beneficiary.id, updated_at=now())
             db.add(commission)

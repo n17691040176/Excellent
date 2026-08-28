@@ -74,9 +74,12 @@ must not contain the merchant application certificate or a stale certificate
 from another Alipay application. After replacing a mounted certificate,
 recreate the backend container so the running process reloads it.
 
-Keep one Alipay runtime configuration file. Set `ALIPAY_ENV_FILE` in the root
-`.env` to that file and let Compose load it through `env_file`; do not append a
-second sandbox or production block to the root `.env`.
+Keep one payment runtime configuration file. Set `PAYMENT_ENV_FILE` in the root
+`.env` to that file and let Compose load it through `env_file`; the older
+`ALIPAY_ENV_FILE` name remains supported for existing deployments. Do not
+append a second sandbox or production block to the root `.env`. The same file
+may also contain the optional `WECHAT_*` variables described in
+`docs/wechat-mweb-payment.md`.
 
 ## Unpaid orders
 

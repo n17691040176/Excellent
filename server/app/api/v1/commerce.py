@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.commerce import CartCheckoutRequest, CartItemCreateRequest, CartItemUpdateRequest
 from app.services.commerce_service import CommerceService
+from app.utils.request_context import build_payment_request_context
 
 app_router = APIRouter(prefix='/app/commerce')
 
@@ -130,7 +131,13 @@ def remove_cart_item(item_id: int, db: Session = Depends(get_db), current_user: 
 
 
 @app_router.post('/cart/checkout')
-def checkout_cart(payload: CartCheckoutRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def checkout_cart(
+    payload: CartCheckoutRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    request_payload = build_payment_request_context(request)
     result = CommerceService.checkout_cart(
         db,
         current_user,
@@ -139,6 +146,7 @@ def checkout_cart(payload: CartCheckoutRequest, db: Session = Depends(get_db), c
         points_amount=payload.points_amount,
         pay_channel=payload.pay_channel,
         auto_complete=payload.auto_complete,
+        request_payload=request_payload,
     )
     return {
         'code': 0,

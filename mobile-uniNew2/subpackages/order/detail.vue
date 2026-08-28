@@ -156,9 +156,10 @@ const paying = ref(false);
 const syncing = ref(false);
 const id = ref('');
 const outTradeNo = ref('');
+const paymentProvider = ref('');
 const alipayReturnParams = ref(null);
 const errorMessage = ref('订单不存在或网络暂时不可用');
-const paymentResultMessage = ref('正在确认支付宝支付结果...');
+const paymentResultMessage = ref('正在确认支付结果...');
 const paymentResultTone = ref('pending');
 
 const detail = ref({
@@ -186,7 +187,7 @@ const detail = ref({
   payChannelOptions: []
 });
 
-const returnedFromPayment = computed(() => Boolean(outTradeNo.value));
+const returnedFromPayment = computed(() => Boolean(outTradeNo.value || alipayReturnParams.value));
 const hasActions = computed(() => (
   detail.value.canPay || detail.value.canConfirm || detail.value.canCancel || detail.value.canRefund
 ));
@@ -230,35 +231,92 @@ function normalizeSteps(timeline = []) {
   }));
 }
 
-function findPaymentCombo(assetDeductions = [], payableAmount = 0, payStatus = '') {
+function queryValue(value) {
+  if (Array.isArray(value)) return value[value.length - 1];
+  return value;
+}
+
+function normalizePaymentProvider(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['wxpay', 'wechat', 'wechatpay', 'weixin', 'wx', '微信'].includes(normalized)) return 'wxpay';
+  if (['alipay', 'ali_pay', 'ali', '支付宝'].includes(normalized)) return 'alipay';
+  return normalized;
+}
+
+function paymentProviderLabel(value = '') {
+  const provider = normalizePaymentProvider(value);
+  if (provider === 'wxpay') return '微信';
+  if (provider === 'alipay') return '支付宝';
+  return '在线';
+}
+
+function normalizePayChannel(value = '') {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (['WXPAY', 'WECHAT', 'WECHATPAY', 'WEIXIN', 'WX'].includes(normalized)) return 'WECHAT';
+  if (['ALIPAY', 'ALI_PAY', 'ALI'].includes(normalized)) return 'ALIPAY';
+  if (normalized === 'BALANCE') return 'BALANCE';
+  return value || '';
+}
+
+function payChannelLabel(value = '') {
+  const channel = normalizePayChannel(value);
+  if (channel === 'WECHAT') return '微信';
+  if (channel === 'ALIPAY') return '支付宝';
+  if (channel === 'BALANCE') return '余额';
+  if (channel === 'VOUCHER') return '消费金';
+  return '在线支付';
+}
+
+function paymentChannelValues(options = []) {
+  return (Array.isArray(options) ? options : [])
+    .map((item) => {
+      if (typeof item === 'string') return { value: item, available: true };
+      return {
+        value: item?.value || item?.channel || item?.pay_channel || '',
+        available: item?.available !== false
+      };
+    })
+    .filter((item) => item.value && item.available)
+    .map((item) => normalizePayChannel(item.value));
+}
+
+function findPaymentCombo(assetDeductions = [], payableAmount = 0, payStatus = '', payChannel = '') {
   const types = new Set((assetDeductions || []).map((item) => item.asset_type));
   if (types.has('BALANCE') && types.has('POINTS')) return '余额 + 积分';
   if (types.has('VOUCHER') && types.has('POINTS')) return '消费金 + 积分';
-  if (types.has('POINTS') && Number(payableAmount || 0) > 0) return '支付宝 + 积分';
+  if (types.has('POINTS') && Number(payableAmount || 0) > 0) return `${payChannelLabel(payChannel)} + 积分`;
   if (types.has('BALANCE')) return '余额支付';
   if (types.has('VOUCHER')) return '消费金支付';
-  if (payStatus === 'PAID') return '支付宝';
+  if (payStatus === 'PAID') return payChannelLabel(payChannel);
   return '待支付';
 }
 
-function paymentLabel(status, providedLabel, assetDeductions, payableAmount, payStatus) {
+function paymentLabel(status, providedLabel, assetDeductions, payableAmount, payStatus, payChannel) {
   if (status === '已退款') return '已退款';
   if (status === '已取消') return '订单已取消';
-  return providedLabel || findPaymentCombo(assetDeductions, payableAmount, payStatus);
+  return providedLabel || findPaymentCombo(assetDeductions, payableAmount, payStatus, payChannel);
 }
 
 function preferredPayChannel(options = [], cashDue = 0, fallback = '') {
+  const values = paymentChannelValues(options);
   if (Number(cashDue || 0) > 0) {
-    const externalChannel = options.find((item) => ['ALIPAY', 'WECHAT'].includes(item));
+    const externalChannel = values.find((item) => ['ALIPAY', 'WECHAT'].includes(item));
     if (externalChannel) return externalChannel;
   }
-  return fallback || options[0] || '';
+  return normalizePayChannel(fallback) || values[0] || '';
 }
 
 function normalize(res = {}) {
   const order = res?.order || res || {};
-  const items = Array.isArray(res?.items) ? res.items : [];
-  const deductions = Array.isArray(res?.asset_deductions) ? res.asset_deductions : [];
+  // Payment-status responses wrap the full serialized order in `order`,
+  // while the detail endpoint returns its item arrays at the top level.
+  // Accept both shapes so a provider return does not blank the detail view.
+  const items = Array.isArray(res?.items)
+    ? res.items
+    : (Array.isArray(order?.items) ? order.items : []);
+  const deductions = Array.isArray(res?.asset_deductions)
+    ? res.asset_deductions
+    : (Array.isArray(order?.asset_deductions) ? order.asset_deductions : []);
   const payableAmount = Number(order?.payable_amount ?? order?.cash_due ?? 0);
   const totalAmount = Number(order?.total_amount ?? order?.amount ?? 0);
   const discountAmount = Number(order?.discount_amount ?? 0);
@@ -268,6 +326,15 @@ function normalize(res = {}) {
   const payChannelOptions = Array.isArray(res?.pay_channel_options)
     ? res.pay_channel_options
     : (Array.isArray(order?.pay_channel_options) ? order.pay_channel_options : []);
+  const payChannel = normalizePayChannel(
+    order?.pay_channel
+      || order?.payChannel
+      || res?.pay_channel
+      || res?.payChannel
+      || res?.default_pay_channel
+      || order?.default_pay_channel
+      || ''
+  ) || preferredPayChannel(payChannelOptions, payableAmount);
 
   return {
     status,
@@ -282,14 +349,15 @@ function normalize(res = {}) {
       res?.payment_combo || order?.payment_combo,
       deductions,
       payableAmount,
-      payStatus
+      payStatus,
+      payChannel
     ),
     channel: order?.channel_text || order?.channel || '商城订单',
     createdAt: formatDateTime(order?.created_at),
     paidAt: formatDateTime(order?.paid_at),
     steps: normalizeSteps(order?.timeline || order?.steps || res?.timeline || res?.steps),
     items,
-    payChannel: preferredPayChannel(payChannelOptions, payableAmount, res?.default_pay_channel || order?.default_pay_channel || ''),
+    payChannel,
     payChannelOptions,
     canPay: Boolean(order?.can_pay ?? res?.can_pay ?? payStatus !== 'PAID'),
     canConfirm: Boolean(order?.can_confirm ?? res?.can_confirm ?? false),
@@ -312,6 +380,9 @@ async function loadDetail({ silent = false } = {}) {
   failed.value = false;
   try {
     detail.value = normalize(await orderApi.detail(id.value));
+    if (!paymentProvider.value && detail.value.payChannel) {
+      paymentProvider.value = normalizePaymentProvider(detail.value.payChannel);
+    }
     return true;
   } catch (error) {
     failed.value = true;
@@ -330,29 +401,37 @@ async function syncReturnedPayment() {
   if (!id.value || !outTradeNo.value) return false;
   syncing.value = true;
   paymentResultTone.value = 'pending';
+  const returnParams = paymentProvider.value === 'alipay' ? alipayReturnParams.value : null;
+  const syncChannel = paymentProvider.value === 'wxpay'
+    ? 'WECHAT'
+    : paymentProvider.value === 'alipay' ? 'ALIPAY' : '';
+  const providerLabel = paymentProviderLabel(paymentProvider.value);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const result = await orderApi.syncPayment(id.value, outTradeNo.value, alipayReturnParams.value);
-      detail.value = normalize(result?.order || {});
+      const result = await orderApi.syncPayment(id.value, outTradeNo.value, returnParams, syncChannel);
+      if (result?.order || result?.status || result?.order_status) {
+        detail.value = normalize(result);
+      }
       if (result?.payment_status === 'PAID' || detail.value.payStatusCode === 'PAID') {
         paymentResultMessage.value = '支付成功，订单状态已更新';
         paymentResultTone.value = 'success';
         syncing.value = false;
         return true;
       }
-      if (result?.provider_status === 'TRADE_CLOSED') {
+      const providerStatus = String(result?.provider_status || '').toUpperCase();
+      if (['TRADE_CLOSED', 'CLOSED', 'PAYERROR', 'FAIL', 'FAILED'].includes(providerStatus)) {
         paymentResultMessage.value = '该笔支付已关闭，可重新发起支付';
         paymentResultTone.value = 'warning';
         syncing.value = false;
         return true;
       }
-      if (result?.provider_status === 'WAIT_BUYER_PAY') {
-        paymentResultMessage.value = '支付宝支付结果暂未确认，请稍后刷新订单';
+      if (['WAIT_BUYER_PAY', 'NOTPAY', 'USERPAYING', 'PENDING'].includes(providerStatus)) {
+        paymentResultMessage.value = `${providerLabel}支付结果暂未确认，请稍后刷新订单`;
         paymentResultTone.value = 'warning';
       }
     } catch (error) {
       if (attempt === 2) {
-        paymentResultMessage.value = '支付结果暂未同步，请稍后刷新订单';
+        paymentResultMessage.value = `${providerLabel}支付结果暂未同步，请稍后刷新订单`;
         paymentResultTone.value = 'warning';
       }
     }
@@ -371,9 +450,9 @@ async function initialize() {
     const loaded = await loadDetail({ silent: true });
     if (loaded && detail.value.canPay) {
       try {
-        const result = await orderApi.syncPayment(id.value);
-        if (result?.provider_status !== 'NO_TRANSACTION') {
-          detail.value = normalize(result?.order || {});
+        const result = await orderApi.syncPayment(id.value, '', null, detail.value.payChannel);
+        if (result?.provider_status !== 'NO_TRANSACTION' && (result?.order || result?.status || result?.order_status)) {
+          detail.value = normalize(result);
         }
         if (result?.payment_status === 'PAID') {
           uni.showToast({ title: '支付状态已更新', icon: 'success' });
@@ -410,15 +489,22 @@ async function payOrder() {
     }
     const result = await orderApi.pay(id.value, { pay_channel: payChannel, auto_complete: true });
     const payment = result?.payment;
+    if (payment?.status === 'FAILED') {
+      throw new Error(payment.message || '支付参数创建失败');
+    }
     if (payment?.status === 'PAID') {
       uni.showToast({ title: '支付完成', icon: 'success' });
       await loadDetail({ silent: true });
       return;
     }
+    paymentProvider.value = normalizePaymentProvider(payment?.provider || payChannel);
     const platformResult = await requestPlatformPayment(payment);
-    if (!platformResult?.redirected && payment?.out_trade_no) {
+    if (platformResult?.redirected) return;
+    if (payment?.out_trade_no) {
       outTradeNo.value = payment.out_trade_no;
       await syncReturnedPayment();
+    } else {
+      await loadDetail({ silent: true });
     }
   } catch (error) {
     const message = String(error?.errMsg || error?.message || '');
@@ -465,6 +551,7 @@ const ALIPAY_RETURN_FIELDS = [
   'out_trade_no',
   'method',
   'total_amount',
+  'trade_status',
   'sign',
   'trade_no',
   'auth_app_id',
@@ -475,21 +562,31 @@ const ALIPAY_RETURN_FIELDS = [
   'timestamp'
 ];
 
-function extractAlipayReturnParams(query = {}) {
+function extractAlipayReturnParams(query = {}, provider = '') {
+  if (provider && provider !== 'alipay') return null;
   const params = {};
   ALIPAY_RETURN_FIELDS.forEach((field) => {
-    const rawValue = query[field];
-    const value = Array.isArray(rawValue) ? rawValue[rawValue.length - 1] : rawValue;
+    const value = queryValue(query[field]);
     if (value !== undefined && value !== null && value !== '') params[field] = String(value);
   });
   return params.sign && params.out_trade_no ? params : null;
 }
 
 onLoad((query) => {
-  id.value = query?.id || query?.order_id || '';
-  alipayReturnParams.value = extractAlipayReturnParams(query);
-  outTradeNo.value = alipayReturnParams.value?.out_trade_no || query?.out_trade_no || '';
-  trackPageView('order_detail_view', { id: id.value, payment_return: Boolean(outTradeNo.value) });
+  id.value = queryValue(query?.id || query?.order_id || '');
+  const queryProvider = normalizePaymentProvider(queryValue(
+    query?.provider || query?.payment_provider || query?.pay_provider || query?.pay_channel
+  ));
+  alipayReturnParams.value = extractAlipayReturnParams(query, queryProvider);
+  paymentProvider.value = queryProvider || (alipayReturnParams.value ? 'alipay' : '');
+  outTradeNo.value = queryValue(
+    alipayReturnParams.value?.out_trade_no || query?.out_trade_no || query?.outTradeNo || ''
+  );
+  trackPageView('order_detail_view', {
+    id: id.value,
+    payment_return: Boolean(outTradeNo.value),
+    payment_provider: paymentProvider.value || undefined
+  });
   initialize();
 });
 </script>

@@ -137,15 +137,26 @@ class AssetService:
         return bool(missing_types)
 
     @staticmethod
-    def get_account(db: Session, user_id: int, asset_type: AssetType) -> UserAssetAccount:
+    def get_account(
+        db: Session,
+        user_id: int,
+        asset_type: AssetType,
+        *,
+        for_update: bool = False,
+    ) -> UserAssetAccount:
         if asset_type == AssetType.POWER_BANK and not AssetService.supports_power_bank_asset_account(db):
             raise NotFoundError('Power bank asset account not supported by current schema')
         if AssetService.ensure_user_asset_accounts(db, user_id, [asset_type]):
             db.commit()
-        account = db.query(UserAssetAccount).filter(
+        query = db.query(UserAssetAccount).filter(
             UserAssetAccount.user_id == user_id,
             UserAssetAccount.asset_type == asset_type,
-        ).first()
+        )
+        if for_update:
+            # Refresh an identity-map hit as well as locking the database row;
+            # balance changes must never be calculated from a stale snapshot.
+            query = query.populate_existing().with_for_update()
+        account = query.first()
         if not account:
             raise NotFoundError('Asset account not found')
         return account
@@ -161,7 +172,7 @@ class AssetService:
         source_no: str | None = None,
         remark: str | None = None,
     ) -> UserAssetAccount:
-        account = AssetService.get_account(db, user_id, asset_type)
+        account = AssetService.get_account(db, user_id, asset_type, for_update=True)
         change = quantize_amount(amount)
         before = quantize_amount(account.available_amount)
         after = before + change
@@ -196,7 +207,7 @@ class AssetService:
         source_no: str | None = None,
         remark: str | None = None,
     ) -> UserAssetAccount:
-        account = AssetService.get_account(db, user_id, asset_type)
+        account = AssetService.get_account(db, user_id, asset_type, for_update=True)
         change = quantize_amount(amount)
         before = quantize_amount(account.available_amount)
         if before < change:
@@ -233,7 +244,7 @@ class AssetService:
         source_no: str | None = None,
         remark: str | None = None,
     ) -> UserAssetAccount:
-        account = AssetService.get_account(db, user_id, asset_type)
+        account = AssetService.get_account(db, user_id, asset_type, for_update=True)
         change = quantize_amount(amount)
         if change <= 0:
             return account
@@ -273,7 +284,7 @@ class AssetService:
         source_no: str | None = None,
         remark: str | None = None,
     ) -> UserAssetAccount:
-        account = AssetService.get_account(db, user_id, asset_type)
+        account = AssetService.get_account(db, user_id, asset_type, for_update=True)
         change = quantize_amount(amount)
         if change <= 0:
             return account
@@ -313,7 +324,7 @@ class AssetService:
         source_no: str | None = None,
         remark: str | None = None,
     ) -> UserAssetAccount:
-        account = AssetService.get_account(db, user_id, asset_type)
+        account = AssetService.get_account(db, user_id, asset_type, for_update=True)
         change = quantize_amount(amount)
         before = quantize_amount(account.available_amount)
         if before < change:
@@ -350,7 +361,7 @@ class AssetService:
         source_no: str | None = None,
         remark: str | None = None,
     ) -> UserAssetAccount:
-        account = AssetService.get_account(db, user_id, asset_type)
+        account = AssetService.get_account(db, user_id, asset_type, for_update=True)
         change = quantize_amount(amount)
         frozen_before = quantize_amount(account.frozen_amount)
         if frozen_before < change:
@@ -384,7 +395,7 @@ class AssetService:
         asset_type: AssetType,
         amount: Decimal | float,
     ) -> UserAssetAccount:
-        account = AssetService.get_account(db, user_id, asset_type)
+        account = AssetService.get_account(db, user_id, asset_type, for_update=True)
         change = quantize_amount(amount)
         frozen_before = quantize_amount(account.frozen_amount)
         if frozen_before < change:

@@ -1,6 +1,9 @@
 # ===========================================
 # Excellent App - 生产环境 Docker Compose 修复版
-# 启动命令: docker compose -f docker-compose.prod.yml up -d
+# 推荐启动命令: ./deploy.sh
+# 直接使用 docker compose 时，请先在根 .env 中设置
+# PAYMENT_ENV_FILE（或兼容的 ALIPAY_ENV_FILE）和 PAYMENT_SECRETS_DIR；Compose 不会从 env_file
+# 内容反向插值宿主机的密钥挂载路径。
 # 停止命令: docker compose -f docker-compose.prod.yml down
 # ===========================================
 # 全局日志统一配置：限制日志大小，防止磁盘打满
@@ -78,8 +81,13 @@ services:
     restart: unless-stopped
     logging: *default-logging
     networks: [excellent-net]
+    # Keep all payment provider variables in one runtime env file. New
+    # deployments should set PAYMENT_ENV_FILE; ALIPAY_ENV_FILE remains a
+    # backwards-compatible alias for existing hosts. The file is passed
+    # through as-is, so WECHAT_* values are available without duplicating
+    # secrets in the root Compose interpolation file.
     env_file:
-      - ${ALIPAY_ENV_FILE:-/www/wwwroot/excellent/server/.env.alipay.local}
+      - ${PAYMENT_ENV_FILE:-${ALIPAY_ENV_FILE:-/www/wwwroot/excellent/server/.env.alipay.local}}
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: 8000

@@ -16,7 +16,7 @@ from cryptography.x509.oid import NameOID
 
 from app.core.exceptions import ConflictError, ForbiddenError
 from app.core.payment_config import AlipayConfig, PaymentConfig, validate_payment_config
-from app.models.enums import OrderType, PaymentChannel, PaymentStatus, PayStatus
+from app.models.enums import OrderStatus, OrderType, PaymentChannel, PaymentStatus, PayStatus
 from app.services import payment_service as payment_module
 from app.services.payment_service import PaymentService
 
@@ -296,6 +296,91 @@ class AlipayH5PaymentTest(TestCase):
             provider_trade_no='20260720000000000001',
         )
 
+    def test_alipay_query_refreshes_transaction_before_settlement(self):
+        tx = self.build_transaction()
+        order = self.build_order()
+        query_result = {
+            'code': '10000',
+            'msg': 'Success',
+            'out_trade_no': tx.out_trade_no,
+            'trade_no': '20260720000000000002',
+            'trade_status': 'TRADE_SUCCESS',
+            'total_amount': '9.90',
+        }
+        db = MagicMock()
+        db.query.return_value.filter.return_value.filter.return_value.first.return_value = tx
+
+        def refresh(instance, **_kwargs):
+            if instance is tx:
+                instance.status = PaymentStatus.PAID
+                instance.provider_trade_no = '20260720000000000002'
+            elif instance is order:
+                instance.pay_status = PayStatus.PAID
+                instance.order_status = OrderStatus.PENDING_SHIP
+
+        db.refresh.side_effect = refresh
+
+        with (
+            patch.object(
+                payment_module,
+                'payment_config',
+                PaymentConfig(mock_external_payment=False, alipay=self.config),
+            ),
+            patch.object(PaymentService, '_alipay_query_trade', return_value=query_result),
+            patch.object(PaymentService, '_record_provider_success_for_closed_order') as record_closed,
+            patch.object(PaymentService, 'confirm_paid_order') as confirm_paid,
+        ):
+            result = PaymentService.reconcile_alipay_payment(db, order, tx.out_trade_no)
+
+        self.assertIs(result['transaction'], tx)
+        self.assertIs(result['order'], order)
+        self.assertEqual(order.pay_status, PayStatus.PAID)
+        self.assertEqual(result['provider_status'], 'TRADE_SUCCESS')
+        record_closed.assert_not_called()
+        confirm_paid.assert_not_called()
+        db.refresh.assert_any_call(order, with_for_update=True)
+
+    def test_alipay_query_does_not_mark_paid_transaction_failed_on_stale_closed_state(self):
+        tx = self.build_transaction()
+        order = self.build_order()
+        query_result = {
+            'code': '10000',
+            'msg': 'Success',
+            'out_trade_no': tx.out_trade_no,
+            'trade_no': '20260720000000000003',
+            'trade_status': 'TRADE_CLOSED',
+            'total_amount': '9.90',
+        }
+        db = MagicMock()
+        db.query.return_value.filter.return_value.filter.return_value.first.return_value = tx
+
+        def refresh(instance, **_kwargs):
+            if instance is tx:
+                instance.status = PaymentStatus.PAID
+                instance.provider_trade_no = '20260720000000000003'
+            elif instance is order:
+                instance.pay_status = PayStatus.PAID
+                instance.order_status = OrderStatus.PENDING_SHIP
+
+        db.refresh.side_effect = refresh
+
+        with (
+            patch.object(
+                payment_module,
+                'payment_config',
+                PaymentConfig(mock_external_payment=False, alipay=self.config),
+            ),
+            patch.object(PaymentService, '_alipay_query_trade', return_value=query_result),
+        ):
+            result = PaymentService.reconcile_alipay_payment(db, order, tx.out_trade_no)
+
+        self.assertEqual(result['provider_status'], 'TRADE_CLOSED')
+        self.assertEqual(tx.status, PaymentStatus.PAID)
+        self.assertIs(result['order'], order)
+        self.assertEqual(order.pay_status, PayStatus.PAID)
+        db.commit.assert_not_called()
+        db.refresh.assert_any_call(order, with_for_update=True)
+
     def test_reconciles_latest_transaction_when_return_trade_no_does_not_match(self):
         tx = self.build_transaction()
         order = self.build_order()
@@ -350,6 +435,7 @@ class AlipayH5PaymentTest(TestCase):
             'out_trade_no': tx.out_trade_no,
             'total_amount': '9.90',
             'trade_no': '20260722000000000001',
+            'trade_status': 'TRADE_SUCCESS',
             'charset': 'utf-8',
             'sign_type': 'RSA2',
             'timestamp': '2026-07-22 13:53:19',
@@ -376,6 +462,116 @@ class AlipayH5PaymentTest(TestCase):
             notify_payload={'source': 'signed_return', **payload},
             provider_trade_no='20260722000000000001',
         )
+
+    def test_signed_return_requires_success_trade_status(self):
+        for trade_status in ('', 'TRADE_CLOSED'):
+            with self.subTest(trade_status=trade_status or 'missing'):
+                tx = self.build_transaction()
+                order = self.build_order()
+                payload = {
+                    'app_id': self.config.app_id,
+                    'auth_app_id': self.config.app_id,
+                    'seller_id': self.config.seller_id,
+                    'method': 'alipay.trade.wap.pay.return',
+                    'out_trade_no': tx.out_trade_no,
+                    'total_amount': '9.90',
+                    'trade_no': '20260722000000000009',
+                    'charset': 'utf-8',
+                    'sign_type': 'RSA2',
+                    'timestamp': '2026-07-22 13:53:19',
+                    'version': '1.0',
+                }
+                if trade_status:
+                    payload['trade_status'] = trade_status
+                payload['sign'] = PaymentService._rsa_sign(
+                    self.alipay_private_key,
+                    PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
+                )
+                db = MagicMock()
+                base_query = db.query.return_value.filter.return_value
+                base_query.with_for_update.return_value.first.return_value = tx
+                base_query.filter.return_value.first.return_value = tx
+
+                query_result = {
+                    'code': '10000',
+                    'msg': 'Success',
+                    'out_trade_no': tx.out_trade_no,
+                    'trade_no': '20260722000000000009',
+                    'trade_status': 'TRADE_SUCCESS',
+                    'total_amount': '9.90',
+                }
+                with (
+                    patch.object(
+                        payment_module,
+                        'payment_config',
+                        PaymentConfig(mock_external_payment=False, alipay=self.config),
+                    ),
+                    patch.object(PaymentService, '_alipay_query_trade', return_value=query_result) as query_trade,
+                    patch.object(PaymentService, 'confirm_paid_order', return_value=order) as confirm_paid,
+                ):
+                    if trade_status:
+                        with self.assertRaisesRegex(ConflictError, r'Alipay return not successful'):
+                            PaymentService.reconcile_alipay_return(db, order, payload)
+                        query_trade.assert_not_called()
+                        confirm_paid.assert_not_called()
+                    else:
+                        result = PaymentService.reconcile_alipay_return(db, order, payload)
+                        self.assertEqual(result['provider_status'], 'TRADE_SUCCESS')
+                        query_trade.assert_called_once_with(tx.out_trade_no, self.config)
+                        confirm_paid.assert_called_once()
+
+    def test_signed_return_for_canceled_order_records_provider_refund(self):
+        tx = self.build_transaction()
+        order = SimpleNamespace(
+            **vars(self.build_order()),
+            order_status=OrderStatus.REFUND,
+        )
+        payload = {
+            'app_id': self.config.app_id,
+            'auth_app_id': self.config.app_id,
+            'seller_id': self.config.seller_id,
+            'method': 'alipay.trade.wap.pay.return',
+            'out_trade_no': tx.out_trade_no,
+            'total_amount': '9.90',
+            'trade_no': '20260722000000000002',
+            'trade_status': 'TRADE_SUCCESS',
+            'charset': 'utf-8',
+            'sign_type': 'RSA2',
+            'timestamp': '2026-07-22 13:53:19',
+            'version': '1.0',
+        }
+        payload['sign'] = PaymentService._rsa_sign(
+            self.alipay_private_key,
+            PaymentService._alipay_sign_string(payload, exclude_sign_type=True),
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = tx
+
+        with (
+            patch.object(
+                payment_module,
+                'payment_config',
+                PaymentConfig(mock_external_payment=False, alipay=self.config),
+            ),
+            patch.object(
+                PaymentService,
+                '_record_provider_success_for_closed_order',
+                return_value='ORDER_CANCELED_PROVIDER_PAYMENT',
+            ) as record_closed,
+            patch.object(PaymentService, 'confirm_paid_order') as confirm_paid,
+        ):
+            result = PaymentService.reconcile_alipay_return(db, order, payload)
+
+        self.assertIs(result['order'], order)
+        self.assertIs(result['transaction'], tx)
+        self.assertEqual(result['provider_status'], 'ORDER_CANCELED_PROVIDER_PAYMENT')
+        record_closed.assert_called_once_with(
+            db,
+            tx,
+            {'source': 'signed_return', **payload},
+            '20260722000000000002',
+        )
+        confirm_paid.assert_not_called()
 
     def test_rejects_invalid_signed_return(self):
         tx = self.build_transaction()

@@ -41,8 +41,33 @@ test('normalizes checkout methods to balance, wechat, and alipay', () => {
   assert.deepEqual(options.map((item) => item.value), ['BALANCE', 'WECHAT', 'ALIPAY']);
   assert.equal(options[0].available, true);
   assert.equal(options[1].available, false);
-  assert.equal(options[1].desc, '正在开发');
+  assert.equal(options[1].desc, '跳转微信完成支付');
   assert.equal(options[2].available, true);
+});
+
+test('honors a configured WeChat channel and its unavailable reason', () => {
+  const enabled = normalizePaymentOptions([
+    {
+      value: 'WECHAT',
+      purchase_mode: 'CASH_ONLY',
+      available: true,
+      desc: '微信 H5 支付'
+    }
+  ]).find((item) => item.value === 'WECHAT');
+  assert.equal(enabled.available, true);
+  assert.equal(enabled.desc, '微信 H5 支付');
+  assert.equal(enabled.unavailable_reason, '');
+
+  const unavailable = normalizePaymentOptions([
+    {
+      value: 'WECHAT',
+      purchase_mode: 'CASH_ONLY',
+      available: false,
+      unavailable_reason: '微信全局配置未就绪'
+    }
+  ]).find((item) => item.value === 'WECHAT');
+  assert.equal(unavailable.available, false);
+  assert.equal(unavailable.unavailable_reason, '微信全局配置未就绪');
 });
 
 test('requires alipay to be available for every product in a combined checkout', () => {

@@ -35,7 +35,10 @@ class OrderLifecycleTest(TestCase):
         db.get.return_value = None
         order = build_order()
 
-        with patch.object(OrderService, 'order_requires_shipping', return_value=True):
+        with (
+            patch.object(OrderService, '_lock_order_for_transition', return_value=order),
+            patch.object(OrderService, 'order_requires_shipping', return_value=True),
+        ):
             result = OrderService._mark_paid(db, order, external_paid_amount=Decimal('100.00'))
 
         self.assertIs(result, order)
@@ -50,6 +53,7 @@ class OrderLifecycleTest(TestCase):
         order = build_order()
 
         with (
+            patch.object(OrderService, '_lock_order_for_transition', return_value=order),
             patch.object(OrderService, 'order_requires_shipping', return_value=False),
             patch('app.services.order_service.CommissionService.settle_for_order') as settle,
         ):
@@ -57,7 +61,7 @@ class OrderLifecycleTest(TestCase):
 
         self.assertEqual(order.order_status, OrderStatus.COMPLETED)
         self.assertEqual(order.confirmed_at, order.paid_at)
-        settle.assert_called_once_with(db, order.id)
+        settle.assert_called_once_with(db, order.id, commit=False)
 
     def test_pending_ship_order_cannot_be_confirmed(self):
         db = MagicMock()

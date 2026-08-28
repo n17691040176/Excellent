@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 UNPAID_ORDER_EXPIRE_MINUTES = 30
 ALIPAY_SANDBOX_GATEWAY_URL = 'https://openapi-sandbox.dl.alipaydev.com/gateway.do'
+WECHAT_REFUND_NOTIFY_URL_MAX_BYTES = 256
 
 
 def _settings_value(name: str) -> str | None:
@@ -68,6 +69,17 @@ class WechatPayConfig:
     merchant_private_key_path: str = _env('WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH')
     platform_cert_path: str = _env('WECHAT_PAY_PLATFORM_CERT_PATH')
     notify_url: str = _env('WECHAT_PAY_NOTIFY_URL')
+    refund_notify_url: str = _env('WECHAT_PAY_REFUND_NOTIFY_URL')
+    # Leave this empty at the dataclass level so the payment service can tell
+    # whether the canonical variable was explicitly supplied. The service
+    # still defaults to WAP when neither canonical nor legacy variable exists.
+    h5_type: str = _env('WECHAT_PAY_H5_TYPE')
+    # Compatibility aliases for deployments that used the earlier draft
+    # names.  The payment service always emits the canonical ``h5_type`` and
+    # ``h5_return_url`` fields.
+    h5_info_type: str = _env('WECHAT_PAY_H5_INFO_TYPE')
+    h5_return_url: str = _env('WECHAT_PAY_H5_RETURN_URL')
+    h5_redirect_url: str = _env('WECHAT_PAY_H5_REDIRECT_URL')
     app_pay_subject_prefix: str = _env('WECHAT_PAY_APP_SUBJECT_PREFIX', 'Excellent') or 'Excellent'
 
 
@@ -110,19 +122,63 @@ payment_config = PaymentConfig()
 def enabled_external_payment_channels(config: PaymentConfig | None = None) -> list[str]:
     active_config = config or payment_config
     if active_config.mock_external_payment:
-        return ['ALIPAY']
+        channels = ['ALIPAY']
+        # Mock mode intentionally does not require credentials, but an
+        # explicitly enabled channel should still be selectable for local
+        # integration testing.  Keep the historical default (only Alipay) when
+        # the WeChat switch is left off.
+        if active_config.wechat.enabled:
+            channels.append('WECHAT')
+        return channels
 
     channels = []
+    if active_config.wechat.enabled:
+        channels.append('WECHAT')
     if active_config.alipay.enabled:
         channels.append('ALIPAY')
     return channels
 
 
 def _valid_url(value: str, *, require_https: bool) -> bool:
-    parsed = urlparse(value)
-    if not parsed.scheme or not parsed.netloc:
+    candidate = str(value or '')
+    if (
+        not candidate
+        or candidate != candidate.strip()
+        or '\\' in candidate
+        or any(char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in candidate)
+    ):
+        return False
+    try:
+        parsed = urlparse(candidate)
+        hostname = parsed.hostname
+        # Accessing ``port`` rejects malformed or out-of-range ports.
+        _parsed_port = parsed.port
+    except ValueError:
+        return False
+    if (
+        parsed.scheme.lower() not in {'http', 'https'}
+        or not parsed.netloc
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
         return False
     return not require_https or parsed.scheme.lower() == 'https'
+
+
+def _valid_wechat_refund_notify_url(value: str, *, require_https: bool) -> bool:
+    """Validate WeChat's callback-only refund URL contract."""
+
+    try:
+        within_limit = len(value.encode('utf-8')) <= WECHAT_REFUND_NOTIFY_URL_MAX_BYTES
+    except UnicodeEncodeError:
+        return False
+    return (
+        within_limit
+        and '?' not in value
+        and '#' not in value
+        and _valid_url(value, require_https=require_https)
+    )
 
 
 def load_alipay_certificates(path: str) -> list[x509.Certificate]:
@@ -157,6 +213,93 @@ def validate_payment_config(app_env: str, config: PaymentConfig | None = None) -
 
     if production and active_config.mock_external_payment:
         errors.append('PAYMENT_MOCK_EXTERNAL_PAYMENT must be false in production')
+
+    wechat = active_config.wechat
+    if wechat.enabled and not active_config.mock_external_payment:
+        required_values = {
+            'WECHAT_PAY_APP_ID': wechat.app_id,
+            'WECHAT_PAY_MCHID': wechat.mchid,
+            'WECHAT_PAY_API_V3_KEY': wechat.api_v3_key,
+            'WECHAT_PAY_MERCHANT_SERIAL_NO': wechat.merchant_serial_no,
+            'WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH': wechat.merchant_private_key_path,
+            'WECHAT_PAY_PLATFORM_CERT_PATH': wechat.platform_cert_path,
+            'WECHAT_PAY_NOTIFY_URL': wechat.notify_url,
+            'WECHAT_PAY_REFUND_NOTIFY_URL': wechat.refund_notify_url,
+        }
+        errors.extend(
+            f'{name} is required when WECHAT_PAY_ENABLED=true'
+            for name, value in required_values.items()
+            if not value
+        )
+
+        # The service defaults to WAP when neither variable is supplied. Keep
+        # startup validation aligned with that behavior while still allowing
+        # the legacy alias to select an explicit type.
+        h5_type = str(wechat.h5_type or wechat.h5_info_type or 'WAP').strip().upper()
+        if h5_type not in {'WAP', 'WEB', 'IOS', 'APP', 'ANDROID'}:
+            errors.append('WECHAT_PAY_H5_TYPE must be Wap, iOS, or Android')
+        if wechat.api_v3_key and len(wechat.api_v3_key.encode('utf-8')) != 32:
+            errors.append('WECHAT_PAY_API_V3_KEY must be exactly 32 bytes')
+
+        key_paths = {
+            'WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH': wechat.merchant_private_key_path,
+            'WECHAT_PAY_PLATFORM_CERT_PATH': wechat.platform_cert_path,
+        }
+        for name, value in key_paths.items():
+            if value and not Path(value).is_file():
+                errors.append(f'{name} does not point to a readable file')
+
+        if wechat.merchant_private_key_path and Path(wechat.merchant_private_key_path).is_file():
+            try:
+                private_key = load_pem_private_key(
+                    Path(wechat.merchant_private_key_path).read_bytes(),
+                    password=None,
+                )
+                if not isinstance(private_key, RSAPrivateKey) or private_key.key_size < 2048:
+                    errors.append(
+                        'WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH must contain an RSA private key of at least 2048 bits'
+                    )
+            except (OSError, TypeError, ValueError):
+                errors.append(
+                    'WECHAT_PAY_MERCHANT_PRIVATE_KEY_PATH does not contain a valid unencrypted PEM private key'
+                )
+
+        if wechat.platform_cert_path and Path(wechat.platform_cert_path).is_file():
+            try:
+                platform_certificates = x509.load_pem_x509_certificates(
+                    Path(wechat.platform_cert_path).read_bytes()
+                )
+                if not platform_certificates:
+                    errors.append('WECHAT_PAY_PLATFORM_CERT_PATH does not contain a certificate')
+                else:
+                    for certificate in platform_certificates:
+                        public_key = certificate.public_key()
+                        if not isinstance(public_key, RSAPublicKey) or public_key.key_size < 2048:
+                            errors.append(
+                                'WECHAT_PAY_PLATFORM_CERT_PATH must contain an RSA certificate of at least 2048 bits'
+                            )
+                            break
+            except (OSError, TypeError, ValueError):
+                errors.append('WECHAT_PAY_PLATFORM_CERT_PATH does not contain a valid PEM X.509 certificate')
+
+        url_values = {
+            'WECHAT_PAY_NOTIFY_URL': wechat.notify_url,
+            'WECHAT_PAY_H5_RETURN_URL': wechat.h5_return_url or wechat.h5_redirect_url,
+        }
+        for name, value in url_values.items():
+            if value and not _valid_url(value, require_https=production):
+                scheme = 'HTTPS' if production else 'HTTP(S)'
+                errors.append(f'{name} must be a valid {scheme} URL')
+        if wechat.refund_notify_url and not _valid_wechat_refund_notify_url(
+            wechat.refund_notify_url,
+            require_https=production,
+        ):
+            scheme = 'HTTPS' if production else 'HTTP(S)'
+            errors.append(
+                'WECHAT_PAY_REFUND_NOTIFY_URL must be a valid '
+                f'{scheme} URL without query or fragment and no longer than '
+                f'{WECHAT_REFUND_NOTIFY_URL_MAX_BYTES} bytes'
+            )
 
     alipay = active_config.alipay
     if alipay.enabled:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps.auth import require_roles
 from app.api.v1.mobile_serializers import enum_value, iso_datetime, money
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.db.session import get_db
 from app.models.enums import GlobalRole, PaymentChannel, PaymentStatus
 from app.models.payment import PaymentTransaction
@@ -42,10 +43,55 @@ def _serialize_payment(tx: PaymentTransaction) -> dict[str, Any]:
     }
 
 
+def _wechat_notify_headers(request: Request) -> dict[str, str]:
+    return {
+        name: request.headers.get(name, '')
+        for name in (
+            'Wechatpay-Timestamp',
+            'Wechatpay-Nonce',
+            'Wechatpay-Signature',
+            'Wechatpay-Serial',
+        )
+    }
+
+
 @app_router.post('/wechat/notify')
 async def wechat_notify(request: Request, db: Session = Depends(get_db)):
-    payload = await request.json()
-    PaymentService.handle_notify(db, PaymentChannel.WECHAT.value, payload)
+    raw_body = await request.body()
+    try:
+        payload = json.loads(raw_body.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # Let the normal application error middleware turn this into the
+        # project's JSON error envelope rather than acknowledging malformed
+        # provider notifications.
+        raise ConflictError('WeChat notify body is invalid JSON') from exc
+    if not isinstance(payload, dict):
+        raise ConflictError('WeChat notify payload must be a JSON object')
+    PaymentService.handle_notify(
+        db,
+        PaymentChannel.WECHAT.value,
+        payload,
+        raw_body=raw_body,
+        headers=_wechat_notify_headers(request),
+    )
+    return JSONResponse({'code': 'SUCCESS', 'message': 'success'})
+
+
+@app_router.post('/wechat/refund-notify')
+async def wechat_refund_notify(request: Request, db: Session = Depends(get_db)):
+    raw_body = await request.body()
+    try:
+        payload = json.loads(raw_body.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ConflictError('WeChat refund notify body is invalid JSON') from exc
+    if not isinstance(payload, dict):
+        raise ConflictError('WeChat refund notify payload must be a JSON object')
+    PaymentService.handle_wechat_refund_notify(
+        db,
+        payload,
+        raw_body=raw_body,
+        headers=_wechat_notify_headers(request),
+    )
     return JSONResponse({'code': 'SUCCESS', 'message': 'success'})
 
 

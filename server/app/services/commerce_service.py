@@ -219,6 +219,7 @@ class CommerceService:
         points_amount: float = 0,
         pay_channel: str = 'BALANCE',
         auto_complete: bool = True,
+        request_payload: dict | None = None,
     ) -> dict:
         rows = db.query(ShoppingCartItem).filter(ShoppingCartItem.user_id == current_user.id)
         if item_ids:
@@ -273,6 +274,7 @@ class CommerceService:
                     resolved_pay_channel,
                     points_amount=0,
                     auto_complete=auto_complete,
+                    request_payload=request_payload,
                 )
                 order = result['order']
                 payment = result['payment']

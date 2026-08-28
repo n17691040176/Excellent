@@ -154,9 +154,10 @@ export const orderApi = {
   pay(id, data) {
     return request.post(`/api/v1/app/orders/${id}/pay`, data);
   },
-  syncPayment(id, outTradeNo = '', returnParams = null) {
+  syncPayment(id, outTradeNo = '', returnParams = null, payChannel = '') {
     const payload = { out_trade_no: outTradeNo };
     if (returnParams) payload.return_params = returnParams;
+    if (payChannel) payload.pay_channel = payChannel;
     return request.post(`/api/v1/app/orders/${id}/payment-status`, payload, {
       hideLoading: true,
       silentError: true

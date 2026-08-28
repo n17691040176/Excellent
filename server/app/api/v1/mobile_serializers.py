@@ -11,10 +11,11 @@ from app.models.address import UserAddress
 from app.models.asset import UserAssetAccount, UserAssetLedger, UserPowerBank
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
 from app.models.commission import CommissionFlow, WithdrawRequest
-from app.models.enums import AssetDirection, OrderStatus, OrderType, PayStatus, ZoneType
+from app.models.enums import AssetDirection, OrderStatus, OrderType, PaymentChannel, PaymentStatus, PayStatus, ZoneType
 from app.models.local_life import LocalLifeMerchant, LocalLifeOrder, LocalLifeService, MerchantStore
 from app.models.order import Order, OrderAssetDeduction, OrderItem
 from app.models.package import Package
+from app.models.payment import PaymentTransaction
 from app.models.product import Product, ProductCategory, ProductZoneConfig
 from app.models.supplier import Supplier
 from app.models.team import Team
@@ -260,6 +261,8 @@ def _payment_option(channel: str, purchase_mode: str) -> dict[str, Any]:
 def _product_payment_options(_product: Product, payment_flags: dict[str, bool]) -> list[dict[str, Any]]:
     active_channels = set(enabled_external_payment_channels())
     balance_available = bool(payment_flags.get('balance_purchase_enabled'))
+    wechat_product_enabled = bool(payment_flags.get('wechat_purchase_enabled'))
+    wechat_provider_ready = 'WECHAT' in active_channels
     alipay_product_enabled = bool(payment_flags.get('alipay_purchase_enabled'))
     alipay_provider_ready = 'ALIPAY' in active_channels
     return [
@@ -271,9 +274,14 @@ def _product_payment_options(_product: Product, payment_flags: dict[str, bool]) 
         },
         {
             **_payment_option('WECHAT', 'CASH_ONLY'),
-            'desc': '正在开发',
-            'available': False,
-            'unavailable_reason': '微信支付正在开发',
+            'available': wechat_product_enabled and wechat_provider_ready,
+            'unavailable_reason': (
+                ''
+                if wechat_product_enabled and wechat_provider_ready
+                else '后台未开启微信支付'
+                if not wechat_product_enabled
+                else '微信全局配置未就绪'
+            ),
         },
         {
             **_payment_option('ALIPAY', 'CASH_ONLY'),
@@ -648,7 +656,11 @@ def _order_channel(order: Order) -> tuple[str, str]:
     return 'mall', '商城订单'
 
 
-def _order_pay_channel_options(order: Order, deductions: list[OrderAssetDeduction] | None = None) -> list[str]:
+def _order_pay_channel_options(
+    order: Order,
+    deductions: list[OrderAssetDeduction] | None = None,
+    db: Session | None = None,
+) -> list[str]:
     order_type = enum_value(order.order_type)
     deduction_types = {str(item.asset_type) for item in (deductions or [])}
     if 'POINTS' in deduction_types and money(order.payable_amount) <= 0:
@@ -659,7 +671,23 @@ def _order_pay_channel_options(order: Order, deductions: list[OrderAssetDeductio
         return ['VOUCHER']
     if order_type == OrderType.PACKAGE_ORDER.value:
         return ['BALANCE']
-    external_channels = enabled_external_payment_channels()
+    external_channels = list(enabled_external_payment_channels())
+    if db is not None:
+        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+        if items:
+            configs = [
+                db.query(ProductZoneConfig)
+                .filter(
+                    ProductZoneConfig.product_id == item.product_id,
+                    ProductZoneConfig.zone_type == order.zone_type,
+                )
+                .first()
+                for item in items
+            ]
+            if not all(bool(getattr(config, 'wechat_purchase_enabled', False)) for config in configs):
+                external_channels = [channel for channel in external_channels if channel != 'WECHAT']
+            if not all(bool(getattr(config, 'alipay_purchase_enabled', True)) for config in configs):
+                external_channels = [channel for channel in external_channels if channel != 'ALIPAY']
     return ['BALANCE', *external_channels]
 
 
@@ -669,6 +697,63 @@ def _default_order_pay_channel(order: Order, pay_channel_options: list[str]) -> 
             if channel in {'ALIPAY', 'WECHAT'}:
                 return channel
     return pay_channel_options[0] if pay_channel_options else None
+
+
+def _payment_transaction_channel(transaction: PaymentTransaction | None) -> str | None:
+    if transaction is None:
+        return None
+    channel = enum_value(getattr(transaction, 'channel', None))
+    return channel if channel in {PaymentChannel.WECHAT.value, PaymentChannel.ALIPAY.value} else None
+
+
+def _payment_transaction_is_paid(transaction: PaymentTransaction | None) -> bool:
+    return (
+        transaction is not None
+        and enum_value(getattr(transaction, 'status', None)) == PaymentStatus.PAID.value
+    )
+
+
+def _preserve_pending_transaction_channel(
+    pay_channel_options: list[str],
+    transaction: PaymentTransaction | None,
+) -> list[str]:
+    """Keep a live transaction retryable while its product switch changes.
+
+    Product-level switches govern creation of new orders.  Once a pending
+    external transaction exists, changing that switch should not strand the
+    checkout URL; the provider's global switch remains the final gate.
+    """
+    if transaction is None or _payment_transaction_is_paid(transaction):
+        return pay_channel_options
+    transaction_channel = _payment_transaction_channel(transaction)
+    if (
+        transaction_channel
+        and transaction_channel in enabled_external_payment_channels()
+        and transaction_channel not in pay_channel_options
+    ):
+        pay_channel_options.append(transaction_channel)
+    return pay_channel_options
+
+
+def _effective_order_pay_channel(
+    order: Order,
+    pay_channel_options: list[str],
+    transaction_channel: str | None,
+    transaction_is_paid: bool,
+) -> str | None:
+    """Choose a retryable channel without hiding the channel of settled orders.
+
+    A pending transaction can outlive an administrator's provider or product
+    switch.  In that case returning its now-unavailable channel causes the
+    mobile client to retry a payment that the service will correctly reject.
+    Settled orders keep their historical provider for display even if that
+    provider is no longer enabled.
+    """
+    if transaction_is_paid and transaction_channel:
+        return transaction_channel
+    if transaction_channel and transaction_channel in pay_channel_options:
+        return transaction_channel
+    return _default_order_pay_channel(order, pay_channel_options)
 
 
 def _order_title(db: Session, order: Order) -> str:
@@ -714,7 +799,35 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         and status == enum_value(OrderStatus.COMPLETED)
         and not requires_shipping
     )
-    pay_channel_options = _order_pay_channel_options(order)
+    active_transactions = (
+        db.query(PaymentTransaction)
+        .filter(
+            PaymentTransaction.order_id == order.id,
+            PaymentTransaction.status.in_((PaymentStatus.PENDING, PaymentStatus.PAID)),
+        )
+        .order_by(PaymentTransaction.id.desc())
+        .all()
+    )
+    latest_transaction = (
+        next(
+            (transaction for transaction in active_transactions if _payment_transaction_is_paid(transaction)),
+            None,
+        )
+        if enum_value(order.pay_status) == PayStatus.PAID.value
+        else None
+    ) or (active_transactions[0] if active_transactions else None)
+    pay_channel_options = _preserve_pending_transaction_channel(
+        _order_pay_channel_options(order, db=db),
+        latest_transaction,
+    )
+    transaction_pay_channel = _payment_transaction_channel(latest_transaction)
+    transaction_is_paid = _payment_transaction_is_paid(latest_transaction)
+    effective_pay_channel = _effective_order_pay_channel(
+        order,
+        pay_channel_options,
+        transaction_pay_channel,
+        transaction_is_paid,
+    )
     data: dict[str, Any] = {
         'id': order.id,
         'order_id': order.id,
@@ -746,7 +859,12 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         'can_refund': can_refund,
         'requires_shipping': requires_shipping,
         'pay_channel_options': pay_channel_options,
-        'default_pay_channel': _default_order_pay_channel(order, pay_channel_options),
+        'default_pay_channel': effective_pay_channel,
+        'pay_channel': effective_pay_channel,
+        'payment_provider': (
+            'wxpay' if effective_pay_channel == PaymentChannel.WECHAT.value else
+            'alipay' if effective_pay_channel == PaymentChannel.ALIPAY.value else None
+        ),
         'created_at': iso_datetime(order.created_at),
         'updated_at': iso_datetime(order.updated_at),
         'paid_at': iso_datetime(order.paid_at),
@@ -760,12 +878,29 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         deductions = db.query(OrderAssetDeduction).filter(
             OrderAssetDeduction.order_id == order.id
         ).order_by(OrderAssetDeduction.id.asc()).all()
+        data['pay_channel_options'] = _preserve_pending_transaction_channel(
+            _order_pay_channel_options(order, deductions, db=db),
+            latest_transaction,
+        )
+        effective_pay_channel = _effective_order_pay_channel(
+            order,
+            data['pay_channel_options'],
+            transaction_pay_channel,
+            transaction_is_paid,
+        )
+        data['default_pay_channel'] = effective_pay_channel
+        data['pay_channel'] = effective_pay_channel
+        data['payment_provider'] = (
+            'wxpay' if effective_pay_channel == PaymentChannel.WECHAT.value else
+            'alipay' if effective_pay_channel == PaymentChannel.ALIPAY.value else None
+        )
+        # Keep the nested compatibility shape in sync with the effective
+        # retry channel.  It is consumed by mobile clients before the
+        # top-level fields when an order detail response is normalized.
         data['order'] = data.copy()
         data['items'] = [serialize_order_item(item, db) for item in items]
         data['asset_deductions'] = [serialize_order_asset_deduction(item) for item in deductions]
         data['payment_combo'] = _payment_combo(order, deductions)
-        data['pay_channel_options'] = _order_pay_channel_options(order, deductions)
-        data['default_pay_channel'] = _default_order_pay_channel(order, data['pay_channel_options'])
         if status == enum_value(OrderStatus.REFUND):
             data['payment_message'] = '订单已退款。' if pay_status == enum_value(PayStatus.REFUNDED) else '订单已取消。'
         else:

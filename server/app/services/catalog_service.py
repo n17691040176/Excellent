@@ -732,12 +732,13 @@ class ProductService:
     def _zone_config_snapshot(db: Session, product: Product) -> dict[str, Any]:
         config = db.query(ProductZoneConfig).filter(ProductZoneConfig.product_id == product.id).first()
         defaults = ProductService.zone_config_defaults(product.zone_type)
+        active_channels = set(enabled_external_payment_channels())
         data: dict[str, Any] = {
             'product_id': product.id,
             'zone_type': product.zone_type.value,
             'configured': bool(config),
-            'alipay_provider_ready': 'ALIPAY' in enabled_external_payment_channels(),
-            'wechat_provider_ready': False,
+            'alipay_provider_ready': 'ALIPAY' in active_channels,
+            'wechat_provider_ready': 'WECHAT' in active_channels,
         }
         for key, value in defaults.items():
             current = getattr(config, key) if config and getattr(config, key) is not None else value
@@ -775,7 +776,9 @@ class ProductService:
         payment_badges = [
             '余额支付' if snapshot.get('balance_purchase_enabled') else None,
             '支付宝支付' if snapshot.get('alipay_purchase_enabled') else None,
-            '微信开发中',
+            '微信支付'
+            if snapshot.get('wechat_purchase_enabled') and snapshot.get('wechat_provider_ready')
+            else '微信支付未就绪' if snapshot.get('wechat_purchase_enabled') else None,
         ]
         commission_badges = []
         if snapshot.get('custom_commission_enabled'):

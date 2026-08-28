@@ -1,4 +1,4 @@
-import { formatDateTime, formatMoney } from './format';
+import { formatDateTime, formatMoney } from './format.js';
 
 function sumVisibleAssets(assetSummary = {}) {
   const total = Number(assetSummary.total_amount);
@@ -23,11 +23,29 @@ export function pickListPayload(res) {
 }
 
 function preferredPayChannel(options = [], cashDue = 0, fallback = '') {
+  const normalizeChannel = (value) => {
+    const normalized = String(value || '').trim().toUpperCase();
+    if (['WXPAY', 'WECHAT', 'WECHATPAY', 'WEIXIN', 'WX'].includes(normalized)) return 'WECHAT';
+    if (['ALIPAY', 'ALI_PAY', 'ALI'].includes(normalized)) return 'ALIPAY';
+    return normalized;
+  };
+  const explicit = normalizeChannel(fallback);
+  if (explicit) return explicit;
+  const values = (Array.isArray(options) ? options : [])
+    .map((item) => {
+      if (typeof item === 'string') return { value: item, available: true };
+      return {
+        value: item?.value || item?.channel || item?.pay_channel || '',
+        available: item?.available !== false
+      };
+    })
+    .filter((item) => item.value && item.available)
+    .map((item) => normalizeChannel(item.value));
   if (Number(cashDue || 0) > 0) {
-    const externalChannel = options.find((item) => ['ALIPAY', 'WECHAT'].includes(item));
+    const externalChannel = values.find((item) => ['ALIPAY', 'WECHAT'].includes(item));
     if (externalChannel) return externalChannel;
   }
-  return fallback || options[0] || '';
+  return values[0] || '';
 }
 
 export function toOrderView(item = {}, index = 0) {
@@ -44,7 +62,11 @@ export function toOrderView(item = {}, index = 0) {
     cashDue: formatMoney(cashDue),
     status,
     paymentCombo: item.payment_combo || (status === '已退款' ? '已退款' : status === '已取消' ? '订单已取消' : '待支付'),
-    payChannel: preferredPayChannel(payChannelOptions, cashDue, item.default_pay_channel || item.pay_channel || ''),
+    payChannel: preferredPayChannel(
+      payChannelOptions,
+      cashDue,
+      item.pay_channel || item.payment_channel || item.default_pay_channel || ''
+    ),
     payChannelOptions,
     canPay: Boolean(item.can_pay),
     canConfirm: Boolean(item.can_confirm),

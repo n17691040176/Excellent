@@ -2,7 +2,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.models.asset import UserAssetLedger
+from app.models.asset import UserAssetAccount, UserAssetLedger
 from app.models.enums import MemberLevel
 from app.models.region_agent import RegionAgent
 from app.models.region_dividend import RegionDividendFlow
@@ -101,14 +101,13 @@ def test_allocate_product_region_reward_credits_balance_and_records_exact_amount
     db = MagicMock()
     duplicate_query = MagicMock()
     duplicate_query.filter.return_value.first.return_value = None
+    agent_query = MagicMock()
     account_query = MagicMock()
     account = SimpleNamespace(
         available_amount=Decimal('10.00'),
         total_amount=Decimal('30.00'),
         updated_at=None,
     )
-    account_query.filter.return_value.with_for_update.return_value.first.return_value = account
-    db.query.side_effect = [duplicate_query, account_query]
 
     order = SimpleNamespace(id=101, order_no='OD101')
     agent = SimpleNamespace(
@@ -119,6 +118,9 @@ def test_allocate_product_region_reward_credits_balance_and_records_exact_amount
         total_orders=2,
         total_dividend=3.0,
     )
+    agent_query.filter.return_value.populate_existing.return_value.with_for_update.return_value.first.return_value = agent
+    account_query.filter.return_value.populate_existing.return_value.with_for_update.return_value.first.return_value = account
+    db.query.side_effect = [duplicate_query, agent_query, account_query]
 
     flow = RegionDividendService._allocate_reward(
         db,
@@ -144,6 +146,54 @@ def test_allocate_product_region_reward_credits_balance_and_records_exact_amount
     assert len(ledgers) == 1
     assert ledgers[0].before_amount == Decimal('10.00')
     assert ledgers[0].after_amount == Decimal('13.00')
+    agent_query.filter.return_value.populate_existing.assert_called_once_with()
+    agent_query.filter.return_value.populate_existing.return_value.with_for_update.assert_called_once_with()
+    account_query.filter.return_value.populate_existing.assert_called_once_with()
+    account_query.filter.return_value.populate_existing.return_value.with_for_update.assert_called_once_with()
+
+
+def test_reverse_region_reward_locks_agent_before_its_balance_account():
+    db = MagicMock()
+    flow_query = MagicMock()
+    flow = SimpleNamespace(
+        id=17,
+        order_id=101,
+        agent_id=9,
+        agent_user_id=88,
+        dividend_amount=Decimal('3.00'),
+        status='SETTLED',
+        remark=None,
+    )
+    flow_query.filter.return_value.order_by.return_value.with_for_update.return_value.all.return_value = [flow]
+    agent_query = MagicMock()
+    agent = SimpleNamespace(total_orders=3, total_dividend=Decimal('6.00'))
+    agent_query.filter.return_value.populate_existing.return_value.with_for_update.return_value.first.return_value = agent
+    account_query = MagicMock()
+    account = SimpleNamespace(
+        available_amount=Decimal('13.00'),
+        total_amount=Decimal('33.00'),
+        updated_at=None,
+    )
+    account_query.filter.return_value.populate_existing.return_value.with_for_update.return_value.first.return_value = account
+    db.query.side_effect = [flow_query, agent_query, account_query]
+
+    RegionDividendService.reverse_order_dividend(
+        db,
+        SimpleNamespace(id=101, order_no='OD101'),
+    )
+
+    assert flow.status == 'EXPIRED'
+    assert account.available_amount == Decimal('10.00')
+    assert account.total_amount == Decimal('30.00')
+    assert agent.total_orders == 2
+    assert agent.total_dividend == 3.0
+    assert [call.args[0] for call in db.query.call_args_list] == [
+        RegionDividendFlow,
+        RegionAgent,
+        UserAssetAccount,
+    ]
+    agent_query.filter.return_value.populate_existing.return_value.with_for_update.assert_called_once_with()
+    account_query.filter.return_value.populate_existing.return_value.with_for_update.assert_called_once_with()
 
 
 def test_allocate_region_reward_is_idempotent_for_order_and_agent():

@@ -647,12 +647,14 @@ class PageDecorationService:
         return PageDecorationService._record_to_dict(record, normalized, team_id)
 
     @staticmethod
-    def get_mobile_uni_home_for_app(db: Session, current_user: User) -> dict:
-        record = None
-        team_id = current_user.team_id
-        if team_id:
-            record = PageDecorationService._query_record(db, team_id)
-        if not record:
+    def get_mobile_uni_home_for_app(db: Session, current_user: User | None) -> dict:
+        if current_user is None:
+            team_id = None
             record = PageDecorationService._query_record(db, None)
+        else:
+            team_id = current_user.team_id
+            record = PageDecorationService._query_record(db, team_id) if team_id else None
+            if not record:
+                record = PageDecorationService._query_record(db, None)
         payload = PageDecorationService.normalize_mobile_uni_home_payload(record.payload if record else None)
         return PageDecorationService._record_to_dict(record, payload, team_id if record and record.team_id is not None else None)

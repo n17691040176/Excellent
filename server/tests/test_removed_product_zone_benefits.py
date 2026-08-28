@@ -133,6 +133,7 @@ def test_paid_self_operated_order_does_not_reward_ai_coupon():
     )
 
     with (
+        patch.object(OrderService, '_lock_order_for_transition', return_value=order),
         patch.object(OrderService, 'order_requires_shipping', return_value=False),
         patch('app.services.order_service.AssetService.add_amount') as add_asset,
         patch('app.services.order_service.CommissionService.settle_for_order'),

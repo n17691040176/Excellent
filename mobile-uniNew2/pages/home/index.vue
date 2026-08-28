@@ -144,6 +144,7 @@ import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import { homeApi, packageApi } from '@/api/modules';
 import { getAssetBaseUrl } from '@/config/index';
 import { trackEvent, trackPageView } from '@/utils/track';
+import { selectImageSwiperBlock } from '@/utils/home-decoration';
 
 const BASE_URL = 'https://file.h516.com/huohonghuo';
 
@@ -206,13 +207,12 @@ const normalizeHotProducts = (rows) => {
 };
 
 const normalizeBannerItems = (payload) => {
-  const blocks = Array.isArray(payload?.custom_blocks) ? payload.custom_blocks : [];
-  const swiper = blocks.find((block) => block?.enabled !== false && block.type === 'image_swiper');
-  const rows = enabledItems(swiper?.items).filter((item) => item.image_url);
+  const swiper = selectImageSwiperBlock(payload);
+  const rows = enabledItems(swiper?.items).filter((item) => String(item?.image_url || '').trim());
   if (!rows.length) return [...defaultBanners];
   return rows.map((item, index) => ({
     id: item.id || `${swiper.id || 'swiper'}-${index}`,
-    image: resolveImage(item.image_url || ''),
+    image: resolveImage(String(item.image_url || '').trim()),
     path: item.path || '',
     open_type: item.open_type || 'navigate',
     gradient: defaultBanners[index % defaultBanners.length].gradient

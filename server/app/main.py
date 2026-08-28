@@ -1,4 +1,6 @@
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -19,6 +21,28 @@ from app.db.migrations import apply_schema_migrations
 from app.db.seed import seed_defaults
 from app.db.session import SessionLocal
 from app.services.page_decoration_service import PageDecorationService
+from app.services.payment_service import PaymentService
+
+logger = logging.getLogger(__name__)
+WECHAT_REFUND_RECONCILIATION_INTERVAL_SECONDS = 60
+
+
+def _reconcile_due_wechat_refunds() -> None:
+    db = SessionLocal()
+    try:
+        PaymentService.reconcile_due_wechat_refunds(db)
+    finally:
+        db.close()
+
+
+async def _wechat_refund_reconciliation_loop() -> None:
+    """Keep provider refunds convergent even if a webhook is unavailable."""
+    while True:
+        try:
+            await asyncio.to_thread(_reconcile_due_wechat_refunds)
+        except Exception:
+            logger.exception('WeChat refund reconciliation pass failed')
+        await asyncio.sleep(WECHAT_REFUND_RECONCILIATION_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
@@ -33,7 +57,13 @@ async def lifespan(_: FastAPI):
         seed_defaults(db)
     finally:
         db.close()
-    yield
+    refund_reconciliation_task = asyncio.create_task(_wechat_refund_reconciliation_loop())
+    try:
+        yield
+    finally:
+        refund_reconciliation_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await refund_reconciliation_task
 
 
 app = FastAPI(title=settings.app_name, debug=settings.app_debug, lifespan=lifespan)

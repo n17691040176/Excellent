@@ -140,6 +140,8 @@ const busyOrderId = ref(null);
 const page = ref(1);
 const pageSize = 10;
 const hasMore = ref(true);
+const paymentReturn = ref(null);
+const paymentReturnHandled = ref(false);
 
 const loadMoreText = computed(() => {
   if (loading.value) return '正在加载';
@@ -208,13 +210,25 @@ async function payOrder(order) {
     }
     const result = await orderApi.pay(order.id, { pay_channel: payChannel, auto_complete: true });
     const payment = result?.payment;
+    if (payment?.status === 'FAILED') {
+      throw new Error(payment.message || '支付参数创建失败');
+    }
     if (payment?.status === 'PAID') {
       uni.showToast({ title: '支付完成', icon: 'success' });
       await reload();
       return;
     }
     const platformResult = await requestPlatformPayment(payment);
-    if (!platformResult?.redirected) await reload();
+    if (platformResult?.redirected) return;
+    if (payment?.out_trade_no) {
+      try {
+        await orderApi.syncPayment(order.id, payment.out_trade_no, null, payChannel);
+      } catch (error) {
+        // The provider callback can arrive after the native payment succeeds;
+        // the regular order reload remains the source of truth.
+      }
+    }
+    await reload();
   } catch (error) {
     const message = String(error?.errMsg || error?.message || '');
     uni.showToast({ title: message.includes('cancel') ? '已取消支付' : '支付未完成', icon: 'none' });
@@ -255,13 +269,55 @@ function refundOrder(order) {
   });
 }
 
+function queryValue(value) {
+  if (Array.isArray(value)) return value[value.length - 1];
+  return value;
+}
+
+function normalizePaymentChannel(value = '') {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (['WXPAY', 'WECHAT', 'WECHATPAY', 'WEIXIN', 'WX'].includes(normalized)) return 'WECHAT';
+  if (['ALIPAY', 'ALI_PAY', 'ALI'].includes(normalized)) return 'ALIPAY';
+  return '';
+}
+
 onLoad((options) => {
-  if (options.status && statuses.includes(options.status)) activeStatus.value = options.status;
+  if (options?.status && statuses.includes(options.status)) activeStatus.value = options.status;
+  const orderId = queryValue(options?.id || options?.order_id || '');
+  const outTradeNo = queryValue(options?.out_trade_no || options?.outTradeNo || '');
+  if (orderId && outTradeNo) {
+    paymentReturn.value = {
+      orderId,
+      outTradeNo,
+      payChannel: normalizePaymentChannel(queryValue(
+        options?.provider || options?.payment_provider || options?.pay_provider || options?.pay_channel
+      ))
+    };
+  }
 });
 
-onShow(() => {
+async function syncReturnedPayment() {
+  if (paymentReturnHandled.value || !paymentReturn.value) return;
+  paymentReturnHandled.value = true;
+  try {
+    const result = await orderApi.syncPayment(
+      paymentReturn.value.orderId,
+      paymentReturn.value.outTradeNo,
+      null,
+      paymentReturn.value.payChannel
+    );
+    if (result?.payment_status === 'PAID') {
+      uni.showToast({ title: '支付状态已更新', icon: 'success' });
+    }
+  } catch (error) {
+    // The list still reloads below; a delayed provider callback is expected.
+  }
+}
+
+onShow(async () => {
   trackPageView('orders_list');
-  reload();
+  await syncReturnedPayment();
+  await reload();
 });
 
 onPullDownRefresh(async () => {

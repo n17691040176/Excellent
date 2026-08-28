@@ -15,8 +15,15 @@
           </el-button-group>
         </div>
         <div class="toolbar-row">
+          <span v-if="hasUnsavedChanges" class="save-status save-status--pending">有未保存修改</span>
           <el-button type="primary" plain @click="loadData">刷新配置</el-button>
-          <el-button v-permission="'decoration:edit'" type="primary" :loading="saving" @click="saveDecoration">保存装修</el-button>
+          <el-button
+            v-permission="'decoration:edit'"
+            type="primary"
+            :loading="saving"
+            :disabled="saving || uploadingCount > 0"
+            @click="saveDecoration"
+          >保存装修</el-button>
         </div>
       </div>
     </div>
@@ -1822,6 +1829,8 @@ const exportJsonText = ref('')
 const importJsonText = ref('')
 const uploadingImageKey = ref('')
 const uploadingSwiperImageKey = ref('')
+const uploadingCount = ref(0)
+const hasUnsavedChanges = ref(false)
 const collapsedCustomBlocks = ref({})
 const dragState = reactive({
   type: '',
@@ -2148,6 +2157,7 @@ function buildPayload() {
 async function loadData() {
   const data = await decorationApi.mobileHome()
   assignPayload(data?.payload || createDefaultPayload())
+  hasUnsavedChanges.value = false
 }
 
 function reorderList(items, from, to) {
@@ -2403,15 +2413,22 @@ async function uploadDecorationItemImage(options, item, uploadKey) {
     return
   }
   uploadingImageKey.value = uploadKey
+  uploadingCount.value += 1
   try {
     const data = await decorationApi.uploadMobileHomeImage(file)
-    item.icon_url = data?.url || ''
-    ElMessage.success('图标已上传')
+    const url = data?.url || data?.data?.url || ''
+    if (!url) {
+      throw new Error('上传接口未返回图片地址')
+    }
+    item.icon_url = url
+    hasUnsavedChanges.value = true
+    ElMessage.success('图标已上传，点击保存装修后生效')
     options?.onSuccess?.(data)
   } catch (error) {
     console.error(error)
     options?.onError?.(error)
   } finally {
+    uploadingCount.value = Math.max(0, uploadingCount.value - 1)
     uploadingImageKey.value = ''
   }
 }
@@ -2424,15 +2441,22 @@ async function uploadSwiperImage(options, block, item, itemIndex) {
   }
   const uploadKey = swiperImageUploadKey(block.id, itemIndex)
   uploadingSwiperImageKey.value = uploadKey
+  uploadingCount.value += 1
   try {
     const data = await decorationApi.uploadMobileHomeImage(file)
-    item.image_url = data?.url || ''
-    ElMessage.success('轮播图已上传')
+    const url = data?.url || data?.data?.url || ''
+    if (!url) {
+      throw new Error('上传接口未返回图片地址')
+    }
+    item.image_url = url
+    hasUnsavedChanges.value = true
+    ElMessage.success('轮播图已上传，点击保存装修后生效')
     options?.onSuccess?.(data)
   } catch (error) {
     console.error(error)
     options?.onError?.(error)
   } finally {
+    uploadingCount.value = Math.max(0, uploadingCount.value - 1)
     uploadingSwiperImageKey.value = ''
   }
 }
@@ -2496,14 +2520,20 @@ function removeQuickItem(index) {
 function applyPreset(type) {
   const factory = presetFactories[type] || createDefaultPayload
   assignPayload(factory())
+  hasUnsavedChanges.value = true
   ElMessage.success('装修模板已应用，保存后生效')
 }
 
 async function saveDecoration() {
+  if (uploadingCount.value > 0) {
+    ElMessage.warning('图片仍在上传，请稍后再保存')
+    return
+  }
   saving.value = true
   try {
     await decorationApi.updateMobileHome(buildPayload())
     ElMessage.success('uni 首页装修已保存')
+    hasUnsavedChanges.value = false
     await loadData()
   } finally {
     saving.value = false
@@ -2530,6 +2560,15 @@ onMounted(loadData)
 .toolbar-label {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+.save-status {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.save-status--pending {
+  color: var(--el-color-warning);
 }
 
 .editor-grid {

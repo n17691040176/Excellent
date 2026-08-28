@@ -12,18 +12,40 @@ from app.services.catalog_service import ProductService
 from app.services.order_service import OrderService
 
 
-def test_only_alipay_can_be_enabled_as_external_channel():
+def test_external_channels_follow_provider_switches():
     config = PaymentConfig(
         mock_external_payment=False,
         wechat=WechatPayConfig(enabled=True),
         alipay=AlipayConfig(enabled=True),
     )
 
-    assert enabled_external_payment_channels(config) == ['ALIPAY']
+    assert enabled_external_payment_channels(config) == ['WECHAT', 'ALIPAY']
+
+    assert enabled_external_payment_channels(
+        PaymentConfig(
+            mock_external_payment=False,
+            wechat=WechatPayConfig(enabled=True),
+            alipay=AlipayConfig(enabled=False),
+        )
+    ) == ['WECHAT']
+
+    assert enabled_external_payment_channels(
+        PaymentConfig(
+            mock_external_payment=False,
+            wechat=WechatPayConfig(enabled=False),
+            alipay=AlipayConfig(enabled=False),
+        )
+    ) == []
 
 
 def test_mock_mode_keeps_wechat_disabled():
     assert enabled_external_payment_channels(PaymentConfig(mock_external_payment=True)) == ['ALIPAY']
+
+    # Development mock mode can exercise the WeChat UI when its explicit
+    # switch is turned on, without requiring merchant credentials.
+    assert enabled_external_payment_channels(
+        PaymentConfig(mock_external_payment=True, wechat=WechatPayConfig(enabled=True))
+    ) == ['ALIPAY', 'WECHAT']
 
 
 def test_product_payment_options_are_fixed_and_report_availability():
@@ -35,7 +57,8 @@ def test_product_payment_options_are_fixed_and_report_availability():
 
     assert [item['value'] for item in options] == ['BALANCE', 'WECHAT', 'ALIPAY']
     assert [item['available'] for item in options] == [True, False, True]
-    assert options[1]['desc'] == '正在开发'
+    assert options[1]['desc'] == '全部使用微信支付'
+    assert options[1]['unavailable_reason'] == '后台未开启微信支付'
 
 
 def test_product_payment_options_require_admin_and_provider_alipay_configuration():
@@ -102,20 +125,64 @@ def test_admin_zone_summary_hides_legacy_payment_modes():
         }
     )
 
-    assert summary['badges'][:3] == ['余额支付', '支付宝支付', '微信开发中']
+    assert summary['badges'][:2] == ['余额支付', '支付宝支付']
+    assert '微信支付未就绪' not in summary['badges']
     assert '未配置分润' in summary['badges']
     assert all('积分' not in badge and '现金' not in badge for badge in summary['badges'])
 
 
-def test_wechat_is_rejected_while_under_development():
+def test_admin_zone_summary_marks_enabled_wechat_when_provider_is_unready():
+    summary = ProductService._zone_config_summary(
+        {
+            'configured': True,
+            'zone_type': ZoneType.SELF_OPERATED.value,
+            'balance_purchase_enabled': False,
+            'alipay_purchase_enabled': False,
+            'wechat_purchase_enabled': True,
+            'wechat_provider_ready': False,
+        }
+    )
+
+    assert '微信支付未就绪' in summary['badges']
+
+
+def test_wechat_requires_global_provider_configuration():
     with (
         patch('app.services.order_service.enabled_external_payment_channels', return_value=['ALIPAY']),
-        pytest.raises(ConflictError, match='under development'),
+        pytest.raises(ConflictError, match='Wechat payment is not enabled'),
     ):
         OrderService._validate_payment_rules(
             ZoneType.SELF_OPERATED,
             Decimal('10.00'),
             [],
+            {},
+            'WECHAT',
+        )
+
+
+def test_wechat_payment_obeys_product_switch_after_global_enablement():
+    disabled_product = SimpleNamespace(wechat_purchase_enabled=False)
+    with (
+        patch('app.services.order_service.enabled_external_payment_channels', return_value=['WECHAT']),
+        pytest.raises(ConflictError, match='Wechat payment is disabled for current product'),
+    ):
+        OrderService._validate_payment_rules(
+            ZoneType.SELF_OPERATED,
+            Decimal('10.00'),
+            [disabled_product],
+            {},
+            'WECHAT',
+        )
+
+    enabled_product = SimpleNamespace(
+        wechat_purchase_enabled=True,
+        cash_only_enabled=True,
+    )
+    with patch('app.services.order_service.enabled_external_payment_channels', return_value=['WECHAT']):
+        OrderService._validate_payment_rules(
+            ZoneType.SELF_OPERATED,
+            Decimal('10.00'),
+            [enabled_product],
             {},
             'WECHAT',
         )

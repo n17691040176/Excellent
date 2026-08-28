@@ -8,9 +8,9 @@ const PAYMENT_CHANNELS = [
   {
     value: 'WECHAT',
     label: '微信支付',
-    desc: '正在开发',
+    desc: '跳转微信完成支付',
     available: false,
-    unavailable_reason: '微信支付正在开发'
+    unavailable_reason: '微信支付暂未启用'
   },
   {
     value: 'ALIPAY',
@@ -48,8 +48,6 @@ export function normalizePaymentOptions(rawOptions = []) {
 
     if (fallback.value === 'BALANCE') {
       available = configured?.available !== false;
-    } else if (fallback.value === 'WECHAT') {
-      available = false;
     } else {
       available = Boolean(configured) && configured.available !== false;
     }

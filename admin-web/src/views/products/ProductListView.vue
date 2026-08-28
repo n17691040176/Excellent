@@ -544,9 +544,17 @@
             </div>
             <el-form-item>
               <template #label>
-                <span class="payment-method-label">微信支付 <el-tag size="small" type="info">正在开发</el-tag></span>
+                <span class="payment-method-label">
+                  微信支付
+                  <el-tag size="small" :type="zoneConfigForm.wechat_provider_ready ? 'success' : 'warning'">
+                    {{ zoneConfigForm.wechat_provider_ready ? '配置就绪' : '配置未就绪' }}
+                  </el-tag>
+                </span>
               </template>
-              <el-switch v-model="zoneConfigForm.wechat_purchase_enabled" disabled />
+              <el-switch
+                v-model="zoneConfigForm.wechat_purchase_enabled"
+                :disabled="!zoneConfigForm.wechat_provider_ready && !zoneConfigForm.wechat_purchase_enabled"
+              />
             </el-form-item>
           </div>
         </el-form>
@@ -980,7 +988,9 @@ function buildZoneSummary(config = {}) {
   const paymentBadges = [
     config.balance_purchase_enabled ? '余额支付' : null,
     config.alipay_purchase_enabled ? '支付宝支付' : null,
-    '微信开发中'
+    config.wechat_purchase_enabled
+      ? (config.wechat_provider_ready ? '微信支付' : '微信支付未就绪')
+      : null
   ].filter(Boolean)
   return { badges: [...paymentBadges, ...commissionBadges, ...businessBadges].slice(0, 5) }
 }
@@ -1156,9 +1166,9 @@ function normalizeZoneConfig(data = {}) {
     points_purchase_enabled: Boolean(data.points_purchase_enabled),
     balance_purchase_enabled: Boolean(data.balance_purchase_enabled),
     alipay_purchase_enabled: data.alipay_purchase_enabled == null ? true : Boolean(data.alipay_purchase_enabled),
-    wechat_purchase_enabled: false,
+    wechat_purchase_enabled: Boolean(data.wechat_purchase_enabled),
     alipay_provider_ready: Boolean(data.alipay_provider_ready),
-    wechat_provider_ready: false,
+    wechat_provider_ready: Boolean(data.wechat_provider_ready),
     points_only_enabled: Boolean(data.points_only_enabled),
     points_cash_enabled: data.points_cash_enabled == null ? true : Boolean(data.points_cash_enabled),
     cash_only_enabled: data.cash_only_enabled == null ? true : Boolean(data.cash_only_enabled),
@@ -1379,7 +1389,7 @@ async function saveZoneConfig() {
       points_purchase_enabled: zoneConfigForm.value.points_purchase_enabled,
       balance_purchase_enabled: zoneConfigForm.value.balance_purchase_enabled,
       alipay_purchase_enabled: zoneConfigForm.value.alipay_purchase_enabled,
-      wechat_purchase_enabled: false,
+      wechat_purchase_enabled: zoneConfigForm.value.wechat_purchase_enabled,
       points_only_enabled: zoneConfigForm.value.points_only_enabled,
       points_cash_enabled: zoneConfigForm.value.points_cash_enabled,
       cash_only_enabled: zoneConfigForm.value.cash_only_enabled,

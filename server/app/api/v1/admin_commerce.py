@@ -9,6 +9,7 @@ from app.models.enums import GlobalRole, OrderStatus
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import User
+from app.services.order_service import OrderService
 from app.utils.helpers import iso_datetime
 
 admin_router = APIRouter(prefix='/admin/commerce')
@@ -263,6 +264,11 @@ def update_shipment_tracking(
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         return {'code': 404, 'message': 'Order not found', 'data': None}
+
+    order = OrderService._lock_order_for_transition(db, order_id)
+    OrderService._ensure_no_active_external_refund(db, order.id)
+    if order.order_status == OrderStatus.REFUND:
+        return {'code': 409, 'message': 'Refunded order cannot update tracking', 'data': None}
 
     order.legacy_logistics_no = tracking_no
     order.legacy_logistics_name = carrier_name

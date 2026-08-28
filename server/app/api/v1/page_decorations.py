@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps.auth import get_current_user, require_roles
+from app.api.deps.auth import get_current_user_optional, require_roles
 from app.db.session import get_db
 from app.models.enums import GlobalRole
 from app.models.user import User
@@ -13,7 +13,10 @@ admin_router = APIRouter(prefix='/admin/decorations')
 
 
 @app_router.get('/mobile-home')
-def app_mobile_home_decoration(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def app_mobile_home_decoration(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
     return {'code': 0, 'message': 'success', 'data': PageDecorationService.get_mobile_uni_home_for_app(db, current_user)}
 
 
