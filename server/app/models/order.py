@@ -1,11 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DECIMAL, BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DECIMAL, JSON, BigInteger, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
-from app.models.enums import OrderStatus, OrderType, PayStatus, ZoneType
+from app.models.enums import CommissionMode, OrderStatus, OrderType, PayStatus, ZoneType
 
 
 class Order(TimestampMixin, Base):
@@ -23,9 +23,32 @@ class Order(TimestampMixin, Base):
     payable_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     paid_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     pay_status: Mapped[PayStatus] = mapped_column(Enum(PayStatus), default=PayStatus.UNPAID, nullable=False)
-    order_status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING_PAYMENT, nullable=False)
+    order_status: Mapped[OrderStatus] = mapped_column(
+        Enum(OrderStatus), default=OrderStatus.PENDING_PAYMENT, nullable=False
+    )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 支付成功时锁定的分润模式与城市/商品金额快照。旧订单默认 ORIGINAL。
+    commission_mode: Mapped[CommissionMode] = mapped_column(
+        Enum(CommissionMode),
+        default=CommissionMode.ORIGINAL,
+        server_default='ORIGINAL',
+        nullable=False,
+    )
+    commission_rule_version: Mapped[str] = mapped_column(
+        String(64),
+        default='legacy',
+        server_default='legacy',
+        nullable=False,
+    )
+    mode_locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    province: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    city_partner_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True, index=True)
+    city_partner_rule_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    sale_price_snapshot: Mapped[Decimal | None] = mapped_column(DECIMAL(18, 2), nullable=True)
+    cost_price_snapshot: Mapped[Decimal | None] = mapped_column(DECIMAL(18, 2), nullable=True)
+    profit_pool_snapshot: Mapped[Decimal | None] = mapped_column(DECIMAL(18, 2), nullable=True)
     legacy_total_price: Mapped[float | None] = mapped_column('total_price', DECIMAL(18, 2), nullable=True)
     legacy_pay_price: Mapped[float | None] = mapped_column('pay_price', DECIMAL(18, 2), nullable=True)
     legacy_create_time: Mapped[datetime | None] = mapped_column('create_time', DateTime, nullable=True)

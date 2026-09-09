@@ -5,15 +5,19 @@ from sqlalchemy import String, and_, cast, func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.core.exceptions import ConflictError, NotFoundError
+from app.models.address import UserAddress
 from app.models.bank_card import UserBankCard
+from app.models.city_partner import CityPartnerCommissionFlow, CityPartnerSeat
 from app.models.commission import (
     CommissionAccountLedger,
     CommissionConfig,
     CommissionFlow,
+    CommissionModeSwitchLog,
     UserCommission,
     WithdrawRequest,
 )
 from app.models.enums import (
+    CommissionMode,
     CommissionStatus,
     MemberLevel,
     OrderStatus,
@@ -91,6 +95,10 @@ class CommissionService:
 
     @staticmethod
     def freeze_for_order(db: Session, order: Order, buyer: User) -> None:
+        mode = getattr(order, 'commission_mode', None) or CommissionService._current_mode(db)
+        if mode == CommissionMode.CITY_PARTNER:
+            CommissionService._freeze_city_partner_rewards(db, order, buyer)
+            return
         if db.query(CommissionFlow.id).filter(CommissionFlow.order_id == order.id).first():
             return
 
@@ -131,6 +139,22 @@ class CommissionService:
             summary.updated_at = now()
             flow.status = CommissionStatus.SETTLED
             flow.settled_at = now()
+        city_flows = db.query(CityPartnerCommissionFlow).filter(
+            CityPartnerCommissionFlow.order_id == order_id,
+            CityPartnerCommissionFlow.status == CommissionStatus.FROZEN,
+            CityPartnerCommissionFlow.beneficiary_user_id.is_not(None),
+        ).order_by(CityPartnerCommissionFlow.id.asc()).with_for_update().all()
+        for flow in city_flows:
+            summary = db.query(UserCommission).filter(UserCommission.user_id == flow.beneficiary_user_id).with_for_update().first()
+            if not summary:
+                continue
+            amount = quantize_amount(flow.commission_amount)
+            summary.frozen_amount = quantize_amount(summary.frozen_amount) - amount
+            summary.available_amount = quantize_amount(summary.available_amount) + amount
+            summary.total_amount = quantize_amount(summary.total_amount)
+            summary.updated_at = now()
+            flow.status = CommissionStatus.SETTLED
+            flow.settled_at = now()
         if commit:
             db.commit()
         else:
@@ -156,6 +180,27 @@ class CommissionService:
                 available = quantize_amount(summary.available_amount)
                 if available < amount:
                     raise ConflictError('Settled commission balance is insufficient for refund')
+                summary.available_amount = available - amount
+            summary.total_amount = max(quantize_amount(summary.total_amount) - amount, Decimal('0.00'))
+            summary.updated_at = now()
+            flow.status = CommissionStatus.CANCELED
+        city_flows = db.query(CityPartnerCommissionFlow).filter(
+            CityPartnerCommissionFlow.order_id == order_id,
+            CityPartnerCommissionFlow.status.in_([CommissionStatus.FROZEN, CommissionStatus.SETTLED]),
+            CityPartnerCommissionFlow.beneficiary_user_id.is_not(None),
+        ).order_by(CityPartnerCommissionFlow.id.asc()).with_for_update().all()
+        for flow in city_flows:
+            summary = db.query(UserCommission).filter(UserCommission.user_id == flow.beneficiary_user_id).with_for_update().first()
+            if not summary:
+                flow.status = CommissionStatus.CANCELED
+                continue
+            amount = quantize_amount(flow.commission_amount)
+            if flow.status == CommissionStatus.FROZEN:
+                summary.frozen_amount = max(quantize_amount(summary.frozen_amount) - amount, Decimal('0.00'))
+            else:
+                available = quantize_amount(summary.available_amount)
+                if available < amount:
+                    raise ConflictError('Settled city partner commission balance is insufficient for refund')
                 summary.available_amount = available - amount
             summary.total_amount = max(quantize_amount(summary.total_amount) - amount, Decimal('0.00'))
             summary.updated_at = now()
@@ -612,6 +657,154 @@ class CommissionService:
     @staticmethod
     def _withdraw_source_no(withdraw_id: int) -> str:
         return f'WD-{withdraw_id}'
+
+    @staticmethod
+    def _commission_mode_status(db: Session) -> dict:
+        config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).first()
+        mode = getattr(config, 'commission_mode', CommissionMode.ORIGINAL) if config else CommissionMode.ORIGINAL
+        rule_version = getattr(config, 'commission_rule_version', 'legacy') if config else 'legacy'
+        updated_at = getattr(config, 'updated_at', None) if config else None
+        pending_order_count = int(db.query(func.count(Order.id)).filter(
+            Order.commission_mode == mode,
+            Order.pay_status == PayStatus.PAID,
+            Order.order_status.notin_([OrderStatus.COMPLETED, OrderStatus.REFUND]),
+        ).scalar() or 0)
+        old_frozen = db.query(func.coalesce(func.sum(CommissionFlow.commission_amount), 0)).filter(
+            CommissionFlow.status == CommissionStatus.FROZEN,
+        ).scalar() or 0
+        city_frozen = db.query(func.coalesce(func.sum(CityPartnerCommissionFlow.commission_amount), 0)).filter(
+            CityPartnerCommissionFlow.status == CommissionStatus.FROZEN,
+        ).scalar() or 0
+        return {
+            'mode': mode,
+            'rule_version': rule_version,
+            'updated_by': getattr(config, 'updated_by', None) if config else None,
+            'updated_at': iso_datetime(updated_at) if updated_at else None,
+            'pending_order_count': pending_order_count,
+            'frozen_commission_amount': float(quantize_amount(Decimal(str(old_frozen)) + Decimal(str(city_frozen)))),
+        }
+
+    @staticmethod
+    def commission_mode(db: Session) -> dict:
+        return CommissionService._commission_mode_status(db)
+
+    @staticmethod
+    def update_commission_mode(db: Session, mode: CommissionMode, operator_id: int, reason: str | None = None) -> dict:
+        config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).with_for_update().first()
+        current_mode = getattr(config, 'commission_mode', CommissionMode.ORIGINAL) if config else CommissionMode.ORIGINAL
+        if current_mode == mode:
+            data = CommissionService._commission_mode_status(db)
+            data['previous_mode'] = current_mode
+            return data
+        before = CommissionService._commission_mode_status(db)
+        switched_at = now()
+        rule_version = f'{mode.value.lower()}-{switched_at.strftime("%Y%m%d%H%M%S")}'
+        if not config:
+            config = CommissionConfig(level1_rate=0, level2_rate=0, is_active=False, updated_at=switched_at)
+            db.add(config)
+            db.flush()
+        config.commission_mode = mode
+        config.commission_rule_version = rule_version
+        config.updated_by = operator_id
+        config.updated_at = switched_at
+        db.add(CommissionModeSwitchLog(
+            from_mode=current_mode, to_mode=mode, commission_rule_version=rule_version,
+            switched_at=switched_at, operator_id=operator_id, reason=reason,
+            pending_order_count=before['pending_order_count'],
+            frozen_commission_amount=quantize_amount(before['frozen_commission_amount']), created_at=switched_at,
+        ))
+        db.commit()
+        return {
+            'mode': mode, 'previous_mode': current_mode, 'rule_version': rule_version,
+            'switched_at': iso_datetime(switched_at), 'operator_id': operator_id, 'reason': reason,
+            'pending_order_count': before['pending_order_count'],
+            'frozen_commission_amount': before['frozen_commission_amount'],
+        }
+
+    @staticmethod
+    def _current_mode(db: Session) -> CommissionMode:
+        config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).first()
+        return getattr(config, 'commission_mode', CommissionMode.ORIGINAL) if config else CommissionMode.ORIGINAL
+
+    @staticmethod
+    def _floor_cent(value: Decimal) -> Decimal:
+        return value.quantize(Decimal('0.01'), rounding='ROUND_DOWN')
+
+    @staticmethod
+    def _freeze_city_partner_rewards(db: Session, order: Order, buyer: User) -> None:
+        if db.query(CityPartnerCommissionFlow.id).filter(CityPartnerCommissionFlow.order_id == order.id).first():
+            return
+        address = db.get(UserAddress, getattr(order, 'legacy_address_id', None)) if getattr(order, 'legacy_address_id', None) else None
+        province, city = (getattr(address, 'province', '') or '', getattr(address, 'city', '') or '')
+        seat = db.query(CityPartnerSeat).filter(
+            CityPartnerSeat.province == province, CityPartnerSeat.city == city,
+            CityPartnerSeat.current_user_id.is_not(None),
+        ).with_for_update().first() if province and city else None
+        order.province, order.city = province or None, city or None
+        order.city_partner_user_id = seat.current_user_id if seat else None
+        order.commission_rule_version = getattr(db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).first(), 'commission_rule_version', 'v1')
+        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).order_by(OrderItem.id.asc()).all()
+        for item in items:
+            product = db.get(Product, item.product_id)
+            config = db.query(ProductZoneConfig).filter(ProductZoneConfig.product_id == item.product_id).first()
+            if not product or not config or not getattr(config, 'city_partner_commission_enabled', False):
+                continue
+            quantity = int(item.quantity or 0)
+            unit_sale = quantize_amount(item.unit_price or 0)
+            unit_cost = quantize_amount(product.cost_price or 0)
+            pool = max(Decimal('0.00'), unit_sale - unit_cost) * quantity
+            city_amount = quantize_amount(getattr(config, 'city_partner_amount', 0) or 0) * quantity
+            direct_amount = quantize_amount(getattr(config, 'city_partner_direct_reward_amount', 0) or 0) * quantity
+            level_amount = quantize_amount(getattr(config, 'city_partner_upline_initial_amount', 0) or 0) * quantity
+            max_levels = min(7, max(0, int(getattr(config, 'city_partner_upline_max_levels', 7) or 7)))
+            decay = Decimal(str(getattr(config, 'city_partner_upline_decay_rate', 50) or 50)) / Decimal('100')
+            allocations = []
+            if seat and city_amount > 0:
+                allocations.append((seat.current_user_id, 'CITY_PARTNER', None, city_amount))
+            ancestors = CommissionService._ancestor_users(db, buyer, max_levels)
+            if ancestors and direct_amount > 0:
+                allocations.append((ancestors[0][1].id, 'DIRECT', 0, direct_amount))
+            for level, beneficiary in ancestors:
+                if level > max_levels or level_amount <= 0:
+                    break
+                allocations.append((beneficiary.id, 'UPLINE', level, level_amount))
+                level_amount = CommissionService._floor_cent(level_amount * decay)
+            allocated = quantize_amount(sum((a[3] for a in allocations), Decimal('0.00')))
+            remainder = max(Decimal('0.00'), quantize_amount(pool - allocated))
+            if allocated > pool:
+                raise ConflictError('City partner commission exceeds product profit pool')
+            for beneficiary_id, role, level, amount in allocations:
+                CommissionService._add_city_partner_flow(db, order, item, buyer, beneficiary_id, role, level, amount, pool, seat, config)
+            if remainder > 0:
+                CommissionService._add_city_partner_flow(db, order, item, buyer, None, 'COMPANY_REMAINDER', None, remainder, pool, seat, config)
+        order.city_partner_rule_snapshot = {'mode': 'CITY_PARTNER', 'version': order.commission_rule_version}
+        order.sale_price_snapshot = quantize_amount(sum((quantize_amount(item.unit_price or 0) * int(item.quantity or 0) for item in items), Decimal('0.00')))
+        order.cost_price_snapshot = quantize_amount(sum((quantize_amount((db.get(Product, item.product_id).cost_price if db.get(Product, item.product_id) else 0) or 0) * int(item.quantity or 0) for item in items), Decimal('0.00')))
+        order.profit_pool_snapshot = max(Decimal('0.00'), order.sale_price_snapshot - order.cost_price_snapshot)
+
+    @staticmethod
+    def _add_city_partner_flow(db, order, item, buyer, beneficiary_id, role, level, amount, pool, seat, config):
+        amount = quantize_amount(amount)
+        if beneficiary_id and amount > 0:
+            summary = db.query(UserCommission).filter(UserCommission.user_id == beneficiary_id).with_for_update().first()
+            if not summary:
+                summary = UserCommission(user_id=beneficiary_id, updated_at=now())
+                db.add(summary)
+                db.flush()
+            summary.frozen_amount = quantize_amount(summary.frozen_amount) + amount
+            summary.total_amount = quantize_amount(summary.total_amount) + amount
+            summary.updated_at = now()
+        db.add(CityPartnerCommissionFlow(
+            order_id=order.id, order_item_id=item.id, product_id=item.product_id, order_no=order.order_no,
+            commission_mode=CommissionMode.CITY_PARTNER,
+            commission_rule_version=getattr(config, 'city_partner_commission_rule_version', 'v1'),
+            province=order.province or '', city=order.city or '', city_partner_user_id=seat.current_user_id if seat else None,
+            beneficiary_user_id=beneficiary_id, beneficiary_account='COMPANY' if beneficiary_id is None else None,
+            source_user_id=buyer.id, commission_role=role, level=level,
+            unit_sale_price=quantize_amount(item.unit_price or 0), unit_cost_price=quantize_amount((db.get(Product, item.product_id).cost_price if db.get(Product, item.product_id) else 0) or 0),
+            quantity=int(item.quantity or 0), profit_pool_amount=quantize_amount(pool), calculated_amount=quantize_amount(amount),
+            commission_amount=quantize_amount(amount), remainder_amount=Decimal('0.00'), status=CommissionStatus.FROZEN, created_at=now(),
+        ))
 
     @staticmethod
     def _freeze_distribution_rewards(

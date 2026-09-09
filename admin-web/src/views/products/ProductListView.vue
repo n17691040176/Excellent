@@ -447,6 +447,66 @@
             </div>
           </template>
 
+          <div class="city-partner-rule-section">
+            <div class="rule-section-heading">
+              <div>
+                <div class="cell-title small">城市合伙人模式商品规则</div>
+                <div class="rule-section-meta">新模式独立于原商品分润；只在 CITY_PARTNER 模式下参与结算</div>
+              </div>
+              <el-tag :type="cityPartnerRulesSupported ? 'success' : 'warning'" size="small">
+                {{ cityPartnerRulesSupported ? '接口已支持配置' : '当前接口暂未返回字段' }}
+              </el-tag>
+            </div>
+            <el-alert
+              v-if="!cityPartnerRulesSupported"
+              title="当前服务端接口尚未返回城市合伙人字段，本入口先保留展示；保存时不会把未知字段发送给旧接口，避免影响原模式规则。"
+              type="warning"
+              :closable="false"
+              show-icon
+              class="commission-rule-alert"
+            />
+            <div class="form-split">
+              <el-form-item label="参与城市合伙人模式">
+                <el-switch v-model="zoneConfigForm.city_partner_commission_enabled" :disabled="!cityPartnerRulesSupported" />
+              </el-form-item>
+              <el-form-item label="城市合伙人金额">
+                <el-input-number v-model="zoneConfigForm.city_partner_amount" :min="0" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
+                <span class="field-suffix">元/件</span>
+              </el-form-item>
+            </div>
+            <div class="form-split">
+              <el-form-item label="直推奖金额">
+                <el-input-number v-model="zoneConfigForm.city_partner_direct_reward_amount" :min="0" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
+                <span class="field-suffix">元/件</span>
+              </el-form-item>
+              <el-form-item label="上级第 1 层金额">
+                <el-input-number v-model="zoneConfigForm.city_partner_upline_initial_amount" :min="0" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
+                <span class="field-suffix">元/件</span>
+              </el-form-item>
+            </div>
+            <div class="form-split">
+              <el-form-item label="上级层数">
+                <el-input-number v-model="zoneConfigForm.city_partner_upline_max_levels" :min="1" :max="7" :step="1" controls-position="right" :disabled="!cityPartnerRulesSupported" />
+                <span class="field-suffix">最多 7 层</span>
+              </el-form-item>
+              <el-form-item label="层级递减比例">
+                <el-input-number v-model="zoneConfigForm.city_partner_upline_decay_rate" :min="0" :max="100" :step="0.5" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
+                <span class="field-suffix">%</span>
+              </el-form-item>
+            </div>
+            <el-form-item label="尾差账户">
+              <el-select v-model="zoneConfigForm.city_partner_remainder_account" :disabled="!cityPartnerRulesSupported" style="width: 100%">
+                <el-option label="公司尾差账户" value="COMPANY" />
+              </el-select>
+            </el-form-item>
+            <div class="city-partner-rule-summary">
+              <span>预计单件分润：<strong>¥{{ cityPartnerRuleTotal.toFixed(2) }}</strong></span>
+              <span>可用分润池：<strong>{{ cityPartnerProfitPool == null ? '--' : `¥${cityPartnerProfitPool.toFixed(2)}` }}</strong></span>
+              <el-tag v-if="cityPartnerRuleExceeded" type="danger" size="small">超过售价 - 成本</el-tag>
+              <el-tag v-else type="success" size="small">金额校验通过</el-tag>
+            </div>
+          </div>
+
           <div class="commission-rule-section">
             <div class="rule-section-heading">
               <div>
@@ -606,6 +666,7 @@ const zoneConfigVisible = ref(false)
 const zoneConfigLoading = ref(false)
 const zoneConfigSaving = ref(false)
 const zoneConfigProduct = ref({})
+const cityPartnerRulesSupported = ref(false)
 const currentEditingProduct = ref(null)
 
 const filters = reactive({ keyword: '', zone_type: '', status: '', owner_type: '' })
@@ -695,6 +756,13 @@ function createDefaultZoneConfig() {
     per_user_limit: null,
     merchant_commission_rule_id: null,
     device_revenue_enabled: false,
+    city_partner_commission_enabled: false,
+    city_partner_amount: 0,
+    city_partner_direct_reward_amount: 0,
+    city_partner_upline_initial_amount: 0,
+    city_partner_upline_max_levels: 7,
+    city_partner_upline_decay_rate: 50,
+    city_partner_remainder_account: 'COMPANY',
     custom_commission_enabled: false,
     custom_commission_method: 'RATE',
     custom_commission_level1_enabled: false,
@@ -845,6 +913,27 @@ const customCommissionTotalText = computed(() => (
 ))
 const customCommissionTotalExceeded = computed(() => (
   customCommissionValueField.value === 'rate' && customCommissionTotal.value > 100
+))
+const cityPartnerProfitPool = computed(() => {
+  const salePrice = Number(zoneConfigProduct.value.sale_price)
+  const costPrice = Number(zoneConfigProduct.value.cost_price)
+  return Number.isFinite(salePrice) && Number.isFinite(costPrice) ? Math.max(0, salePrice - costPrice) : null
+})
+const cityPartnerRuleTotal = computed(() => {
+  const config = zoneConfigForm.value
+  let total = Number(config.city_partner_amount || 0) + Number(config.city_partner_direct_reward_amount || 0)
+  let layerAmount = Number(config.city_partner_upline_initial_amount || 0)
+  const levels = Math.max(0, Math.min(7, Number(config.city_partner_upline_max_levels || 0)))
+  const decay = Number(config.city_partner_upline_decay_rate || 0) / 100
+  for (let index = 0; index < levels; index += 1) {
+    const rounded = Math.floor((layerAmount + 0.0000001) * 100) / 100
+    total += rounded
+    layerAmount *= decay
+  }
+  return total
+})
+const cityPartnerRuleExceeded = computed(() => (
+  cityPartnerProfitPool.value != null && cityPartnerRuleTotal.value > cityPartnerProfitPool.value
 ))
 
 function firstFilled(values) {
@@ -1150,6 +1239,13 @@ function normalizeZoneConfig(data = {}) {
     product_id: data.product_id ?? null,
     per_user_limit: data.per_user_limit ?? null,
     merchant_commission_rule_id: data.merchant_commission_rule_id ?? null,
+    city_partner_commission_enabled: Boolean(data.city_partner_commission_enabled),
+    city_partner_amount: Number(data.city_partner_amount || 0),
+    city_partner_direct_reward_amount: Number(data.city_partner_direct_reward_amount || 0),
+    city_partner_upline_initial_amount: Number(data.city_partner_upline_initial_amount || 0),
+    city_partner_upline_max_levels: Math.max(1, Math.min(7, Number(data.city_partner_upline_max_levels || 7))),
+    city_partner_upline_decay_rate: Number(data.city_partner_upline_decay_rate == null ? 50 : data.city_partner_upline_decay_rate),
+    city_partner_remainder_account: data.city_partner_remainder_account || 'COMPANY',
     custom_commission_method: data.custom_commission_method || 'RATE',
     custom_commission_level1_enabled: Boolean(data.custom_commission_level1_enabled),
     custom_commission_level2_enabled: Boolean(data.custom_commission_level2_enabled),
@@ -1353,14 +1449,22 @@ async function openZoneConfig(row) {
   zoneConfigVisible.value = true
   zoneConfigLoading.value = true
   zoneConfigProduct.value = row
+  cityPartnerRulesSupported.value = false
   try {
-    zoneConfigForm.value = normalizeZoneConfig(await productApi.zoneConfig(row.id))
+    const data = await productApi.zoneConfig(row.id)
+    cityPartnerRulesSupported.value = ['city_partner_commission_enabled', 'city_partner_amount', 'city_partner_direct_reward_amount', 'city_partner_upline_initial_amount', 'city_partner_upline_max_levels', 'city_partner_upline_decay_rate', 'city_partner_remainder_account']
+      .some((key) => Object.prototype.hasOwnProperty.call(data || {}, key))
+    zoneConfigForm.value = normalizeZoneConfig(data)
   } finally {
     zoneConfigLoading.value = false
   }
 }
 
 async function saveZoneConfig() {
+  if (cityPartnerRulesSupported.value && cityPartnerRuleExceeded.value) {
+    ElMessage.warning('城市合伙人分润合计不能超过商品售价减成本后的分润池')
+    return
+  }
   if (zoneConfigForm.value.custom_commission_enabled) {
     const fixed = zoneConfigForm.value.custom_commission_method === 'FIXED_AMOUNT'
     const field = fixed ? 'amount' : 'rate'
@@ -1385,7 +1489,7 @@ async function saveZoneConfig() {
   }
   zoneConfigSaving.value = true
   try {
-    await productApi.updateZoneConfig(zoneConfigProduct.value.id, {
+    const payload = {
       points_purchase_enabled: zoneConfigForm.value.points_purchase_enabled,
       balance_purchase_enabled: zoneConfigForm.value.balance_purchase_enabled,
       alipay_purchase_enabled: zoneConfigForm.value.alipay_purchase_enabled,
@@ -1413,7 +1517,19 @@ async function saveZoneConfig() {
       custom_commission_level2_amount: zoneConfigForm.value.custom_commission_level2_amount,
       custom_commission_county_agent_amount: zoneConfigForm.value.custom_commission_county_agent_amount,
       custom_commission_city_agent_amount: zoneConfigForm.value.custom_commission_city_agent_amount
-    })
+    }
+    if (cityPartnerRulesSupported.value) {
+      Object.assign(payload, {
+        city_partner_commission_enabled: zoneConfigForm.value.city_partner_commission_enabled,
+        city_partner_amount: zoneConfigForm.value.city_partner_amount,
+        city_partner_direct_reward_amount: zoneConfigForm.value.city_partner_direct_reward_amount,
+        city_partner_upline_initial_amount: zoneConfigForm.value.city_partner_upline_initial_amount,
+        city_partner_upline_max_levels: zoneConfigForm.value.city_partner_upline_max_levels,
+        city_partner_upline_decay_rate: zoneConfigForm.value.city_partner_upline_decay_rate,
+        city_partner_remainder_account: zoneConfigForm.value.city_partner_remainder_account
+      })
+    }
+    await productApi.updateZoneConfig(zoneConfigProduct.value.id, payload)
     ElMessage.success('专区规则已保存')
     zoneConfigVisible.value = false
     await loadData()
@@ -1971,6 +2087,34 @@ onMounted(loadData)
 
 .config-head h3 {
   margin: var(--space-3) 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+.field-suffix {
+  margin-left: 8px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.city-partner-rule-section {
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.city-partner-rule-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.city-partner-rule-summary strong {
   color: var(--text-primary);
 }
 

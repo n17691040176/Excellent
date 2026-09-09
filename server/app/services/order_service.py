@@ -15,8 +15,10 @@ from app.core.payment_config import (
 )
 from app.models.address import UserAddress
 from app.models.asset import UserAssetLedger
+from app.models.commission import CommissionConfig
 from app.models.enums import (
     AssetType,
+    CommissionMode,
     OrderStatus,
     OrderType,
     PaymentChannel,
@@ -1395,6 +1397,10 @@ class OrderService:
             order.payable_amount = Decimal('0.00')
 
         order.pay_status = PayStatus.PAID
+        commission_config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).first()
+        order.commission_mode = getattr(commission_config, 'commission_mode', CommissionMode.ORIGINAL) if commission_config else CommissionMode.ORIGINAL
+        order.commission_rule_version = getattr(commission_config, 'commission_rule_version', 'legacy') if commission_config else 'legacy'
+        order.mode_locked_at = now()
         requires_shipping = OrderService.order_requires_shipping(db, order.id)
         order.order_status = OrderStatus.PENDING_SHIP if requires_shipping else OrderStatus.COMPLETED
         order.paid_at = now()

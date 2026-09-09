@@ -17,10 +17,28 @@
       />
     </div>
 
+    <div class="panel-card data-card mode-card">
+      <div class="mode-card__heading">
+        <div class="section-title-lite">
+          <h3>商品分润模式</h3>
+          <p>原模式保留普通会员、经销商及区域代理规则；城市合伙人模式仅展示/读取城市合伙人商品规则。</p>
+        </div>
+        <el-tag :type="activeMode === 'CITY_PARTNER' ? 'success' : 'info'" effect="dark" size="large">
+          {{ modeLabel(activeMode) }}
+        </el-tag>
+      </div>
+      <el-alert
+        title="模式以接口返回的 commission_mode 为准；旧接口未返回该字段时按原模式兼容展示，不代表后台已完成全局模式切换。"
+        type="info"
+        :closable="false"
+        show-icon
+      />
+    </div>
+
     <div class="panel-card data-card">
       <div class="section-title-lite">
         <h3>商品分润规则</h3>
-        <p>同步商品管理中已启用的专属分润配置；普通会员、经销商按推荐关系结算，区代理、市代理按订单区域结算。</p>
+        <p>同步商品管理中已启用的专属分润配置；城市合伙人规则与原模式规则分开展示，避免误读或混算。</p>
       </div>
       <div class="toolbar-row">
         <el-input
@@ -42,8 +60,25 @@
         <el-table-column label="专区" width="120">
           <template #default="{ row }">{{ zoneLabel(row.zone_type) }}</template>
         </el-table-column>
-        <el-table-column label="分润方式" width="120">
-          <template #default="{ row }">{{ row.method === 'FIXED_AMOUNT' ? '固定金额' : '利润比例' }}</template>
+        <el-table-column label="模式" width="150">
+          <template #default="{ row }">
+            <el-tag :type="rowMode(row) === 'CITY_PARTNER' ? 'success' : 'info'" size="small">
+              {{ modeLabel(rowMode(row)) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="分润方式" width="140">
+          <template #default="{ row }">{{ rowMode(row) === 'CITY_PARTNER' ? '分润池固定金额' : (row.method === 'FIXED_AMOUNT' ? '固定金额' : '利润比例') }}</template>
+        </el-table-column>
+        <el-table-column v-if="hasCityPartnerRows" label="城市合伙人规则" min-width="330">
+          <template #default="{ row }">
+            <div v-if="rowMode(row) === 'CITY_PARTNER'" class="city-rule-cell">
+              <div><strong>{{ cityPartnerRuleValue(row, 'city_partner_amount') }}</strong> 合伙人</div>
+              <div>直推 {{ cityPartnerRuleValue(row, 'direct_reward_amount') }} · 上级起始 {{ cityPartnerRuleValue(row, 'upline_start_amount') }}</div>
+              <div>{{ cityPartnerRuleValue(row, 'upline_levels') }} · 递减 {{ cityPartnerRuleValue(row, 'upline_decay_rate') }} · {{ cityPartnerRuleValue(row, 'tail_account') }}</div>
+            </div>
+            <span v-else class="rule-value-disabled">不适用</span>
+          </template>
         </el-table-column>
         <el-table-column
           v-for="level in commissionMemberLevels"
@@ -206,12 +241,23 @@ const rulePage = ref(1)
 const rulePageSize = ref(20)
 const ruleTotal = ref(0)
 
+const modeOptions = [
+  { label: '原模式', value: 'ORIGINAL' },
+  { label: '城市合伙人模式', value: 'CITY_PARTNER' }
+]
+
 const zoneOptions = [
   { label: '复购区', value: 'REPURCHASE' },
   { label: '自营商城', value: 'SELF_OPERATED' },
   { label: '爆款区', value: 'HOT_SALE' },
   { label: '本地生活', value: 'LOCAL_LIFE' }
 ]
+
+const activeMode = computed(() => {
+  const mode = productRules.value.map((row) => rowMode(row)).find(Boolean)
+  return mode || 'ORIGINAL'
+})
+const hasCityPartnerRows = computed(() => productRules.value.some((row) => rowMode(row) === 'CITY_PARTNER'))
 
 const commissionMemberLevels = [
   { label: '普通会员', key: 'level1' },
@@ -246,6 +292,31 @@ function formatDate(value) {
 
 function zoneLabel(value) {
   return zoneOptions.find((item) => item.value === value)?.label || value || '--'
+}
+
+function modeLabel(value) {
+  return modeOptions.find((item) => item.value === value)?.label || value || '未标记模式'
+}
+
+function rowMode(row = {}) {
+  return String(row.commission_mode || row.mode || row.rule_mode || 'ORIGINAL').toUpperCase()
+}
+
+function cityPartnerRuleValue(row, key) {
+  const aliases = {
+    city_partner_amount: ['city_partner_amount', 'city_partner_commission_amount', 'new_mode_city_partner_amount'],
+    direct_reward_amount: ['direct_reward_amount', 'city_partner_direct_reward_amount', 'new_mode_direct_reward_amount'],
+    upline_start_amount: ['upline_start_amount', 'city_partner_upline_start_amount', 'new_mode_upline_start_amount'],
+    upline_levels: ['upline_levels', 'city_partner_upline_levels', 'new_mode_upline_levels'],
+    upline_decay_rate: ['upline_decay_rate', 'city_partner_upline_decay_rate', 'new_mode_upline_decay_rate'],
+    tail_account: ['tail_account', 'city_partner_tail_account', 'new_mode_tail_account']
+  }
+  const sourceKey = aliases[key]?.find((item) => row[item] !== undefined && row[item] !== null)
+  const value = sourceKey ? row[sourceKey] : null
+  if (key === 'tail_account') return { COMPANY: '公司尾差账户', COMPANY_ACCOUNT: '公司尾差账户' }[value] || value || '--'
+  if (key === 'upline_levels') return value == null ? '--' : `${Number(value)}层`
+  if (key === 'upline_decay_rate') return value == null ? '--' : `${Number(value).toFixed(2)}%`
+  return value == null ? '--' : `¥${Number(value).toFixed(2)}`
 }
 
 function ruleValue(row, level) {
@@ -328,6 +399,18 @@ onMounted(loadData)
 .commission-view {
   display: grid;
   gap: var(--space-4);
+}
+
+.mode-card__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.city-rule-cell {
+  line-height: 1.7;
+  white-space: normal;
 }
 
 .section-title-lite {

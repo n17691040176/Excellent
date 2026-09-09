@@ -94,6 +94,14 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     custom_commission_level2_amount: float = 0
     custom_commission_county_agent_amount: float = 0
     custom_commission_city_agent_amount: float = 0
+    city_partner_commission_enabled: bool = False
+    city_partner_commission_rule_version: str = 'v1'
+    city_partner_amount: float = 0
+    city_partner_direct_reward_amount: float = 0
+    city_partner_upline_initial_amount: float = 0
+    city_partner_upline_max_levels: int = 7
+    city_partner_upline_decay_rate: float = 50
+    city_partner_remainder_account: str = 'COMPANY'
 
 
 class ProductCategoryCreateRequest(AppBaseModel):

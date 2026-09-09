@@ -146,6 +146,15 @@ class ProductZoneConfig(TimestampMixin, Base):
     custom_commission_level2_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     custom_commission_county_agent_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     custom_commission_city_agent_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    # 城市合伙人商品分润配置；仅由新模式结算器读取。
+    city_partner_commission_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    city_partner_commission_rule_version: Mapped[str] = mapped_column(String(64), default='v1', nullable=False)
+    city_partner_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    city_partner_direct_reward_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    city_partner_upline_initial_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    city_partner_upline_max_levels: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    city_partner_upline_decay_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), default=50, nullable=False)
+    city_partner_remainder_account: Mapped[str] = mapped_column(String(32), default='COMPANY', nullable=False)
 
 
 class ProductQualification(Base):

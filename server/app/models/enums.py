@@ -47,6 +47,23 @@ class TeamRole(StrEnum):
     MEMBER = 'MEMBER'
 
 
+class CommissionMode(StrEnum):
+    ORIGINAL = 'ORIGINAL'
+    CITY_PARTNER = 'CITY_PARTNER'
+
+
+class CityPartnerSeatStatus(StrEnum):
+    ACTIVE = 'ACTIVE'
+    INACTIVE = 'INACTIVE'
+
+
+class CityPartnerRotationStatus(StrEnum):
+    PENDING = 'PENDING'
+    SUCCESS = 'SUCCESS'
+    FAILED = 'FAILED'
+    CANCELED = 'CANCELED'
+
+
 class CommissionStatus(StrEnum):
     FROZEN = 'FROZEN'
     SETTLED = 'SETTLED'
@@ -124,12 +141,12 @@ class OrderType(StrEnum):
 
 
 class OrderStatus(StrEnum):
-    PENDING_PAYMENT = 'PENDING_PAYMENT'   # 待支付
-    PENDING_SHIP = 'PENDING_SHIP'         # 待发货
-    SHIPPED = 'SHIPPED'                   # 已发货
-    COMPLETED = 'COMPLETED'               # 已完成
-    PENDING_REVIEW = 'PENDING_REVIEW'      # 待评价（预留）
-    REFUND = 'REFUND'                     # 退款（预留）
+    PENDING_PAYMENT = 'PENDING_PAYMENT'  # 待支付
+    PENDING_SHIP = 'PENDING_SHIP'  # 待发货
+    SHIPPED = 'SHIPPED'  # 已发货
+    COMPLETED = 'COMPLETED'  # 已完成
+    PENDING_REVIEW = 'PENDING_REVIEW'  # 待评价（预留）
+    REFUND = 'REFUND'  # 退款（预留）
 
 
 class PayStatus(StrEnum):

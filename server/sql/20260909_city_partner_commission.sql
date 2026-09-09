@@ -1,0 +1,141 @@
+-- 城市合伙人模式、订单快照、席位轮换及新商品分润配置
+-- 由应用启动时的 apply_schema_migrations() 幂等执行；本文件用于人工/部署迁移。
+
+ALTER TABLE commission_configs
+    ADD COLUMN commission_mode VARCHAR(32) NOT NULL DEFAULT 'ORIGINAL',
+    ADD COLUMN commission_rule_version VARCHAR(64) NOT NULL DEFAULT 'legacy';
+
+ALTER TABLE product_zone_configs
+    ADD COLUMN city_partner_commission_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    ADD COLUMN city_partner_commission_rule_version VARCHAR(64) NOT NULL DEFAULT 'v1',
+    ADD COLUMN city_partner_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    ADD COLUMN city_partner_direct_reward_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    ADD COLUMN city_partner_upline_initial_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    ADD COLUMN city_partner_upline_max_levels INT NOT NULL DEFAULT 7,
+    ADD COLUMN city_partner_upline_decay_rate DECIMAL(5,2) NOT NULL DEFAULT 50.00,
+    ADD COLUMN city_partner_remainder_account VARCHAR(32) NOT NULL DEFAULT 'COMPANY';
+
+ALTER TABLE orders
+    ADD COLUMN commission_mode VARCHAR(32) NOT NULL DEFAULT 'ORIGINAL',
+    ADD COLUMN commission_rule_version VARCHAR(64) NOT NULL DEFAULT 'legacy',
+    ADD COLUMN mode_locked_at DATETIME NULL,
+    ADD COLUMN province VARCHAR(64) NULL,
+    ADD COLUMN city VARCHAR(64) NULL,
+    ADD COLUMN city_partner_user_id BIGINT NULL,
+    ADD COLUMN city_partner_rule_snapshot JSON NULL,
+    ADD COLUMN sale_price_snapshot DECIMAL(18,2) NULL,
+    ADD COLUMN cost_price_snapshot DECIMAL(18,2) NULL,
+    ADD COLUMN profit_pool_snapshot DECIMAL(18,2) NULL,
+    ADD KEY ix_orders_city_partner_user_id (city_partner_user_id),
+    ADD CONSTRAINT fk_orders_city_partner_user_id FOREIGN KEY (city_partner_user_id) REFERENCES users (id);
+
+CREATE TABLE IF NOT EXISTS city_partner_seats (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    province VARCHAR(64) NOT NULL,
+    city VARCHAR(64) NOT NULL,
+    current_user_id BIGINT NULL,
+    current_order_id BIGINT NULL,
+    initial_price DECIMAL(18,2) NOT NULL DEFAULT 0,
+    current_price DECIMAL(18,2) NOT NULL DEFAULT 0,
+    price_growth_rate DECIMAL(7,4) NOT NULL DEFAULT 0,
+    price_cap DECIMAL(18,2) NULL,
+    price_version INT NOT NULL DEFAULT 0,
+    rotation_count INT NOT NULL DEFAULT 0,
+    term_started_at DATETIME NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_city_partner_seats_province_city (province, city),
+    KEY ix_city_partner_seats_current_user_id (current_user_id),
+    CONSTRAINT fk_city_partner_seats_current_user_id FOREIGN KEY (current_user_id) REFERENCES users (id),
+    CONSTRAINT fk_city_partner_seats_current_order_id FOREIGN KEY (current_order_id) REFERENCES orders (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS city_partner_rotation_flows (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    seat_id BIGINT NOT NULL,
+    order_id BIGINT NOT NULL,
+    order_no VARCHAR(64) NOT NULL,
+    province VARCHAR(64) NOT NULL,
+    city VARCHAR(64) NOT NULL,
+    previous_user_id BIGINT NULL,
+    new_user_id BIGINT NOT NULL,
+    new_user_parent_id BIGINT NULL,
+    previous_price DECIMAL(18,2) NOT NULL DEFAULT 0,
+    new_price DECIMAL(18,2) NOT NULL,
+    appreciation_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    principal_refund_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    appreciation_reward_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    company_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    parent_reward_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    operations_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    price_version_before INT NOT NULL,
+    price_version_after INT NOT NULL,
+    commission_rule_version VARCHAR(64) NOT NULL DEFAULT 'v1',
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    confirmed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_city_partner_rotation_seat_order (seat_id, order_id),
+    KEY ix_city_partner_rotation_order_id (order_id),
+    KEY ix_city_partner_rotation_previous_user_id (previous_user_id),
+    KEY ix_city_partner_rotation_new_user_id (new_user_id),
+    CONSTRAINT fk_city_partner_rotation_seat_id FOREIGN KEY (seat_id) REFERENCES city_partner_seats (id),
+    CONSTRAINT fk_city_partner_rotation_order_id FOREIGN KEY (order_id) REFERENCES orders (id),
+    CONSTRAINT fk_city_partner_rotation_previous_user_id FOREIGN KEY (previous_user_id) REFERENCES users (id),
+    CONSTRAINT fk_city_partner_rotation_new_user_id FOREIGN KEY (new_user_id) REFERENCES users (id),
+    CONSTRAINT fk_city_partner_rotation_parent_id FOREIGN KEY (new_user_parent_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS city_partner_commission_flows (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    order_id BIGINT NOT NULL,
+    order_item_id BIGINT NULL,
+    product_id BIGINT NOT NULL,
+    order_no VARCHAR(64) NOT NULL,
+    commission_mode VARCHAR(32) NOT NULL DEFAULT 'CITY_PARTNER',
+    commission_rule_version VARCHAR(64) NOT NULL,
+    province VARCHAR(64) NOT NULL,
+    city VARCHAR(64) NOT NULL,
+    city_partner_user_id BIGINT NULL,
+    beneficiary_user_id BIGINT NULL,
+    beneficiary_account VARCHAR(32) NULL,
+    source_user_id BIGINT NOT NULL,
+    commission_role VARCHAR(32) NOT NULL,
+    level INT NULL,
+    unit_sale_price DECIMAL(18,2) NOT NULL,
+    unit_cost_price DECIMAL(18,2) NOT NULL,
+    quantity INT NOT NULL,
+    profit_pool_amount DECIMAL(18,2) NOT NULL,
+    calculated_amount DECIMAL(18,2) NOT NULL,
+    commission_amount DECIMAL(18,2) NOT NULL,
+    remainder_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    status VARCHAR(32) NOT NULL,
+    settled_at DATETIME NULL,
+    created_at DATETIME NOT NULL,
+    KEY ix_city_partner_commission_order_id (order_id),
+    KEY ix_city_partner_commission_product_id (product_id),
+    KEY ix_city_partner_commission_beneficiary_id (beneficiary_user_id),
+    CONSTRAINT fk_city_partner_commission_order_id FOREIGN KEY (order_id) REFERENCES orders (id),
+    CONSTRAINT fk_city_partner_commission_order_item_id FOREIGN KEY (order_item_id) REFERENCES order_items (id),
+    CONSTRAINT fk_city_partner_commission_product_id FOREIGN KEY (product_id) REFERENCES products (id),
+    CONSTRAINT fk_city_partner_commission_city_partner_user_id FOREIGN KEY (city_partner_user_id) REFERENCES users (id),
+    CONSTRAINT fk_city_partner_commission_beneficiary_user_id FOREIGN KEY (beneficiary_user_id) REFERENCES users (id),
+    CONSTRAINT fk_city_partner_commission_source_user_id FOREIGN KEY (source_user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS commission_mode_switch_logs (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    from_mode VARCHAR(32) NOT NULL,
+    to_mode VARCHAR(32) NOT NULL,
+    commission_rule_version VARCHAR(64) NOT NULL,
+    switched_at DATETIME NOT NULL,
+    operator_id BIGINT NULL,
+    reason VARCHAR(500) NULL,
+    pending_order_count INT NOT NULL DEFAULT 0,
+    frozen_commission_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY ix_commission_mode_switch_logs_switched_at (switched_at),
+    KEY ix_commission_mode_switch_logs_operator_id (operator_id),
+    CONSTRAINT fk_commission_mode_switch_logs_operator_id FOREIGN KEY (operator_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

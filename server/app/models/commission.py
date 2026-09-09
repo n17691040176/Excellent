@@ -5,13 +5,22 @@ from sqlalchemy import DECIMAL, BigInteger, DateTime, Enum, ForeignKey, String, 
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.models.enums import CommissionStatus, WithdrawStatus, WithdrawType
+from app.models.enums import CommissionMode, CommissionStatus, WithdrawStatus, WithdrawType
 
 
 class CommissionConfig(Base):
     __tablename__ = 'commission_configs'
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    commission_mode: Mapped[CommissionMode] = mapped_column(
+        Enum(CommissionMode),
+        default=CommissionMode.ORIGINAL,
+        server_default=CommissionMode.ORIGINAL.value,
+        nullable=False,
+    )
+    commission_rule_version: Mapped[str] = mapped_column(
+        String(64), default='legacy', server_default='legacy', nullable=False
+    )
     level1_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
     level2_rate: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(default=False, nullable=False)
@@ -20,6 +29,23 @@ class CommissionConfig(Base):
     withdraw_max_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False, default=50000)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class CommissionModeSwitchLog(Base):
+    """Audit record for each global commission mode change."""
+
+    __tablename__ = 'commission_mode_switch_logs'
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    from_mode: Mapped[CommissionMode] = mapped_column(Enum(CommissionMode), nullable=False)
+    to_mode: Mapped[CommissionMode] = mapped_column(Enum(CommissionMode), nullable=False)
+    commission_rule_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    switched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    operator_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    pending_order_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    frozen_commission_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class UserCommission(Base):

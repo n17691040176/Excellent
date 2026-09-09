@@ -743,6 +743,14 @@ class ProductService:
         for key, value in defaults.items():
             current = getattr(config, key) if config and getattr(config, key) is not None else value
             data[key] = ProductService._serialize_zone_config_value(current)
+        data.setdefault('city_partner_commission_enabled', False)
+        data.setdefault('city_partner_commission_rule_version', 'v1')
+        data.setdefault('city_partner_amount', 0.0)
+        data.setdefault('city_partner_direct_reward_amount', 0.0)
+        data.setdefault('city_partner_upline_initial_amount', 0.0)
+        data.setdefault('city_partner_upline_max_levels', 7)
+        data.setdefault('city_partner_upline_decay_rate', 50.0)
+        data.setdefault('city_partner_remainder_account', 'COMPANY')
         return data
 
     @staticmethod

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     addresses,
+    admin_city_partners,
     admin_commerce,
     admin_invites,
     admin_permissions,
@@ -51,6 +52,8 @@ api_router.include_router(payments.admin_router, tags=['Admin Payments'])
 api_router.include_router(commission.admin_router, tags=['Admin Commission'])
 api_router.include_router(earning_rules.admin_router, tags=['Admin Earning Rules'])
 api_router.include_router(admin_region_agents.router, tags=['Admin Region Agents'])
+api_router.include_router(admin_city_partners.router, tags=['Admin City Partners'])
+api_router.include_router(admin_city_partners.user_router, tags=['City Partners'])
 api_router.include_router(admin_invites.admin_router, tags=['Admin Invites'])
 api_router.include_router(admin_commerce.admin_router, tags=['Admin Commerce'])
 api_router.include_router(admin_permissions.router, tags=['Admin Permissions'])

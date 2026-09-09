@@ -4,7 +4,6 @@ from pydantic import Field
 
 from app.schemas.common import AppBaseModel
 
-
 DataScope = Literal['ALL', 'TEAM']
 EnabledStatus = Literal['ENABLED', 'DISABLED']
 

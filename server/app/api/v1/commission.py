@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.models.enums import GlobalRole, WithdrawType
 from app.models.user import User
 from app.schemas.commission import (
+    CommissionModeUpdateRequest,
     WithdrawConfigUpdateRequest,
     WithdrawCreateRequest,
     WithdrawRejectRequest,
@@ -71,6 +72,24 @@ def my_withdraws(
 @app_router.get('/withdraws/config')
 def app_withdraw_config(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return {'code': 0, 'message': 'success', 'data': CommissionService.withdraw_config(db)}
+
+
+@admin_router.get('/commission/mode')
+def admin_commission_mode(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+):
+    return {'code': 0, 'message': 'success', 'data': CommissionService.commission_mode(db)}
+
+
+@admin_router.put('/commission/mode')
+def update_admin_commission_mode(
+    payload: CommissionModeUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+):
+    data = CommissionService.update_commission_mode(db, payload.mode, current_user.id, payload.reason)
+    return {'code': 0, 'message': 'success', 'data': data}
 
 
 @admin_router.get('/commission/flows')

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password, verify_password
 from app.models.admin_role import AdminRole, AdminRolePermission
+from app.models.commission import UserCommission
 from app.models.enums import GlobalRole, UserStatus
 from app.models.team import Team
 from app.models.user import AdminUserPermission, User
@@ -14,7 +15,6 @@ from app.services.admin_permission_service import (
 )
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import init_user_assets
-from app.models.commission import UserCommission
 from app.utils.helpers import generate_code, iso_datetime, now
 
 

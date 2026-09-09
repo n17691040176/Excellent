@@ -41,27 +41,21 @@ PAYMENT_REFUND_ADDITIVE_COLUMNS = {
     'next_retry_at': 'DATETIME NULL',
     'attempt_count': 'INT NOT NULL DEFAULT 0',
     'created_at': 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    'updated_at': (
-        'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
-    ),
+    'updated_at': ('DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'),
 }
 
 PAYMENT_REFUND_INDEXES = {
     'uk_payment_refunds_payment_transaction': (
-        'CREATE UNIQUE INDEX uk_payment_refunds_payment_transaction '
-        'ON payment_refunds (payment_transaction_id)'
+        'CREATE UNIQUE INDEX uk_payment_refunds_payment_transaction ' 'ON payment_refunds (payment_transaction_id)'
     ),
     'uk_payment_refunds_out_refund_no': (
-        'CREATE UNIQUE INDEX uk_payment_refunds_out_refund_no '
-        'ON payment_refunds (out_refund_no)'
+        'CREATE UNIQUE INDEX uk_payment_refunds_out_refund_no ' 'ON payment_refunds (out_refund_no)'
     ),
     'uk_payment_refunds_provider_refund_id': (
-        'CREATE UNIQUE INDEX uk_payment_refunds_provider_refund_id '
-        'ON payment_refunds (provider_refund_id)'
+        'CREATE UNIQUE INDEX uk_payment_refunds_provider_refund_id ' 'ON payment_refunds (provider_refund_id)'
     ),
     'uk_payment_refunds_provider_notify_id': (
-        'CREATE UNIQUE INDEX uk_payment_refunds_provider_notify_id '
-        'ON payment_refunds (provider_notify_id)'
+        'CREATE UNIQUE INDEX uk_payment_refunds_provider_notify_id ' 'ON payment_refunds (provider_notify_id)'
     ),
     'uk_payment_refunds_transaction_idempotency': (
         'CREATE UNIQUE INDEX uk_payment_refunds_transaction_idempotency '
@@ -69,8 +63,7 @@ PAYMENT_REFUND_INDEXES = {
     ),
     'ix_payment_refunds_order_id': 'CREATE INDEX ix_payment_refunds_order_id ON payment_refunds (order_id)',
     'ix_payment_refunds_payment_transaction_id': (
-        'CREATE INDEX ix_payment_refunds_payment_transaction_id '
-        'ON payment_refunds (payment_transaction_id)'
+        'CREATE INDEX ix_payment_refunds_payment_transaction_id ' 'ON payment_refunds (payment_transaction_id)'
     ),
     'ix_payment_refunds_order_no': 'CREATE INDEX ix_payment_refunds_order_no ON payment_refunds (order_no)',
     'ix_payment_refunds_channel': 'CREATE INDEX ix_payment_refunds_channel ON payment_refunds (channel)',
@@ -97,8 +90,8 @@ PAYMENT_REFUNDS_CREATE_SQL = (
     'payment_transaction_id BIGINT NOT NULL, '
     'order_no VARCHAR(64) NOT NULL, '
     'channel VARCHAR(32) NOT NULL, '
-    'status VARCHAR(32) NOT NULL DEFAULT \'PENDING\', '
-    'currency VARCHAR(8) NOT NULL DEFAULT \'CNY\', '
+    "status VARCHAR(32) NOT NULL DEFAULT 'PENDING', "
+    "currency VARCHAR(8) NOT NULL DEFAULT 'CNY', "
     'original_amount DECIMAL(18,2) NOT NULL, '
     'refund_amount DECIMAL(18,2) NOT NULL, '
     'out_refund_no VARCHAR(64) NOT NULL, '
@@ -178,9 +171,7 @@ def _foreign_key_signatures(table_name: str) -> set[tuple[str, str, str]]:
         referred_columns = item.get('referred_columns') or []
         referred_table = str(item.get('referred_table') or '')
         if len(constrained_columns) == 1 and len(referred_columns) == 1 and referred_table:
-            signatures.add(
-                (str(constrained_columns[0]), referred_table, str(referred_columns[0]))
-            )
+            signatures.add((str(constrained_columns[0]), referred_table, str(referred_columns[0])))
     return signatures
 
 
@@ -202,9 +193,7 @@ def _ensure_payment_refund_schema(connection: Connection) -> None:
 
     for column_name, column_type in PAYMENT_REFUND_ADDITIVE_COLUMNS.items():
         if column_name not in columns:
-            connection.execute(
-                text(f'ALTER TABLE payment_refunds ADD COLUMN {column_name} {column_type}')
-            )
+            connection.execute(text(f'ALTER TABLE payment_refunds ADD COLUMN {column_name} {column_type}'))
 
     index_names = _index_names('payment_refunds')
     for index_name, statement in PAYMENT_REFUND_INDEXES.items():
@@ -236,16 +225,115 @@ def _clear_legacy_earning_rule_pool(connection: Connection) -> None:
         return
 
     connection.execute(text('DELETE FROM earning_rules'))
-    connection.execute(
-        text('UPDATE commission_configs SET level1_rate = 0, level2_rate = 0, is_active = 0')
-    )
+    connection.execute(text('UPDATE commission_configs SET level1_rate = 0, level2_rate = 0, is_active = 0'))
     connection.execute(
         text(
-            'INSERT INTO app_data_migrations (migration_key, applied_at) '
-            'VALUES (:migration_key, CURRENT_TIMESTAMP)'
+            'INSERT INTO app_data_migrations (migration_key, applied_at) ' 'VALUES (:migration_key, CURRENT_TIMESTAMP)'
         ),
         {'migration_key': EARNING_RULE_POOL_CLEANUP_KEY},
     )
+
+
+CITY_PARTNER_TABLE_SQL = (
+    'CREATE TABLE IF NOT EXISTS city_partner_seats ('
+    'id BIGINT PRIMARY KEY AUTO_INCREMENT, province VARCHAR(64) NOT NULL, city VARCHAR(64) NOT NULL, '
+    'current_user_id BIGINT NULL, current_order_id BIGINT NULL, initial_price DECIMAL(18,2) NOT NULL DEFAULT 0, '
+    'current_price DECIMAL(18,2) NOT NULL DEFAULT 0, price_growth_rate DECIMAL(7,4) NOT NULL DEFAULT 0, '
+    'price_cap DECIMAL(18,2) NULL, price_version INT NOT NULL DEFAULT 0, rotation_count INT NOT NULL DEFAULT 0, '
+    "term_started_at DATETIME NULL, status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE', "
+    'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+    'updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, '
+    'UNIQUE KEY uq_city_partner_seats_province_city (province, city), '
+    'KEY ix_city_partner_seats_current_user_id (current_user_id), '
+    'CONSTRAINT fk_city_partner_seats_current_user_id FOREIGN KEY (current_user_id) REFERENCES users (id), '
+    'CONSTRAINT fk_city_partner_seats_current_order_id FOREIGN KEY (current_order_id) REFERENCES orders (id)'
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4',
+    'CREATE TABLE IF NOT EXISTS city_partner_rotation_flows ('
+    'id BIGINT PRIMARY KEY AUTO_INCREMENT, seat_id BIGINT NOT NULL, order_id BIGINT NOT NULL, '
+    'order_no VARCHAR(64) NOT NULL, province VARCHAR(64) NOT NULL, city VARCHAR(64) NOT NULL, '
+    'previous_user_id BIGINT NULL, new_user_id BIGINT NOT NULL, new_user_parent_id BIGINT NULL, '
+    'previous_price DECIMAL(18,2) NOT NULL DEFAULT 0, new_price DECIMAL(18,2) NOT NULL, '
+    'appreciation_amount DECIMAL(18,2) NOT NULL DEFAULT 0, principal_refund_amount DECIMAL(18,2) NOT NULL DEFAULT 0, '
+    'appreciation_reward_amount DECIMAL(18,2) NOT NULL DEFAULT 0, company_amount DECIMAL(18,2) NOT NULL DEFAULT 0, '
+    'parent_reward_amount DECIMAL(18,2) NOT NULL DEFAULT 0, operations_amount DECIMAL(18,2) NOT NULL DEFAULT 0, '
+    "price_version_before INT NOT NULL, price_version_after INT NOT NULL, commission_rule_version VARCHAR(64) NOT NULL DEFAULT 'v1', "
+    "status VARCHAR(32) NOT NULL DEFAULT 'PENDING', confirmed_at DATETIME NULL, "
+    'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, '
+    'UNIQUE KEY uq_city_partner_rotation_seat_order (seat_id, order_id), KEY ix_city_partner_rotation_order_id (order_id), '
+    'KEY ix_city_partner_rotation_previous_user_id (previous_user_id), KEY ix_city_partner_rotation_new_user_id (new_user_id), '
+    'CONSTRAINT fk_city_partner_rotation_seat_id FOREIGN KEY (seat_id) REFERENCES city_partner_seats (id), '
+    'CONSTRAINT fk_city_partner_rotation_order_id FOREIGN KEY (order_id) REFERENCES orders (id), '
+    'CONSTRAINT fk_city_partner_rotation_previous_user_id FOREIGN KEY (previous_user_id) REFERENCES users (id), '
+    'CONSTRAINT fk_city_partner_rotation_new_user_id FOREIGN KEY (new_user_id) REFERENCES users (id), '
+    'CONSTRAINT fk_city_partner_rotation_parent_id FOREIGN KEY (new_user_parent_id) REFERENCES users (id)'
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4',
+    'CREATE TABLE IF NOT EXISTS city_partner_commission_flows ('
+    'id BIGINT PRIMARY KEY AUTO_INCREMENT, order_id BIGINT NOT NULL, order_item_id BIGINT NULL, product_id BIGINT NOT NULL, order_no VARCHAR(64) NOT NULL, '
+    "commission_mode VARCHAR(32) NOT NULL DEFAULT 'CITY_PARTNER', commission_rule_version VARCHAR(64) NOT NULL, province VARCHAR(64) NOT NULL, city VARCHAR(64) NOT NULL, "
+    'city_partner_user_id BIGINT NULL, beneficiary_user_id BIGINT NULL, beneficiary_account VARCHAR(32) NULL, source_user_id BIGINT NOT NULL, commission_role VARCHAR(32) NOT NULL, level INT NULL, '
+    'unit_sale_price DECIMAL(18,2) NOT NULL, unit_cost_price DECIMAL(18,2) NOT NULL, quantity INT NOT NULL, profit_pool_amount DECIMAL(18,2) NOT NULL, calculated_amount DECIMAL(18,2) NOT NULL, commission_amount DECIMAL(18,2) NOT NULL, remainder_amount DECIMAL(18,2) NOT NULL DEFAULT 0, status VARCHAR(32) NOT NULL, settled_at DATETIME NULL, created_at DATETIME NOT NULL, '
+    'KEY ix_city_partner_commission_order_id (order_id), KEY ix_city_partner_commission_product_id (product_id), KEY ix_city_partner_commission_beneficiary_id (beneficiary_user_id), '
+    'CONSTRAINT fk_city_partner_commission_order_id FOREIGN KEY (order_id) REFERENCES orders (id), CONSTRAINT fk_city_partner_commission_order_item_id FOREIGN KEY (order_item_id) REFERENCES order_items (id), CONSTRAINT fk_city_partner_commission_product_id FOREIGN KEY (product_id) REFERENCES products (id), '
+    'CONSTRAINT fk_city_partner_commission_city_partner_user_id FOREIGN KEY (city_partner_user_id) REFERENCES users (id), CONSTRAINT fk_city_partner_commission_beneficiary_user_id FOREIGN KEY (beneficiary_user_id) REFERENCES users (id), CONSTRAINT fk_city_partner_commission_source_user_id FOREIGN KEY (source_user_id) REFERENCES users (id)'
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4',
+    'CREATE TABLE IF NOT EXISTS commission_mode_switch_logs ('
+    'id BIGINT PRIMARY KEY AUTO_INCREMENT, from_mode VARCHAR(32) NOT NULL, to_mode VARCHAR(32) NOT NULL, commission_rule_version VARCHAR(64) NOT NULL, switched_at DATETIME NOT NULL, operator_id BIGINT NULL, reason VARCHAR(500) NULL, pending_order_count INT NOT NULL DEFAULT 0, frozen_commission_amount DECIMAL(18,2) NOT NULL DEFAULT 0, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY ix_commission_mode_switch_logs_switched_at (switched_at), KEY ix_commission_mode_switch_logs_operator_id (operator_id), CONSTRAINT fk_commission_mode_switch_logs_operator_id FOREIGN KEY (operator_id) REFERENCES users (id)'
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4',
+)
+
+
+def _ensure_city_partner_schema(connection: Connection) -> None:
+    """Create city-partner tables and add additive columns for existing databases."""
+
+    commission_config_columns = _column_names('commission_configs')
+    for column_name, column_type in {
+        'commission_mode': "VARCHAR(32) NOT NULL DEFAULT 'ORIGINAL'",
+        'commission_rule_version': "VARCHAR(64) NOT NULL DEFAULT 'legacy'",
+    }.items():
+        if column_name not in commission_config_columns:
+            connection.execute(text(f'ALTER TABLE commission_configs ADD COLUMN {column_name} {column_type}'))
+
+    zone_columns = _column_names('product_zone_configs')
+    for column_name, column_type in {
+        'city_partner_commission_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
+        'city_partner_commission_rule_version': "VARCHAR(64) NOT NULL DEFAULT 'v1'",
+        'city_partner_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
+        'city_partner_direct_reward_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
+        'city_partner_upline_initial_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
+        'city_partner_upline_max_levels': 'INT NOT NULL DEFAULT 7',
+        'city_partner_upline_decay_rate': 'DECIMAL(5,2) NOT NULL DEFAULT 50.00',
+        'city_partner_remainder_account': "VARCHAR(32) NOT NULL DEFAULT 'COMPANY'",
+    }.items():
+        if column_name not in zone_columns:
+            connection.execute(text(f'ALTER TABLE product_zone_configs ADD COLUMN {column_name} {column_type}'))
+
+    order_columns = _column_names('orders')
+    for column_name, column_type in {
+        'commission_mode': "VARCHAR(32) NOT NULL DEFAULT 'ORIGINAL'",
+        'commission_rule_version': "VARCHAR(64) NOT NULL DEFAULT 'legacy'",
+        'mode_locked_at': 'DATETIME NULL',
+        'province': 'VARCHAR(64) NULL',
+        'city': 'VARCHAR(64) NULL',
+        'city_partner_user_id': 'BIGINT NULL',
+        'city_partner_rule_snapshot': 'JSON NULL',
+        'sale_price_snapshot': 'DECIMAL(18,2) NULL',
+        'cost_price_snapshot': 'DECIMAL(18,2) NULL',
+        'profit_pool_snapshot': 'DECIMAL(18,2) NULL',
+    }.items():
+        if column_name not in order_columns:
+            connection.execute(text(f'ALTER TABLE orders ADD COLUMN {column_name} {column_type}'))
+    order_indexes = _index_names('orders')
+    if 'ix_orders_city_partner_user_id' not in order_indexes:
+        connection.execute(text('CREATE INDEX ix_orders_city_partner_user_id ON orders (city_partner_user_id)'))
+    if ('city_partner_user_id', 'users', 'id') not in _foreign_key_signatures('orders'):
+        connection.execute(
+            text(
+                'ALTER TABLE orders ADD CONSTRAINT fk_orders_city_partner_user_id FOREIGN KEY (city_partner_user_id) REFERENCES users (id)'
+            )
+        )
+
+    for statement in CITY_PARTNER_TABLE_SQL:
+        connection.execute(text(statement))
 
 
 def apply_schema_migrations() -> None:
@@ -256,6 +344,8 @@ def apply_schema_migrations() -> None:
     """
 
     with engine.begin() as connection, _schema_migration_lock(connection):
+        _ensure_city_partner_schema(connection)
+
         user_columns = _column_names('users')
         if 'member_level' not in user_columns:
             connection.execute(
@@ -264,7 +354,7 @@ def apply_schema_migrations() -> None:
             if 'business_identity' in user_columns:
                 connection.execute(
                     text(
-                        "UPDATE users SET member_level = CASE business_identity "
+                        'UPDATE users SET member_level = CASE business_identity '
                         "WHEN 'DEALER' THEN 'DEALER' "
                         "WHEN 'COUNTY_AGENT' THEN 'COUNTY_AGENT' "
                         "WHEN 'CITY_AGENT' THEN 'CITY_AGENT' "
@@ -369,7 +459,7 @@ def apply_schema_migrations() -> None:
         _ensure_payment_refund_schema(connection)
 
         commission_columns = {
-            'custom_commission_enabled': "TINYINT(1) NOT NULL DEFAULT 0",
+            'custom_commission_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
             'custom_commission_method': "VARCHAR(32) NOT NULL DEFAULT 'RATE'",
             'custom_commission_level1_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
             'custom_commission_level2_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
@@ -387,20 +477,22 @@ def apply_schema_migrations() -> None:
         added_commission_columns: set[str] = set()
         for column_name, column_type in commission_columns.items():
             if column_name not in zone_config_columns:
-                connection.execute(
-                    text(f'ALTER TABLE product_zone_configs ADD COLUMN {column_name} {column_type}')
-                )
+                connection.execute(text(f'ALTER TABLE product_zone_configs ADD COLUMN {column_name} {column_type}'))
                 added_commission_columns.add(column_name)
 
         if 'custom_commission_level1_enabled' in added_commission_columns:
-            connection.execute(text(
-                'UPDATE product_zone_configs SET custom_commission_level1_enabled = 1 '
-                'WHERE custom_commission_level1_rate > 0 OR custom_commission_level1_amount > 0'
-            ))
+            connection.execute(
+                text(
+                    'UPDATE product_zone_configs SET custom_commission_level1_enabled = 1 '
+                    'WHERE custom_commission_level1_rate > 0 OR custom_commission_level1_amount > 0'
+                )
+            )
         if 'custom_commission_level2_enabled' in added_commission_columns:
-            connection.execute(text(
-                'UPDATE product_zone_configs SET custom_commission_level2_enabled = 1 '
-                'WHERE custom_commission_level2_rate > 0 OR custom_commission_level2_amount > 0'
-            ))
+            connection.execute(
+                text(
+                    'UPDATE product_zone_configs SET custom_commission_level2_enabled = 1 '
+                    'WHERE custom_commission_level2_rate > 0 OR custom_commission_level2_amount > 0'
+                )
+            )
 
         _clear_legacy_earning_rule_pool(connection)
