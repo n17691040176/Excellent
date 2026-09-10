@@ -16,6 +16,8 @@ class User(TimestampMixin, Base):
     nickname: Mapped[str] = mapped_column(String(64), nullable=False)
     avatar: Mapped[str | None] = mapped_column(String(255), nullable=True)
     global_role: Mapped[GlobalRole] = mapped_column(Enum(GlobalRole), default=GlobalRole.USER, nullable=False)
+    # Reserved internal settlement account: COMPANY or OPERATIONS.
+    system_account_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     admin_role_id: Mapped[int | None] = mapped_column(ForeignKey('admin_roles.id'), nullable=True, index=True)
     admin_role = relationship('AdminRole', foreign_keys=[admin_role_id])
     member_level: Mapped[MemberLevel] = mapped_column(

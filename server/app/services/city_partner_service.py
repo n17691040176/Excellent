@@ -120,6 +120,16 @@ class CityPartnerService:
         summary.updated_at = now()
 
     @staticmethod
+    def _credit_system_account(db: Session, account_type: str, amount: Decimal) -> None:
+        """Credit a designated internal user when one has been configured."""
+        amount = CityPartnerService._money(amount)
+        if amount <= 0:
+            return
+        account = db.query(User).filter(User.system_account_type == account_type).with_for_update().first()
+        if account:
+            CityPartnerService._credit_user(db, account.id, amount)
+
+    @staticmethod
     def purchase_or_rotate(
         db: Session, seat_id: int, buyer: User, order_id: int
     ) -> tuple[CityPartnerSeat, CityPartnerRotationFlow]:

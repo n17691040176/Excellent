@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
     nickname VARCHAR(64) NOT NULL,
     avatar VARCHAR(255) NULL,
     global_role VARCHAR(32) NOT NULL DEFAULT 'USER',
+    system_account_type VARCHAR(32) NULL,
     member_level VARCHAR(32) NOT NULL DEFAULT 'NORMAL_MEMBER',
     status VARCHAR(32) NOT NULL DEFAULT 'ENABLED',
     invite_code VARCHAR(32) NOT NULL,

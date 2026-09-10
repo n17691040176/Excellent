@@ -363,6 +363,8 @@ def apply_schema_migrations() -> None:
                 )
         if 'business_identity' in user_columns:
             connection.execute(text('ALTER TABLE users DROP COLUMN business_identity'))
+        if 'system_account_type' not in user_columns:
+            connection.execute(text('ALTER TABLE users ADD COLUMN system_account_type VARCHAR(32) NULL'))
         if 'admin_role_id' not in user_columns:
             connection.execute(text('ALTER TABLE users ADD COLUMN admin_role_id BIGINT NULL'))
 

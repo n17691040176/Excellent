@@ -1,3 +1,4 @@
+ALTER TABLE users ADD COLUMN system_account_type VARCHAR(32) NULL;
 -- 城市合伙人模式、订单快照、席位轮换及新商品分润配置
 -- 由应用启动时的 apply_schema_migrations() 幂等执行；本文件用于人工/部署迁移。
 
