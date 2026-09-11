@@ -1,0 +1,11 @@
+# Proposed replacement for the MySQL healthcheck in BaoTa's existing Compose.
+# Do not replace the rest of the production Compose with this snippet.
+# This file does not apply or restart anything.
+services:
+  mysql:
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql -h 127.0.0.1 -uroot --batch --skip-column-names -e 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
