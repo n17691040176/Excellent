@@ -1,0 +1,81 @@
+# Layer on compose.local-test.yml to reuse the isolated local MySQL/Redis data.
+services:
+  mysql:
+    restart: unless-stopped
+  redis:
+    restart: unless-stopped
+  server:
+    build:
+      context: ../server
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      APP_DEBUG: "false"
+      SECRET_KEY: excellent-local-docker-development-only
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: excellent
+      MYSQL_PASSWORD: excellentlocal2026
+      MYSQL_DB: excellent_local_test
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PAYMENT_MOCK_EXTERNAL_PAYMENT: "true"
+      ALIPAY_ENABLED: "false"
+      WECHAT_PAY_ENABLED: "false"
+      SMS_ENABLED: "false"
+      DYNPNS_ENABLED: "false"
+      TENCENT_COS_ENABLED: "false"
+      CORS_ORIGINS: http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ../server/uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 4s
+      start_period: 30s
+      retries: 30
+  admin-web:
+    build:
+      context: ../admin-web
+      args:
+        VITE_API_BASE_URL: /
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 5s
+      timeout: 4s
+      retries: 15
+  mobile-uni-new2:
+    build:
+      context: ../mobile-uniNew2
+      args:
+        VITE_API_BASE_URL: /api/
+        VITE_INVITE_WEB_BASE_URL: http://127.0.0.1:5174
+        VITE_APP_ENV: local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5174:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 5s
+      timeout: 4s
+      retries: 15

@@ -24,6 +24,7 @@ class CityPartnerSeat(TimestampMixin, Base):
     price_growth_rate: Mapped[Decimal] = mapped_column(DECIMAL(7, 4), nullable=False, default=0)
     price_cap: Mapped[Decimal | None] = mapped_column(DECIMAL(18, 2), nullable=True)
     price_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rule_version: Mapped[str] = mapped_column(String(64), nullable=False, default='city-partner-v1')
     rotation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     term_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[CityPartnerSeatStatus] = mapped_column(
@@ -95,9 +96,21 @@ class CityPartnerCommissionFlow(Base):
     unit_cost_price: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     profit_pool_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
-    calculated_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
+    calculated_amount: Mapped[Decimal] = mapped_column(DECIMAL(48, 26), nullable=False)
+    calculation_precision_known: Mapped[bool] = mapped_column(default=True, server_default='0', nullable=False)
     commission_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
     remainder_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False, default=0)
     status: Mapped[CommissionStatus] = mapped_column(Enum(CommissionStatus), nullable=False)
     settled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class CityPartnerPurchase(Base):
+    __tablename__ = 'city_partner_purchases'
+
+    order_id: Mapped[int] = mapped_column(ForeignKey('orders.id'), primary_key=True)
+    seat_id: Mapped[int] = mapped_column(ForeignKey('city_partner_seats.id'), nullable=False, index=True)
+    price_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    quoted_price: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), nullable=False)
+    settlement_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

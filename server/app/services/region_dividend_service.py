@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.asset import UserAssetAccount, UserAssetLedger
-from app.models.enums import AssetDirection, AssetType, MemberLevel, OrderStatus, PayStatus
+from app.models.enums import AssetDirection, AssetType, CommissionMode, MemberLevel, OrderStatus, PayStatus
 from app.models.order import Order, OrderItem
 from app.models.product import Product, ProductZoneConfig
 from app.models.region_agent import RegionAgent
@@ -32,6 +32,8 @@ class RegionDividendService:
         *,
         commit: bool = True,
     ) -> list[RegionDividendFlow]:
+        if getattr(order, 'commission_mode', None) == CommissionMode.CITY_PARTNER:
+            return []
         province = str(address.get('province') or '').strip()
         city = str(address.get('city') or '').strip()
         district = str(address.get('district') or '').strip()
@@ -45,6 +47,8 @@ class RegionDividendService:
         if not locked_order:
             return []
         db.refresh(locked_order, with_for_update=True)
+        if getattr(locked_order, 'commission_mode', None) == CommissionMode.CITY_PARTNER:
+            return []
         if (
             locked_order.pay_status != PayStatus.PAID
             or locked_order.order_status != OrderStatus.COMPLETED

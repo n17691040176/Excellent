@@ -36,7 +36,6 @@
       >
         <div class="zone-card-title">{{ item.label }}</div>
         <div class="zone-card-value">{{ zoneCount(item.code) }}</div>
-        <div class="zone-card-meta">{{ item.desc }}</div>
       </button>
     </div>
 
@@ -48,7 +47,7 @@
       <!-- 批量操作栏 -->
       <div v-if="selectedRows.length" class="batch-toolbar">
         <div class="batch-toolbar__info">
-          已选 {{ selectedRows.length }} 个商品。第一条会拿到最高排序值，用于快速对齐移动端列表顺序。
+          已选 {{ selectedRows.length }} 个商品
         </div>
         <div class="batch-toolbar__actions">
           <el-input-number v-model="batchForm.order_by_start" :min="0" :step="10" controls-position="right" />
@@ -337,13 +336,6 @@
             </div>
           </el-form>
 
-          <div class="config-tips">
-            <div>导入和手工新增商品都会先保存为草稿，再走提审、审核和上架流程。</div>
-            <div>模板里可直接填写商品 ID 更新已有商品，不填则创建新商品。</div>
-            <div>模板现在也支持专区规则字段，商品资料和支付/资格规则可以一次导入完成。</div>
-            <div>移动端展示最依赖主图、品牌、简介、卖点、详情和专区规则，建议一次补齐。</div>
-          </div>
-
           <div class="dialog-actions">
             <el-button @click="dialogVisible = false">取消</el-button>
             <el-button type="primary" :loading="saving" @click="saveProduct">保存商品</el-button>
@@ -416,19 +408,17 @@
     </el-drawer>
 
     <!-- 专区规则配置抽屉 -->
+    <RuleHistoryDrawer v-model="zoneRuleHistoryVisible" :entity-id="zoneConfigProduct.id" entity-type="PRODUCT" />
     <el-drawer v-model="zoneConfigVisible" :title="zoneConfigTitle" size="min(560px, 100vw)">
+      <el-button link @click="zoneRuleHistoryVisible = true">查看规则修改记录</el-button>
+      <el-input v-model="zoneChangeReason" placeholder="本次规则修改原因（选填）" maxlength="500" style="margin-bottom: 16px" />
       <div class="panel-card data-card" v-loading="zoneConfigLoading">
         <div class="config-head">
           <div class="soft-tag">{{ zoneLabelMap[zoneConfigForm.zone_type] || '--' }}</div>
           <h3>{{ zoneConfigProduct.product_name || '--' }}</h3>
-          <p class="config-desc">{{ zoneDescription }}</p>
-          <div class="tag-row">
-            <span v-for="item in zoneConfigSummary.badges" :key="item" class="mini-tag">{{ item }}</span>
-            <span class="mini-tag muted">{{ zoneConfigForm.configured ? '已配置' : '默认规则' }}</span>
-          </div>
         </div>
 
-        <el-form label-position="top" :model="zoneConfigForm">
+        <el-form v-if="!zoneConfigLoading" label-position="top" :model="zoneConfigForm">
           <template v-if="zoneConfigForm.zone_type === 'HOT_SALE'">
             <div class="form-split">
               <el-form-item label="限购件数">
@@ -450,59 +440,38 @@
           <div class="city-partner-rule-section">
             <div class="rule-section-heading">
               <div>
-                <div class="cell-title small">城市合伙人模式商品规则</div>
-                <div class="rule-section-meta">新模式独立于原商品分润；只在 CITY_PARTNER 模式下参与结算</div>
+                <div class="cell-title small">城市合伙人分润</div>
               </div>
-              <el-tag :type="cityPartnerRulesSupported ? 'success' : 'warning'" size="small">
-                {{ cityPartnerRulesSupported ? '接口已支持配置' : '当前接口暂未返回字段' }}
-              </el-tag>
+              <el-switch v-model="zoneConfigForm.city_partner_commission_enabled" :disabled="!cityPartnerRulesSupported" aria-label="启用城市合伙人分润" />
             </div>
             <el-alert
               v-if="!cityPartnerRulesSupported"
-              title="当前服务端接口尚未返回城市合伙人字段，本入口先保留展示；保存时不会把未知字段发送给旧接口，避免影响原模式规则。"
+              title="暂无法配置，请刷新后重试"
               type="warning"
               :closable="false"
               show-icon
               class="commission-rule-alert"
             />
             <div class="form-split">
-              <el-form-item label="参与城市合伙人模式">
-                <el-switch v-model="zoneConfigForm.city_partner_commission_enabled" :disabled="!cityPartnerRulesSupported" />
-              </el-form-item>
               <el-form-item label="城市合伙人金额">
                 <el-input-number v-model="zoneConfigForm.city_partner_amount" :min="0" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
                 <span class="field-suffix">元/件</span>
               </el-form-item>
-            </div>
-            <div class="form-split">
               <el-form-item label="直推奖金额">
                 <el-input-number v-model="zoneConfigForm.city_partner_direct_reward_amount" :min="0" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
                 <span class="field-suffix">元/件</span>
               </el-form-item>
-              <el-form-item label="上级第 1 层金额">
-                <el-input-number v-model="zoneConfigForm.city_partner_upline_initial_amount" :min="0" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
-                <span class="field-suffix">元/件</span>
-              </el-form-item>
             </div>
-            <div class="form-split">
-              <el-form-item label="上级层数">
-                <el-input-number v-model="zoneConfigForm.city_partner_upline_max_levels" :min="1" :max="7" :step="1" controls-position="right" :disabled="!cityPartnerRulesSupported" />
-                <span class="field-suffix">最多 7 层</span>
-              </el-form-item>
-              <el-form-item label="层级递减比例">
-                <el-input-number v-model="zoneConfigForm.city_partner_upline_decay_rate" :min="0" :max="100" :step="0.5" :precision="2" controls-position="right" :disabled="!cityPartnerRulesSupported" />
-                <span class="field-suffix">%</span>
-              </el-form-item>
-            </div>
-            <el-form-item label="尾差账户">
-              <el-select v-model="zoneConfigForm.city_partner_remainder_account" :disabled="!cityPartnerRulesSupported" style="width: 100%">
-                <el-option label="公司尾差账户" value="COMPANY" />
-              </el-select>
-            </el-form-item>
+            <details class="rule-details">
+              <summary>七层分润明细</summary>
+              <p>从直推上级的上级起，每层减半；剩余归公司。</p>
+              <div v-for="(amount, index) in cityPartnerLayers" :key="index" class="layer-row"><span>第 {{ index + 1 }} 层</span><strong>¥{{ amount.toFixed(2) }}</strong></div>
+            </details>
             <div class="city-partner-rule-summary">
-              <span>预计单件分润：<strong>¥{{ cityPartnerRuleTotal.toFixed(2) }}</strong></span>
-              <span>可用分润池：<strong>{{ cityPartnerProfitPool == null ? '--' : `¥${cityPartnerProfitPool.toFixed(2)}` }}</strong></span>
+              <span>分润合计：<strong>¥{{ cityPartnerRuleTotal.toFixed(2) }}</strong></span>
+              <span>可分配：<strong>{{ cityPartnerProfitPool == null ? '--' : `¥${cityPartnerProfitPool.toFixed(2)}` }}</strong></span>
               <el-tag v-if="cityPartnerRuleExceeded" type="danger" size="small">超过售价 - 成本</el-tag>
+              <el-tag v-else-if="cityPartnerProfitPool == null" type="warning" size="small">请先填写售价和成本</el-tag>
               <el-tag v-else type="success" size="small">金额校验通过</el-tag>
             </div>
           </div>
@@ -510,20 +479,12 @@
           <div class="commission-rule-section">
             <div class="rule-section-heading">
               <div>
-                <div class="cell-title small">商品专属分润</div>
-                <div class="rule-section-meta">仅对当前商品生效</div>
-              </div>
+                <div class="cell-title small">原模式分润</div>
+                </div>
               <el-switch v-model="zoneConfigForm.custom_commission_enabled" />
             </div>
 
             <template v-if="zoneConfigForm.custom_commission_enabled">
-              <el-alert
-                title="普通会员、经销商按推荐链路中的实际等级匹配；区代理、市代理按订单收货区域匹配。未启用等级不参与此商品分润。"
-                type="warning"
-                :closable="false"
-                show-icon
-                class="commission-rule-alert"
-              />
               <div class="commission-method-row">
                 <el-form-item label="计算方式" class="commission-method-field">
                   <el-radio-group v-model="zoneConfigForm.custom_commission_method">
@@ -559,7 +520,7 @@
                     <span class="member-level-mark" :class="`is-${level.tone}`">{{ level.mark }}</span>
                     <div>
                       <div class="member-level-name">{{ level.label }}</div>
-                      <div class="member-level-meta">{{ level.description }}</div>
+                      <el-tooltip :content="level.description"><span class="member-level-help" tabindex="0" :aria-label="`${level.label}发放对象`">ⓘ</span></el-tooltip>
                     </div>
                   </div>
                   <div class="member-level-switch">
@@ -619,14 +580,9 @@
           </div>
         </el-form>
 
-        <div class="config-tips">
-          <div>专区规则会直接影响移动端下单校验、支付方式和活动展示。</div>
-          <div>建议商品创建后立刻补齐专区规则，避免前台已上架但支付与资格规则缺失。</div>
-        </div>
-
         <div class="dialog-actions">
           <el-button @click="zoneConfigVisible = false">取消</el-button>
-          <el-button type="primary" :loading="zoneConfigSaving" @click="saveZoneConfig">保存规则</el-button>
+          <el-button type="primary" :loading="zoneConfigSaving" :disabled="zoneConfigLoading" @click="saveZoneConfig">保存规则</el-button>
         </div>
       </div>
     </el-drawer>
@@ -640,6 +596,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 import { productApi, supplierApi, categoryApi } from '@/api/modules'
+import RuleHistoryDrawer from '@/views/commission/RuleHistoryDrawer.vue'
 import { useUserStore } from '@/stores/user'
 import { hasPermission } from '@/utils/permission'
 import { PageHeader, MetricCard, FilterBar, StatusTag } from '@/components/common'
@@ -663,9 +620,12 @@ const uploadingImageFields = reactive({ main_image: false, cover: false })
 const galleryUploadCount = ref(0)
 const editingId = ref(null)
 const zoneConfigVisible = ref(false)
+const zoneRuleHistoryVisible = ref(false)
+const zoneChangeReason = ref('')
 const zoneConfigLoading = ref(false)
 const zoneConfigSaving = ref(false)
 const zoneConfigProduct = ref({})
+const loadedZoneConfig = ref({})
 const cityPartnerRulesSupported = ref(false)
 const currentEditingProduct = ref(null)
 
@@ -852,14 +812,6 @@ const zoneConfigTitle = computed(() => {
   if (!zoneConfigProduct.value.id) return '专区规则配置'
   return `${zoneLabelMap[zoneConfigForm.value.zone_type] || '专区'}规则 - ${zoneConfigProduct.value.product_name}`
 })
-const zoneDescription = computed(() => {
-  return {
-    REPURCHASE: '配置复购区商品的专属分润和支付方式。',
-    SELF_OPERATED: '配置自营商城商品的专属分润和支付方式。',
-    HOT_SALE: '爆款区以限购、闪购和活动支付方式为核心。',
-    LOCAL_LIFE: '本地生活以分佣和设备收益联动为核心。'
-  }[zoneConfigForm.value.zone_type] || ''
-})
 const selectedIds = computed(() => selectedRows.value.map((item) => item.id))
 
 const commissionMemberLevels = [
@@ -915,23 +867,20 @@ const customCommissionTotalExceeded = computed(() => (
   customCommissionValueField.value === 'rate' && customCommissionTotal.value > 100
 ))
 const cityPartnerProfitPool = computed(() => {
+  if (zoneConfigProduct.value.cost_price == null || zoneConfigProduct.value.sale_price == null) return null
   const salePrice = Number(zoneConfigProduct.value.sale_price)
   const costPrice = Number(zoneConfigProduct.value.cost_price)
   return Number.isFinite(salePrice) && Number.isFinite(costPrice) ? Math.max(0, salePrice - costPrice) : null
 })
-const cityPartnerRuleTotal = computed(() => {
-  const config = zoneConfigForm.value
-  let total = Number(config.city_partner_amount || 0) + Number(config.city_partner_direct_reward_amount || 0)
-  let layerAmount = Number(config.city_partner_upline_initial_amount || 0)
-  const levels = Math.max(0, Math.min(7, Number(config.city_partner_upline_max_levels || 0)))
-  const decay = Number(config.city_partner_upline_decay_rate || 0) / 100
-  for (let index = 0; index < levels; index += 1) {
-    const rounded = Math.floor((layerAmount + 0.0000001) * 100) / 100
-    total += rounded
-    layerAmount *= decay
-  }
-  return total
+const cityPartnerLayers = computed(() => {
+  const directCents = Math.round(Number(zoneConfigForm.value.city_partner_direct_reward_amount || 0) * 100)
+  return Array.from({ length: 7 }, (_, index) => Math.floor(directCents / (2 ** (index + 1))) / 100)
 })
+const cityPartnerRuleTotal = computed(() => (
+  Math.round(Number(zoneConfigForm.value.city_partner_amount || 0) * 100)
+  + Math.round(Number(zoneConfigForm.value.city_partner_direct_reward_amount || 0) * 100)
+  + cityPartnerLayers.value.reduce((sum, amount) => sum + Math.round(amount * 100), 0)
+) / 100)
 const cityPartnerRuleExceeded = computed(() => (
   cityPartnerProfitPool.value != null && cityPartnerRuleTotal.value > cityPartnerProfitPool.value
 ))
@@ -1053,37 +1002,6 @@ function buildItemList(profile, detail) {
   return items.length ? items : ['建议补充商品简介与详情，用于移动端详情页摘要展示。']
 }
 
-function buildZoneSummary(config = {}) {
-  const businessBadges = []
-  const commissionBadges = []
-  if (config.custom_commission_enabled) {
-    const fixed = config.custom_commission_method === 'FIXED_AMOUNT'
-    const suffix = fixed ? '元/件' : '%'
-    const field = fixed ? 'amount' : 'rate'
-    const values = commissionMemberLevels
-      .filter((level) => config[`custom_commission_${level.key}_enabled`])
-      .map((level) => `${level.mark}${Number(config[`custom_commission_${level.key}_${field}`] || 0)}`)
-    commissionBadges.push(values.length ? `专属分润 ${values.join('/')} ${suffix}` : '专属分润待配置')
-  } else {
-    commissionBadges.push('未配置分润')
-  }
-  if (config.zone_type === 'HOT_SALE') {
-    if (config.flash_sale_enabled) businessBadges.push('开启闪购')
-    if (config.per_user_limit != null) businessBadges.push(`每人限购 ${config.per_user_limit} 件`)
-  } else if (config.zone_type === 'LOCAL_LIFE') {
-    if (config.merchant_commission_rule_id) businessBadges.push(`分佣规则 #${config.merchant_commission_rule_id}`)
-    if (config.device_revenue_enabled) businessBadges.push('联动设备收益')
-  }
-  const paymentBadges = [
-    config.balance_purchase_enabled ? '余额支付' : null,
-    config.alipay_purchase_enabled ? '支付宝支付' : null,
-    config.wechat_purchase_enabled
-      ? (config.wechat_provider_ready ? '微信支付' : '微信支付未就绪')
-      : null
-  ].filter(Boolean)
-  return { badges: [...paymentBadges, ...commissionBadges, ...businessBadges].slice(0, 5) }
-}
-
 const formPreview = computed(() => {
   const gallery = splitMedia(form.value.icons)
   const image = firstFilled([form.value.cover, form.value.main_image, gallery[0]])
@@ -1110,7 +1028,6 @@ const formPreview = computed(() => {
   }
 })
 
-const zoneConfigSummary = computed(() => buildZoneSummary(zoneConfigForm.value))
 
 function formatMoney(value) {
   return value == null ? '--' : `¥${Number(value).toFixed(2)}`
@@ -1447,6 +1364,7 @@ async function removeProduct(row) {
 
 async function openZoneConfig(row) {
   zoneConfigVisible.value = true
+  zoneChangeReason.value = ''
   zoneConfigLoading.value = true
   zoneConfigProduct.value = row
   cityPartnerRulesSupported.value = false
@@ -1455,13 +1373,22 @@ async function openZoneConfig(row) {
     cityPartnerRulesSupported.value = ['city_partner_commission_enabled', 'city_partner_amount', 'city_partner_direct_reward_amount', 'city_partner_upline_initial_amount', 'city_partner_upline_max_levels', 'city_partner_upline_decay_rate', 'city_partner_remainder_account']
       .some((key) => Object.prototype.hasOwnProperty.call(data || {}, key))
     zoneConfigForm.value = normalizeZoneConfig(data)
+    loadedZoneConfig.value = { ...zoneConfigForm.value }
+  } catch (error) {
+    zoneConfigVisible.value = false
+    ElMessage.error('商品规则加载失败，请重新打开后再试')
   } finally {
     zoneConfigLoading.value = false
   }
 }
 
 async function saveZoneConfig() {
-  if (cityPartnerRulesSupported.value && cityPartnerRuleExceeded.value) {
+  if (zoneConfigLoading.value) return
+  if (cityPartnerRulesSupported.value && zoneConfigForm.value.city_partner_commission_enabled && cityPartnerProfitPool.value == null) {
+    ElMessage.warning('请先在商品编辑中填写售价和成本')
+    return
+  }
+  if (cityPartnerRulesSupported.value && zoneConfigForm.value.city_partner_commission_enabled && cityPartnerRuleExceeded.value) {
     ElMessage.warning('城市合伙人分润合计不能超过商品售价减成本后的分润池')
     return
   }
@@ -1523,13 +1450,15 @@ async function saveZoneConfig() {
         city_partner_commission_enabled: zoneConfigForm.value.city_partner_commission_enabled,
         city_partner_amount: zoneConfigForm.value.city_partner_amount,
         city_partner_direct_reward_amount: zoneConfigForm.value.city_partner_direct_reward_amount,
-        city_partner_upline_initial_amount: zoneConfigForm.value.city_partner_upline_initial_amount,
-        city_partner_upline_max_levels: zoneConfigForm.value.city_partner_upline_max_levels,
-        city_partner_upline_decay_rate: zoneConfigForm.value.city_partner_upline_decay_rate,
         city_partner_remainder_account: zoneConfigForm.value.city_partner_remainder_account
       })
     }
-    await productApi.updateZoneConfig(zoneConfigProduct.value.id, payload)
+    // Only send edited fields so another administrator's changes to the other
+    // commission mode survive an already-open drawer being saved.
+    const changes = Object.fromEntries(Object.entries(payload).filter(
+      ([key, value]) => value !== loadedZoneConfig.value[key]
+    ))
+    await productApi.updateZoneConfig(zoneConfigProduct.value.id, { ...changes, change_reason: zoneChangeReason.value || null })
     ElMessage.success('专区规则已保存')
     zoneConfigVisible.value = false
     await loadData()
@@ -2391,4 +2320,9 @@ onMounted(loadData)
     grid-column: 1 / -1;
   }
 }
+.rule-details { margin-bottom: 20px; color: var(--text-secondary); border-top: 1px solid var(--border-light); }
+.rule-details summary { padding: 16px 0; cursor: pointer; font-size: 14px; color: var(--primary-deep); }
+.rule-details p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; }
+.layer-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+.member-level-help { color: var(--text-muted); cursor: help; }
 </style>

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { toOrderView } from './adapters.js';
+import { toOrderView, toProfileOverview } from './adapters.js';
+
+test('visible assets exclude hidden currencies and include available commission', () => {
+  const view = toProfileOverview({}, {}, { BALANCE: 10, POINTS: 20, COMMISSION: 30, VOUCHER: 900, AI_COUPON: 800, total_amount: 1730 });
+  assert.equal(view.totalAsset, '60.00');
+});
 
 test('keeps the recorded payment channel ahead of available-channel defaults', () => {
   const order = toOrderView({

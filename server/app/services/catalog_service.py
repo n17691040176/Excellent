@@ -2,6 +2,7 @@ import csv
 import io
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -28,6 +29,7 @@ from app.models.supplier import Supplier, SupplierAgreement
 from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
+from app.services.city_partner_rules import CITY_PARTNER_DEFAULTS, city_partner_rule_values, validate_city_partner_rule
 from app.services.user_service import UserService
 from app.utils.helpers import generate_order_no, iso_datetime, now, quantize_amount
 from app.utils.spreadsheet import load_tabular_rows
@@ -731,7 +733,7 @@ class ProductService:
     @staticmethod
     def _zone_config_snapshot(db: Session, product: Product) -> dict[str, Any]:
         config = db.query(ProductZoneConfig).filter(ProductZoneConfig.product_id == product.id).first()
-        defaults = ProductService.zone_config_defaults(product.zone_type)
+        defaults = {**ProductService.zone_config_defaults(product.zone_type), **CITY_PARTNER_DEFAULTS}
         active_channels = set(enabled_external_payment_channels())
         data: dict[str, Any] = {
             'product_id': product.id,
@@ -741,16 +743,9 @@ class ProductService:
             'wechat_provider_ready': 'WECHAT' in active_channels,
         }
         for key, value in defaults.items():
-            current = getattr(config, key) if config and getattr(config, key) is not None else value
+            current = getattr(config, key, None) if config and getattr(config, key, None) is not None else value
             data[key] = ProductService._serialize_zone_config_value(current)
-        data.setdefault('city_partner_commission_enabled', False)
-        data.setdefault('city_partner_commission_rule_version', 'v1')
-        data.setdefault('city_partner_amount', 0.0)
-        data.setdefault('city_partner_direct_reward_amount', 0.0)
-        data.setdefault('city_partner_upline_initial_amount', 0.0)
-        data.setdefault('city_partner_upline_max_levels', 7)
-        data.setdefault('city_partner_upline_decay_rate', 50.0)
-        data.setdefault('city_partner_remainder_account', 'COMPANY')
+        data.update({key: ProductService._serialize_zone_config_value(value) for key, value in city_partner_rule_values(config).items()})
         return data
 
     @staticmethod
@@ -1001,8 +996,14 @@ class ProductService:
 
     @staticmethod
     def update_for_admin(db: Session, product_id: int, current_user: User, payload: dict) -> Product:
+        from app.services.commission_audit import record_rule_change, rule_snapshot
         product = ProductService._ensure_product_visible_for_admin(db, product_id, current_user)
+        product = db.query(Product).filter(Product.id == product.id).populate_existing().with_for_update().one()
         ProductService._validate_product_payload(payload)
+        existing_rule = db.query(ProductZoneConfig).filter(ProductZoneConfig.product_id == product.id).populate_existing().with_for_update().first()
+        before = {**rule_snapshot(existing_rule), '_sale_price': str(product.sale_price), '_cost_price': str(product.cost_price)}
+        if existing_rule:
+            validate_city_partner_rule(existing_rule, payload['sale_price'], payload.get('cost_price'))
         category = ProductService._ensure_active_category(db, payload.get('category_id'))
 
         order_count = ProductService._product_order_count(db, product.id)
@@ -1042,6 +1043,12 @@ class ProductService:
         product.requires_shipping = payload['requires_shipping'] if payload['zone_type'] != ZoneType.LOCAL_LIFE else False
         product.drop_shipping_enabled = payload.get('drop_shipping_enabled', False)
 
+        if existing_rule and (before['_sale_price'] != str(product.sale_price) or before['_cost_price'] != str(product.cost_price)):
+            existing_rule.city_partner_commission_rule_version = f'city-product-{uuid4().hex}'
+            db.flush()
+            after = {**rule_snapshot(existing_rule), '_sale_price': str(product.sale_price), '_cost_price': str(product.cost_price)}
+            record_rule_change(db, 'PRODUCT', product.id, existing_rule.city_partner_commission_rule_version,
+                               before, after, current_user.id, '修改商品售价或成本')
         db.commit()
         db.refresh(product)
         return product
@@ -1428,6 +1435,7 @@ class ProductService:
 
     @staticmethod
     def _validate_zone_config_payload(product: Product, payload: dict) -> None:
+        validate_city_partner_rule(payload, getattr(product, 'sale_price', 0), getattr(product, 'cost_price', None))
         per_user_limit = payload.get('per_user_limit')
         if per_user_limit is not None and per_user_limit <= 0:
             raise ConflictError('per_user_limit must be greater than 0')
@@ -1446,7 +1454,7 @@ class ProductService:
             raise ConflictError('Custom commission amounts cannot be negative')
         if payload.get('custom_commission_enabled'):
             selected_values = [
-                payload.get(f'custom_commission_{role}_{"rate" if commission_method == "RATE" else "amount"}', 0)
+                Decimal(str(payload.get(f'custom_commission_{role}_{"rate" if commission_method == "RATE" else "amount"}', 0)))
                 for role in commission_roles
                 if payload.get(f'custom_commission_{role}_enabled')
             ]
@@ -1481,9 +1489,15 @@ class ProductService:
 
     @staticmethod
     def update_zone_config_for_admin(db: Session, product_id: int, current_user: User, payload: dict) -> dict:
+        from app.services.commission_audit import record_rule_change, rule_snapshot
         product = ProductService._ensure_product_visible_for_admin(db, product_id, current_user)
+        product = db.query(Product).filter(Product.id == product.id).populate_existing().with_for_update().one()
+        config = db.query(ProductZoneConfig).filter(ProductZoneConfig.product_id == product.id).populate_existing().with_for_update().first()
+        defaults = {**ProductService.zone_config_defaults(product.zone_type), **CITY_PARTNER_DEFAULTS}
+        payload = {**{key: getattr(config, key, value) if config is not None else value for key, value in defaults.items()}, **payload}
+        payload.update(city_partner_rule_values(payload))
         ProductService._validate_zone_config_payload(product, payload)
-        config = db.query(ProductZoneConfig).filter(ProductZoneConfig.product_id == product.id).first()
+        before = {**rule_snapshot(config), '_sale_price': str(product.sale_price), '_cost_price': str(product.cost_price)}
         if not config:
             config = ProductZoneConfig(product_id=product.id, zone_type=product.zone_type)
             db.add(config)
@@ -1493,7 +1507,12 @@ class ProductService:
             if hasattr(config, field):
                 setattr(config, field, value)
 
+        config.city_partner_commission_rule_version = f'city-product-{uuid4().hex}'
         config.zone_type = product.zone_type
+        db.flush()
+        record_rule_change(db, 'PRODUCT', product.id, config.city_partner_commission_rule_version,
+                           before, {**rule_snapshot(config), '_sale_price': str(product.sale_price), '_cost_price': str(product.cost_price)},
+                           current_user.id, payload.get('change_reason') or '更新商品分润规则')
         db.commit()
         db.refresh(config)
         return ProductService._zone_config_snapshot(db, product)

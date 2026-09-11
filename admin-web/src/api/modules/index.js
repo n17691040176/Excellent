@@ -134,6 +134,17 @@ export const orderApi = {
 }
 
 export const commissionApi = {
+  failedSettlements(params) {
+    return request.get('/api/v1/admin/commission/failed-settlements', { params })
+  },
+  readiness() { return request.get('/api/v1/admin/commission/mode/readiness') },
+  modeHistory(params) { return request.get('/api/v1/admin/commission/mode/history', { params }) },
+  ruleHistory(type, id, params) {
+    const path = type === 'SEAT' ? `/api/v1/admin/city-partners/${id}/rule-history` : `/api/v1/admin/products/${id}/commission-rule-history`
+    return request.get(path, { params })
+  },
+  mode() { return request.get('/api/v1/admin/commission/mode') },
+  updateMode(data) { return request.put('/api/v1/admin/commission/mode', data) },
   users(params) {
     return request.get('/api/v1/admin/commission/users', { params })
   },
@@ -224,6 +235,8 @@ export const supplierApi = {
 }
 
 export const assetApi = {
+  commissionSummary() { return request.get('/api/v1/app/commission/summary') },
+  commissionFlows() { return request.get('/api/v1/app/commission/flows', { params: { page: 1, page_size: 100 } }) },
   summary() {
     return request.get('/api/v1/app/assets/summary')
   },
@@ -520,4 +533,12 @@ export const adminProfileApi = {
   changePassword(data) {
     return request.post('/api/v1/admin/profile/password', data)
   }
+}
+
+export const cityPartnerApi = {
+  unsettled(params) { return request.get('/api/v1/admin/city-partners/unsettled-purchases', { params }) },
+  list() { return request.get('/api/v1/admin/city-partners/list') },
+  create(data) { return request.post('/api/v1/admin/city-partners', data) },
+  update(id, data) { return request.put(`/api/v1/admin/city-partners/${id}`, data) },
+  rotations(id) { return request.get(`/api/v1/admin/city-partners/${id}/rotations`) }
 }

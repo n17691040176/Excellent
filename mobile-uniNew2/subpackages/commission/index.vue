@@ -4,26 +4,13 @@
     <view class="page-header">
       <view class="header-content">
         <AppBackButton @click="goBack" />
-        <view class="logo-mark">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
-            <path d="M12 6v12M6 12h12" stroke="white" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </view>
         <text class="page-title">佣金中心</text>
-        <view class="header-badge">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" fill="currentColor"/>
-          </svg>
-          实时
-        </view>
+        <view class="header-spacer" />
       </view>
     </view>
 
     <!-- Summary Card -->
     <view class="summary-card">
-      <view class="card-icon">◆</view>
-      <text class="card-subtitle">收益趋势与结算进度实时同步</text>
 
       <view class="balance-wrap">
         <text class="balance-label">可提现金额</text>
@@ -68,7 +55,6 @@
     <view v-else-if="!list.length" class="empty-state">
       <text class="empty-icon">◇</text>
       <text class="empty-title">暂无佣金记录</text>
-      <text class="empty-desc">产生收益后会同步展示结算进度</text>
     </view>
 
     <!-- Records -->
@@ -85,7 +71,7 @@
           </view>
         </view>
         <view class="record-footer">
-          <text class="record-desc">{{ item.desc || '收益入账记录' }}</text>
+          <text class="record-desc">{{ item.modeLabel || item.desc || '收益入账记录' }}</text>
           <text class="record-amount">+¥{{ item.amount }}</text>
         </view>
       </view>
@@ -106,7 +92,7 @@ const withdrawable = ref('0.00');
 const list = ref([]);
 
 const settledCount = computed(() => list.value.filter((item) => item.status === '已结算').length);
-const pendingCount = computed(() => list.value.filter((item) => item.status !== '已结算').length);
+const pendingCount = computed(() => list.value.filter((item) => item.status === '待结算').length);
 
 const loadCommission = async () => {
   loading.value = true;
@@ -199,7 +185,9 @@ onPullDownRefresh(async () => {
   opacity: 0.6;
 }
 
+.header-spacer { width: 64rpx; }
 .page-title {
+  text-align: center;
   font-size: var(--text-xl);
   font-weight: var(--font-bold);
   color: var(--text);

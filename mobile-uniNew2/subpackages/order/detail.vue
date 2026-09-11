@@ -23,8 +23,8 @@
       <view class="status-panel" :class="statusTone">
         <view class="status-symbol">{{ statusIcon }}</view>
         <view class="status-copy">
-          <text class="status-title">{{ detail.status }}</text>
-          <text class="status-description">{{ statusHint }}</text>
+          <text class="status-title">{{ displayStatus }}</text>
+          <text v-if="statusHint" class="status-description">{{ statusHint }}</text>
         </view>
       </view>
 
@@ -34,6 +34,10 @@
       </view>
 
       <view class="content-stack">
+        <view v-if="detail.isCityPartner" class="section-card">
+          <text class="section-title">{{ detail.seatTitle }}</text>
+          <text class="empty-line">城市合伙人订单不支持退款</text>
+        </view>
         <view v-if="detail.requiresShipping" class="section-card address-section">
           <view class="section-heading">
             <text class="section-title">收货信息</text>
@@ -193,14 +197,17 @@ const hasActions = computed(() => (
 ));
 const itemQuantity = computed(() => detail.value.items.reduce((total, item) => total + Number(item.quantity || 0), 0));
 
+const needsReview = computed(() => detail.value.payStatusCode === 'PAID' && (detail.value.commissionPendingReview || detail.value.seatSettlementError));
+const displayStatus = computed(() => needsReview.value ? (detail.value.isCityPartner ? '席位待处理' : '订单待平台处理') : detail.value.seatSettled && detail.value.payStatusCode === 'PAID' ? '席位已取得' : detail.value.status);
 const statusTone = computed(() => {
+  if (needsReview.value) return 'warning';
   if (detail.value.status === '待支付') return 'warning';
   if (detail.value.status === '已发货') return 'info';
   if (['已取消', '已退款'].includes(detail.value.status)) return 'muted';
   return 'success';
 });
 
-const statusIcon = computed(() => ({
+const statusIcon = computed(() => needsReview.value ? '!' : ({
   待支付: '¥',
   待发货: '✓',
   已发货: '→',
@@ -209,14 +216,14 @@ const statusIcon = computed(() => ({
   已退款: '↩'
 }[detail.value.status] || '·'));
 
-const statusHint = computed(() => ({
+const statusHint = computed(() => needsReview.value ? (detail.value.canRefund ? '支付成功，可申请退款' : '支付成功，请联系平台处理') : detail.value.seatSettled && detail.value.payStatusCode === 'PAID' ? '' : ({
   待支付: '请在订单关闭前完成支付',
   待发货: '支付成功，商家正在备货',
   已发货: '商品已发出，请留意物流更新',
-  已完成: '订单已完成',
-  已取消: '订单已取消',
+  已完成: '',
+  已取消: '',
   已退款: '款项已原路退回'
-}[detail.value.status] || '订单状态已更新'));
+}[detail.value.status] || ''));
 
 function money(value) {
   return formatMoney(value, { withThousands: false });
@@ -338,6 +345,11 @@ function normalize(res = {}) {
 
   return {
     status,
+    isCityPartner: order?.order_type === 'CITY_PARTNER_ORDER',
+    seatTitle: order?.title || '城市合伙人席位',
+    seatSettled: Boolean(order?.seat_settled ?? res?.seat_settled),
+    seatSettlementError: order?.seat_settlement_error ?? res?.seat_settlement_error,
+    commissionPendingReview: Boolean(order?.commission_pending_review ?? res?.commission_pending_review),
     no: order?.order_no || order?.no || '--',
     totalAmount: money(totalAmount),
     discountAmount: money(discountAmount),
@@ -362,7 +374,7 @@ function normalize(res = {}) {
     canPay: Boolean(order?.can_pay ?? res?.can_pay ?? payStatus !== 'PAID'),
     canConfirm: Boolean(order?.can_confirm ?? res?.can_confirm ?? false),
     canCancel: Boolean(order?.can_cancel ?? res?.can_cancel ?? false),
-    canRefund: Boolean(order?.can_refund ?? res?.can_refund ?? false),
+    canRefund: order?.order_type !== 'CITY_PARTNER_ORDER' && Boolean(order?.can_refund ?? res?.can_refund ?? false),
     requiresShipping: Boolean(order?.requires_shipping ?? res?.requires_shipping),
     shippingAddress: res?.shipping_address || order?.shipping_address || null,
     shipment: res?.shipment || order?.shipment || null

@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_users_system_account_type (system_account_type),
     UNIQUE KEY uk_users_phone (phone),
     UNIQUE KEY uk_users_invite_code (invite_code),
     KEY idx_users_parent_id (parent_id),
@@ -787,6 +788,7 @@ CREATE TABLE IF NOT EXISTS city_partner_seats (
     price_growth_rate DECIMAL(7,4) NOT NULL DEFAULT 0,
     price_cap DECIMAL(18,2) NULL,
     price_version INT NOT NULL DEFAULT 0,
+    rule_version VARCHAR(64) NOT NULL DEFAULT 'city-partner-v1',
     rotation_count INT NOT NULL DEFAULT 0,
     term_started_at DATETIME NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
@@ -849,7 +851,8 @@ CREATE TABLE IF NOT EXISTS city_partner_commission_flows (
     unit_cost_price DECIMAL(18,2) NOT NULL,
     quantity INT NOT NULL,
     profit_pool_amount DECIMAL(18,2) NOT NULL,
-    calculated_amount DECIMAL(18,2) NOT NULL,
+    calculated_amount DECIMAL(48,26) NOT NULL,
+    calculation_precision_known TINYINT(1) NOT NULL DEFAULT 0,
     commission_amount DECIMAL(18,2) NOT NULL,
     remainder_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
     status VARCHAR(32) NOT NULL,
@@ -873,4 +876,30 @@ CREATE TABLE IF NOT EXISTS commission_mode_switch_logs (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY ix_commission_mode_switch_logs_switched_at (switched_at),
     KEY ix_commission_mode_switch_logs_operator_id (operator_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS city_partner_purchases (
+    order_id BIGINT PRIMARY KEY,
+    seat_id BIGINT NOT NULL,
+    price_version INT NOT NULL,
+    quoted_price DECIMAL(18,2) NOT NULL,
+    settlement_error VARCHAR(255) NULL,
+    settled_at DATETIME NULL,
+    KEY ix_city_partner_purchases_seat_id (seat_id),
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (seat_id) REFERENCES city_partner_seats(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS commission_rule_audits (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    entity_type VARCHAR(32) NOT NULL,
+    entity_id BIGINT NOT NULL,
+    rule_version VARCHAR(64) NOT NULL,
+    before_values JSON NOT NULL,
+    after_values JSON NOT NULL,
+    operator_id BIGINT NULL,
+    reason VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL,
+    KEY ix_commission_rule_audits_entity (entity_type, entity_id, id),
+    FOREIGN KEY (operator_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

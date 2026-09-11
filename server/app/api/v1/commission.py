@@ -74,12 +74,21 @@ def app_withdraw_config(db: Session = Depends(get_db), _: User = Depends(get_cur
     return {'code': 0, 'message': 'success', 'data': CommissionService.withdraw_config(db)}
 
 
+@admin_router.get('/commission/failed-settlements')
+def failed_settlements(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+                       db: Session = Depends(get_db), _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN))):
+    return {'code': 0, 'message': 'success', 'data': CommissionService.list_failed_settlements(db, page, page_size)}
+
+
 @admin_router.get('/commission/mode')
 def admin_commission_mode(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN)),
+    _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
-    return {'code': 0, 'message': 'success', 'data': CommissionService.commission_mode(db)}
+    data = CommissionService.commission_mode(db)
+    if _.global_role != GlobalRole.SUPER_ADMIN:
+        data = {key: data[key] for key in ('mode', 'rule_version', 'updated_at')}
+    return {'code': 0, 'message': 'success', 'data': data}
 
 
 @admin_router.put('/commission/mode')
@@ -90,6 +99,25 @@ def update_admin_commission_mode(
 ):
     data = CommissionService.update_commission_mode(db, payload.mode, current_user.id, payload.reason)
     return {'code': 0, 'message': 'success', 'data': data}
+
+
+@admin_router.get('/commission/mode/readiness')
+def mode_readiness(db: Session = Depends(get_db), _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN))):
+    return {'code': 0, 'message': 'success', 'data': CommissionService.mode_readiness(db)}
+
+
+@admin_router.get('/commission/mode/history')
+def mode_history(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+                 db: Session = Depends(get_db), _: User = Depends(require_roles(GlobalRole.SUPER_ADMIN))):
+    from app.models.commission import CommissionModeSwitchLog
+    from app.services.commission_audit import rule_snapshot
+    query = db.query(CommissionModeSwitchLog)
+    total = query.count()
+    rows = query.order_by(CommissionModeSwitchLog.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    names = {user.id: user.nickname for user in db.query(User).filter(User.id.in_([row.operator_id for row in rows])).all()}
+    return {'code': 0, 'message': 'success', 'data': {'total': total, 'items': [
+        {**rule_snapshot(row), 'operator_name': names.get(row.operator_id) or '系统'} for row in rows
+    ]}}
 
 
 @admin_router.get('/commission/flows')

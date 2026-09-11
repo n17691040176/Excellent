@@ -25,18 +25,18 @@
       <!-- Balance Card -->
       <view class="balance-card">
         <view class="balance-header">
-          <text class="balance-label">账户余额</text>
+          <text class="balance-label">{{ activeAssetType === 'points' ? '积分' : '账户余额' }}</text>
         </view>
-        <text class="balance-amount">¥{{ money(activeBalance) }}</text>
+        <text class="balance-amount">{{ amountText(activeBalance) }}</text>
         <view class="balance-strip">
           <view class="strip-item">
             <text class="strip-label">可提现</text>
-            <text class="strip-value">¥{{ money(activeAvailable) }}</text>
+            <text class="strip-value">{{ amountText(activeAvailable) }}</text>
           </view>
           <view class="strip-divider" />
           <view class="strip-item">
             <text class="strip-label">累计提现</text>
-            <text class="strip-value">¥{{ money(activeWithdrawn) }}</text>
+            <text class="strip-value">{{ amountText(activeWithdrawn) }}</text>
           </view>
         </view>
       </view>
@@ -104,35 +104,13 @@
         </view>
       </view>
 
-      <!-- Power Bank Section -->
-      <view v-if="isPowerBankTab" class="power-card">
-        <text class="section-title">充电宝设备</text>
-        <view v-if="!powerBanks.length" class="state-empty">
-          <view class="empty-icon">◇</view>
-          <text class="empty-title">暂无绑定设备</text>
-        </view>
-        <view v-else class="power-list">
-          <view v-for="item in powerBanks" :key="item.id" class="power-item">
-            <view class="power-header">
-              <text class="power-name">{{ item.device_name || item.device_code }}</text>
-              <view class="power-status" :class="item.status === 'ACTIVE' ? 'status-active' : 'status-disabled'">
-                {{ item.status === 'ACTIVE' ? '生效中' : '已停用' }}
-              </view>
-            </view>
-            <view class="power-meta">
-              <text>编号：{{ item.device_code }}</text>
-              <text>累计收益 ¥{{ money(item.total_income_amount) }}</text>
-            </view>
-          </view>
-        </view>
-      </view>
     </template>
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue';
-import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app';
+import { onLoad, onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app';
 import { assetApi } from '@/api/modules';
 import { pickListPayload } from '@/utils/adapters';
 import { formatDateTime as formatDetailTime } from '@/utils/format';
@@ -141,9 +119,8 @@ const DETAIL_PAGE_SIZE = 12;
 
 const assetTabs = [
   { value: 'balance', label: '余额' },
-  { value: 'voucher', label: '消费金' },
-  { value: 'points', label: '积分' },
-  { value: 'power_bank', label: '充电宝' }
+  { value: 'commission', label: '佣金' },
+  { value: 'points', label: '积分' }
 ];
 
 const pageLoading = ref(false);
@@ -151,38 +128,32 @@ const pageFailed = ref(false);
 const detailLoading = ref(false);
 const detailFailed = ref(false);
 const summary = ref({});
-const powerBanks = ref([]);
 const activeAssetType = ref('balance');
 const assetDetail = ref({});
 const detailRows = ref([]);
 const detailPage = ref(1);
 const detailHasMore = ref(true);
 
-const isPowerBankTab = computed(() => activeAssetType.value === 'power_bank');
 
 const activeBalance = computed(() => assetDetail.value.available_amount || 0);
 const activeAvailable = computed(() => assetDetail.value.available_amount || 0);
 const activeWithdrawn = computed(() => assetDetail.value.withdrawn_amount || 0);
 
 const detailCards = computed(() => {
-  if (isPowerBankTab.value) {
-    const activeCount = powerBanks.value.filter((item) => item.status === 'ACTIVE').length;
-    return [
-      { key: 'active', label: '当前生效', value: `${activeCount} 台` },
-      { key: 'total', label: '累计绑定', value: `${powerBanks.value.length} 台` }
-    ];
-  }
-
   const available = assetDetail.value.available_amount || 0;
   const consumed = assetDetail.value.consumed_amount || 0;
 
   return [
-    { key: 'available', label: '当前可用', value: `¥${money(available)}` },
-    { key: 'consumed', label: activeAssetType.value === 'balance' ? '累计提现' : '累计使用', value: `¥${money(consumed)}` }
+    { key: 'available', label: '当前可用', value: amountText(available) },
+    { key: 'consumed', label: '累计使用', value: amountText(consumed) }
   ];
 });
 
 const hasMore = computed(() => detailHasMore.value);
+
+function amountText(value) {
+  return `${activeAssetType.value === 'points' ? '' : '¥'}${money(value)}`;
+}
 
 function money(value) {
   return Number(value || 0).toFixed(2);
@@ -224,7 +195,7 @@ function buildDetailRows(rows = []) {
     return {
       id: item.id || `${activeAssetType.value}-${index}`,
       name: formatLedgerBizName(item),
-      amountText: `¥${money(Math.abs(amount))}`,
+      amountText: amountText(Math.abs(amount)),
       type,
       summaryText: item.remark || formatLedgerBizName(item),
       time: formatDetailTime(item.created_at || item.time)
@@ -233,23 +204,10 @@ function buildDetailRows(rows = []) {
 }
 
 async function loadOverview() {
-  const [summaryRes, powerBanksRes] = await Promise.allSettled([
-    assetApi.summary(),
-    assetApi.powerBanks()
-  ]);
-
-  if (summaryRes.status === 'fulfilled') {
-    summary.value = summaryRes.value || {};
-  }
-  if (powerBanksRes.status === 'fulfilled') {
-    powerBanks.value = pickListPayload(powerBanksRes.value);
-  }
-
-  if (summaryRes.status === 'rejected' && powerBanksRes.status === 'rejected') {
-    throw new Error('overview_load_failed');
-  }
+  summary.value = await assetApi.summary();
 }
 
+let latestDetailRequest = 0;
 async function loadAssetDetail({ reset = false } = {}) {
   if (detailLoading.value && !reset) return;
   if (!reset && !detailHasMore.value) return;
@@ -259,6 +217,8 @@ async function loadAssetDetail({ reset = false } = {}) {
     detailPage.value = 1;
     detailHasMore.value = true;
   }
+  const requestId = ++latestDetailRequest;
+  const requestedType = activeAssetType.value;
   detailLoading.value = true;
   detailFailed.value = false;
   const targetPage = reset ? 1 : detailPage.value;
@@ -269,9 +229,10 @@ async function loadAssetDetail({ reset = false } = {}) {
 
     if (reset) {
       const [accountRes, ledgerRes] = await Promise.all([
-        assetApi.detail(activeAssetType.value),
-        assetApi.ledgers(activeAssetType.value, ledgerParams)
+        assetApi.detail(requestedType),
+        assetApi.ledgers(requestedType, ledgerParams)
       ]);
+      if (requestId !== latestDetailRequest) return;
       detailRes = accountRes || {};
       assetDetail.value = detailRes;
       const rows = buildDetailRows(pickListPayload(ledgerRes));
@@ -281,21 +242,22 @@ async function loadAssetDetail({ reset = false } = {}) {
       return;
     }
 
-    const ledgerRes = await assetApi.ledgers(activeAssetType.value, ledgerParams);
+    const ledgerRes = await assetApi.ledgers(requestedType, ledgerParams);
+    if (requestId !== latestDetailRequest) return;
     detailRes = assetDetail.value || {};
     const rows = buildDetailRows(pickListPayload(ledgerRes));
     detailRows.value = [...detailRows.value, ...rows];
     detailHasMore.value = rows.length >= DETAIL_PAGE_SIZE;
     detailPage.value = targetPage + 1;
   } catch (error) {
-    detailFailed.value = true;
+    if (requestId === latestDetailRequest) detailFailed.value = true;
   } finally {
-    detailLoading.value = false;
+    if (requestId === latestDetailRequest) detailLoading.value = false;
   }
 }
 
 function reloadAssetDetail() {
-  loadAssetDetail({ reset: true });
+  return loadAssetDetail({ reset: true });
 }
 
 async function reloadPage() {
@@ -312,14 +274,23 @@ async function reloadPage() {
 }
 
 function changeAssetType(type) {
+  if (type === 'commission') {
+    uni.navigateTo({ url: '/subpackages/commission/index' });
+    return;
+  }
   if (activeAssetType.value === type) return;
   activeAssetType.value = type;
+  assetDetail.value = {};
   reloadAssetDetail();
 }
 
 function loadMoreDetail() {
   loadAssetDetail();
 }
+
+onLoad((options) => {
+  activeAssetType.value = options?.type === 'points' ? 'points' : 'balance';
+});
 
 onShow(() => {
   reloadPage();

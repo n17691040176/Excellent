@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Header, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -308,6 +310,7 @@ def admin_list_orders(
     pay_status: PayStatus | None = Query(default=None),
     order_type: OrderType | None = Query(default=None),
     zone_type: ZoneType | None = Query(default=None),
+    commission_mode: Literal['ORIGINAL', 'CITY_PARTNER', 'UNLOCKED'] | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN)),
 ):
@@ -319,6 +322,7 @@ def admin_list_orders(
         pay_status=enum_value(pay_status),
         order_type=enum_value(order_type),
         zone_type=enum_value(zone_type),
+        commission_mode=commission_mode,
         page=page,
         page_size=page_size,
     )

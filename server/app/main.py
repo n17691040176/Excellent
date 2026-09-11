@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager, suppress
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
@@ -107,7 +108,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         content={
             'code': 40001,
             'message': 'Parameter validation failed',
-            'data': exc.errors(),
+            'data': jsonable_encoder(exc.errors(), custom_encoder={ValueError: str}),
             'request_id': getattr(request.state, 'request_id', None),
         },
     )

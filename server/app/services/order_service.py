@@ -15,6 +15,7 @@ from app.core.payment_config import (
 )
 from app.models.address import UserAddress
 from app.models.asset import UserAssetLedger
+from app.models.city_partner import CityPartnerPurchase
 from app.models.commission import CommissionConfig
 from app.models.enums import (
     AssetType,
@@ -35,6 +36,8 @@ from app.models.user import User
 from app.services.admin_scope import AdminScopeService
 from app.services.asset_service import AssetService
 from app.services.catalog_service import ProductService
+from app.services.city_partner_rules import CityPartnerSettlementError
+from app.services.city_partner_service import CityPartnerService
 from app.services.commission_service import CommissionService
 from app.services.region_dividend_service import RegionDividendService
 from app.utils.helpers import generate_order_no, now, quantize_amount
@@ -83,6 +86,7 @@ class OrderService:
         pay_status: str | None = None,
         order_type: str | None = None,
         zone_type: str | None = None,
+        commission_mode: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> dict:
@@ -107,6 +111,9 @@ class OrderService:
             query = query.filter(Order.order_type == OrderType(order_type))
         if zone_type:
             query = query.filter(Order.zone_type == ZoneType(zone_type))
+        if commission_mode:
+            from app.services.order_commission_display import order_commission_mode_expression
+            query = query.filter(order_commission_mode_expression() == commission_mode)
 
         safe_page = max(page, 1)
         safe_page_size = max(1, min(page_size, 100))
@@ -291,8 +298,22 @@ class OrderService:
             raise ConflictError('Order refund is processing')
 
     @staticmethod
-    def _validate_paid_refund_transition(db: Session, order: Order) -> None:
+    def _assert_seat_refundable(db: Session, order: Order) -> None:
+        if order.order_type == OrderType.CITY_PARTNER_ORDER or getattr(order, 'city_partner_user_id', None) is not None:
+            CityPartnerService.assert_refundable(db, order)
+
+    @staticmethod
+    def _assert_refund_request_allowed(order: Order) -> None:
+        if order.order_type == OrderType.CITY_PARTNER_ORDER:
+            raise ConflictError('城市合伙人订单不支持退款')
+
+    @staticmethod
+    def _validate_paid_refund_transition(db: Session, order: Order, *, existing_provider_refund: bool = False) -> None:
         """Validate the local order state before asking a provider to refund."""
+        if not existing_provider_refund:
+            OrderService._assert_refund_request_allowed(order)
+        OrderService._assert_seat_refundable(db, order)
+        CommissionService.assert_mode_isolation(db, order)
         if order.order_type == OrderType.LOCAL_LIFE_ORDER:
             raise ConflictError('Local-life orders use the verification workflow')
         if order.pay_status != PayStatus.PAID:
@@ -315,6 +336,7 @@ class OrderService:
         # Checkout locks product inventory before user assets. Preserve that
         # global order here so a refund cannot hold an asset account while a
         # concurrent checkout holds one of the same product rows.
+        OrderService._assert_seat_refundable(db, order)
         OrderService._restore_order_inventory(db, order)
         CommissionService.cancel_for_order(db, order.id)
         RegionDividendService.reverse_order_dividend(db, order)
@@ -420,7 +442,8 @@ class OrderService:
             db.refresh(locked_order)
             return locked_order
 
-        OrderService._validate_paid_refund_transition(db, locked_order)
+        # A refund accepted before the policy change still needs financial reconciliation.
+        OrderService._validate_paid_refund_transition(db, locked_order, existing_provider_refund=True)
         OrderService._apply_paid_refund_side_effects(db, locked_order)
         db.commit()
         OrderService._close_pending_payment_transactions_after_cancellation(db, locked_order.id)
@@ -437,6 +460,7 @@ class OrderService:
         requested_by: int | None = None,
     ) -> dict:
         """Request an order refund and expose provider state to API callers."""
+        OrderService._assert_refund_request_allowed(order)
         if order.order_status == OrderStatus.REFUND:
             late_transactions = (
                 db.query(PaymentTransaction)
@@ -622,6 +646,8 @@ class OrderService:
         if order.order_status == OrderStatus.COMPLETED and (not refunded or requires_shipping):
             raise ConflictError('Completed shipping order cannot be canceled or directly refunded')
         if refunded:
+            OrderService._assert_refund_request_allowed(order)
+            OrderService._assert_seat_refundable(db, order)
             if order.pay_status != PayStatus.PAID:
                 raise ConflictError('Only paid orders can be refunded')
             allowed_statuses = {OrderStatus.PENDING_SHIP, OrderStatus.SHIPPED}
@@ -687,6 +713,7 @@ class OrderService:
 
     @staticmethod
     def _confirm_order_instance(db: Session, order: Order) -> Order:
+        CommissionService.assert_fulfillable(order)
         if order.pay_status != PayStatus.PAID:
             raise ConflictError('Only paid orders can be confirmed')
         if order.order_status == OrderStatus.COMPLETED:
@@ -715,6 +742,8 @@ class OrderService:
         *,
         commit: bool = True,
     ) -> None:
+        if getattr(order, 'commission_mode', None) == CommissionMode.CITY_PARTNER:
+            return
         address_id = getattr(order, 'legacy_address_id', None)
         if not address_id:
             return
@@ -777,6 +806,7 @@ class OrderService:
         OrderService.get_order_for_admin(db, order_id, current_user)
         order = OrderService._lock_order_for_transition(db, order_id)
         OrderService._ensure_no_active_external_refund(db, order.id)
+        CommissionService.assert_fulfillable(order)
         if order.order_status not in (OrderStatus.PENDING_SHIP,):
             raise ConflictError('Only pending-ship orders can be shipped')
         order.order_status = OrderStatus.SHIPPED
@@ -1397,10 +1427,30 @@ class OrderService:
             order.payable_amount = Decimal('0.00')
 
         order.pay_status = PayStatus.PAID
-        commission_config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).first()
+        commission_config = db.query(CommissionConfig).order_by(CommissionConfig.id.asc()).populate_existing().with_for_update(read=True).first()
         order.commission_mode = getattr(commission_config, 'commission_mode', CommissionMode.ORIGINAL) if commission_config else CommissionMode.ORIGINAL
         order.commission_rule_version = getattr(commission_config, 'commission_rule_version', 'legacy') if commission_config else 'legacy'
         order.mode_locked_at = now()
+        if order.order_type == OrderType.CITY_PARTNER_ORDER:
+            order.commission_mode = CommissionMode.CITY_PARTNER
+            order.commission_rule_version = 'city-partner-v1'
+            order.paid_at = now()
+            order.order_status = OrderStatus.PENDING_SHIP
+            db.flush()
+            try:
+                with db.begin_nested():
+                    buyer = db.get(User, order.user_id)
+                    CityPartnerService.purchase_or_rotate(db, order.source_ref_id, buyer, order.id, commit=False)
+            except ConflictError as exc:
+                # Preserve provider success when a late quote cannot be fulfilled.
+                # No money is allocated inside the rolled-back savepoint; refund remains available.
+                purchase = db.get(CityPartnerPurchase, order.id)
+                if not purchase:
+                    raise
+                purchase.settlement_error = str(exc)
+            db.commit()
+            db.refresh(order)
+            return order
         requires_shipping = OrderService.order_requires_shipping(db, order.id)
         order.order_status = OrderStatus.PENDING_SHIP if requires_shipping else OrderStatus.COMPLETED
         order.paid_at = now()
@@ -1409,7 +1459,20 @@ class OrderService:
 
         buyer = db.get(User, order.user_id)
         if buyer:
-            CommissionService.freeze_for_order(db, order, buyer)
+            if order.commission_mode == CommissionMode.CITY_PARTNER:
+                try:
+                    with db.begin_nested():
+                        CommissionService.freeze_for_order(db, order, buyer)
+                except CityPartnerSettlementError as exc:
+                    for key, value in exc.order_snapshot.items():
+                        setattr(order, key, value)
+                    order.order_status = OrderStatus.PENDING_SHIP
+                    order.confirmed_at = None
+                    db.commit()
+                    db.refresh(order)
+                    return order
+            else:
+                CommissionService.freeze_for_order(db, order, buyer)
 
         if order.order_type == OrderType.PACKAGE_ORDER:
             from app.services.catalog_service import PackageService
@@ -1421,6 +1484,7 @@ class OrderService:
             # same transaction. A provider refund can only acquire the order
             # lock after this commit, so it cannot reverse the order and then
             # let an older payment callback settle rewards afterwards.
+            db.flush()
             CommissionService.settle_for_order(db, order.id, commit=False)
             OrderService._process_region_dividend(db, order, commit=False)
         db.commit()
@@ -1439,6 +1503,10 @@ class OrderService:
         if not payment_config.mock_external_payment:
             raise ConflictError('Demo payment is disabled')
         order = OrderService.get_order(db, user_id, order_id)
+        if order.order_type == OrderType.CITY_PARTNER_ORDER:
+            from app.services.city_partner_service import CityPartnerService
+            order = OrderService._lock_order_for_transition(db, order_id)
+            CityPartnerService.assert_mobile_enabled(db)
         return OrderService._mark_paid(db, order)
 
     @staticmethod
@@ -1602,6 +1670,10 @@ class OrderService:
             raise ConflictError('Points deduction must be selected during order creation')
 
         if resolved_channel in INTERNAL_PAY_CHANNELS:
+            if order.order_type == OrderType.CITY_PARTNER_ORDER:
+                from app.services.city_partner_service import CityPartnerService
+                order = OrderService._lock_order_for_transition(db, order_id)
+                CityPartnerService.assert_mobile_enabled(db)
             if quantize_amount(order.payable_amount) > 0:
                 raise ConflictError('Current order cannot be completed with internal assets')
             order = OrderService._mark_paid(db, order, external_paid_amount=Decimal('0.00'))

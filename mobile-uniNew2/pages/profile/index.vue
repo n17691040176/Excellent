@@ -185,6 +185,9 @@ import { onPullDownRefresh, onShow } from '@dcloudio/uni-app';
 import { assetApi, commissionApi, userApi, commerceApi, orderApi } from '@/api/modules';
 import { pickListPayload, toProfileOverview } from '@/utils/adapters';
 import { trackEvent, trackPageView } from '@/utils/track';
+import { useCityPartnerAvailability } from '@/composables/useCityPartnerAvailability';
+
+const { enabled: cityPartnerEnabled, refresh: refreshCityPartner } = useCityPartnerAvailability();
 
 const TAB_PAGES = new Set([
   '/pages/home/index',
@@ -214,9 +217,8 @@ const level = computed(() => overview.value.memberLevel || 'NORMAL_MEMBER');
 // Assets
 const assets = computed(() => [
   { label: '余额', value: formatAmount(assetSummary.value.BALANCE ?? assetSummary.value.balance), path: '/subpackages/assets/index' },
-  { label: '积分', value: formatAmount(assetSummary.value.POINTS ?? assetSummary.value.points), path: '/subpackages/assets/index' },
   { label: '佣金', value: formatAmount(overview.value.withdrawableCommission), path: '/subpackages/commission/index' },
-  { label: '优惠券', value: '0', path: '/subpackages/coupon/list' }
+  { label: '积分', value: formatAmount(assetSummary.value.POINTS ?? assetSummary.value.points), path: '/subpackages/assets/index?type=points' }
 ]);
 
 // Order counts
@@ -257,6 +259,7 @@ const tools = computed(() => [
 const DEV_MENU_LABELS = ['消息通知', '账号安全', '联系客服'];
 
 const menuItems = computed(() => [
+  ...(cityPartnerEnabled.value ? [{ icon: 'team', iconBg: 'var(--primary)', label: '城市合伙人', value: '', path: '/subpackages/profile/city-partners' }] : []),
   { icon: 'invite', iconBg: 'linear-gradient(135deg, var(--success), #16A34A)', label: '邀请有礼', value: inviteCode.value || '', path: '/subpackages/invite/index' },
   { icon: 'app-download', iconBg: 'linear-gradient(135deg, #F97316, #EA580C)', label: '灶具APP下载', value: '', path: '/subpackages/profile/app-download' },
   { icon: 'team', iconBg: 'linear-gradient(135deg, #0EA5E9, #0284C7)', label: '我的团队', value: '', path: '/subpackages/team/index' },
@@ -350,7 +353,8 @@ const go = (path) => {
   }
 };
 
-const handleMenu = (item) => {
+const handleMenu = async (item) => {
+  if (item.path === '/subpackages/profile/city-partners' && !(await refreshCityPartner())) return;
   trackEvent('profile_menu', { label: item.label });
   if (DEV_MENU_LABELS.includes(item.label)) {
     uni.showToast({ title: `${item.label}开发中`, icon: 'none' });
@@ -388,6 +392,7 @@ onPullDownRefresh(async () => {
 
 /* ===== User Header ===== */
 .user-header {
+  gap: 20rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -395,12 +400,15 @@ onPullDownRefresh(async () => {
 }
 
 .user-info {
+  min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 28rpx;
 }
 
 .avatar-wrap {
+  flex-shrink: 0;
   width: 132rpx;
   height: 132rpx;
   border-radius: var(--radius-full);
@@ -425,12 +433,18 @@ onPullDownRefresh(async () => {
 }
 
 .user-text {
+  min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10rpx;
 }
 
 .user-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--text-2xl);
   font-weight: var(--font-bold);
   color: var(--text);
@@ -445,6 +459,8 @@ onPullDownRefresh(async () => {
 }
 
 .vip-tag {
+  flex-shrink: 0;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 8rpx;

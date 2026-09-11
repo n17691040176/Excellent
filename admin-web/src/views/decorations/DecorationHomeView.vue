@@ -1490,7 +1490,7 @@ function createDefaultPayload() {
       subtitle: '热门分区',
       items: [
         { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
-        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+        { enabled: true, key: 'selfOperated', title: '自营商城', tip: '精选商品，支持余额和积分', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
         { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
         { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/local-life/index', open_type: 'switchTab' }
       ]
@@ -1504,7 +1504,7 @@ function createDefaultPayload() {
         { enabled: true, title: '我的团队', desc: '管理归属与成员结构', icon_url: '', path: '/subpackages/team/index', open_type: 'navigate' },
         { enabled: true, title: '邀请好友', desc: '分享邀请码完成绑定', icon_url: '', path: '/subpackages/invite/index', open_type: 'navigate' },
         { enabled: true, title: '佣金中心', desc: '跟进冻结与可提现状态', icon_url: '', path: '/subpackages/commission/index', open_type: 'navigate' },
-        { enabled: true, title: '我的资产', desc: '查看余额、消费金、积分和充电宝', icon_url: '', path: '/subpackages/assets/index', open_type: 'navigate' },
+        { enabled: true, title: '我的资产', desc: '查看余额、佣金和积分', icon_url: '', path: '/subpackages/assets/index', open_type: 'navigate' },
         { enabled: true, title: '个人中心', desc: '维护资料、签到和账号设置', icon_url: '', path: '/pages/profile/index', open_type: 'switchTab' }
       ]
     }
@@ -1571,7 +1571,7 @@ function createLocalLifePayload() {
   payload.zone_section.items = [
     { enabled: true, key: 'localLife', title: '本地生活', tip: '联盟商家服务、门店履约与收益联动', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/local-life/index', open_type: 'switchTab' },
     { enabled: true, key: 'repurchase', title: '复购区', tip: '套餐进入，二次复购 4-6 折', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
-    { enabled: true, key: 'selfOperated', title: '自营商城', tip: '兑换券 5-7 折抵扣，返 AI 券', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
+    { enabled: true, key: 'selfOperated', title: '自营商城', tip: '精选商品，支持余额和积分', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' },
     { enabled: true, key: 'hotSale', title: '爆款区', tip: '低价抢购，支持积分或余额', icon_url: '', link_text: '进入专区', show_count: true, path: '/pages/packages/list', open_type: 'switchTab' }
   ]
   payload.waterfall_section = {

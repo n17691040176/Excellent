@@ -56,7 +56,7 @@ def test_add_frozen_flow_locks_and_refreshes_existing_commission_account():
     assert isinstance(flow, CommissionFlow)
     assert flow.commission_amount == Decimal('2.00')
     assert flow.status == CommissionStatus.FROZEN
-    db.flush.assert_not_called()
+    db.flush.assert_called_once_with()
     db.commit.assert_not_called()
     db.rollback.assert_not_called()
 
@@ -67,8 +67,9 @@ def test_add_frozen_flow_creates_commission_account_while_user_row_is_locked():
 
     def apply_insert_defaults() -> None:
         commission = db.add.call_args_list[0].args[0]
-        commission.frozen_amount = Decimal('0.00')
-        commission.total_amount = Decimal('0.00')
+        if commission.frozen_amount is None:
+            commission.frozen_amount = Decimal('0.00')
+            commission.total_amount = Decimal('0.00')
 
     db.flush.side_effect = apply_insert_defaults
 
@@ -84,6 +85,6 @@ def test_add_frozen_flow_creates_commission_account_while_user_row_is_locked():
     assert commission.frozen_amount == Decimal('2.00')
     assert commission.total_amount == Decimal('2.00')
     assert isinstance(flow, CommissionFlow)
-    db.flush.assert_called_once_with()
+    assert db.flush.call_count == 2
     db.commit.assert_not_called()
     db.rollback.assert_not_called()

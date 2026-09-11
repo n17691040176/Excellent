@@ -142,6 +142,7 @@
     {
       "root": "subpackages/profile",
       "pages": [
+        { "path": "city-partners", "style": { "navigationBarTitleText": "城市合伙人" } },
         {
           "path": "settings",
           "style": {

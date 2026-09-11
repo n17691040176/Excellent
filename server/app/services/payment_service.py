@@ -837,6 +837,10 @@ class PaymentService:
         if order.pay_status != PayStatus.UNPAID or order.order_status != OrderStatus.PENDING_PAYMENT:
             raise ConflictError('Only unpaid pending orders can be paid')
 
+        if order.order_type == OrderType.CITY_PARTNER_ORDER:
+            from app.services.city_partner_service import CityPartnerService
+            CityPartnerService.assert_mobile_enabled(db)
+
         # The transaction may have changed while the order was acquired (for
         # example, a callback could have completed it).  Re-query when the
         # pre-locked row is no longer reusable; the order lock serializes the
@@ -1427,7 +1431,18 @@ class PaymentService:
             # and will subsequently see the active refund row.
             from app.services.order_service import OrderService
 
-            OrderService._validate_paid_refund_transition(db, order)
+            if order.order_type == OrderType.CITY_PARTNER_ORDER:
+                # Only resume a persisted refund; never create a new seat refund.
+                existing_refund = db.query(PaymentRefund.id).filter(
+                    PaymentRefund.payment_transaction_id == tx.id,
+                    PaymentRefund.order_id == order.id,
+                    PaymentRefund.status.in_((RefundStatus.PENDING, RefundStatus.PROCESSING, RefundStatus.SUCCESS)),
+                ).first()
+                OrderService._validate_paid_refund_transition(
+                    db, order, existing_provider_refund=existing_refund is not None,
+                )
+            else:
+                OrderService._validate_paid_refund_transition(db, order)
         if quantize_amount(tx.amount) <= 0:
             raise ConflictError('WeChat refund amount must be greater than zero')
 

@@ -98,7 +98,7 @@
         <view class="points-box">
           <view class="points-info">
             <text class="points-title">积分抵扣</text>
-            <text class="points-desc">积分可与余额、消费金组合使用</text>
+            <text class="points-desc">积分可与余额组合使用</text>
           </view>
           <input class="points-input" v-model="pointsAmount" type="digit" placeholder="0" />
         </view>

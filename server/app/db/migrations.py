@@ -307,6 +307,13 @@ def _ensure_city_partner_schema(connection: Connection) -> None:
         if column_name not in zone_columns:
             connection.execute(text(f'ALTER TABLE product_zone_configs ADD COLUMN {column_name} {column_type}'))
 
+    # Existing deployments may use native MySQL ENUMs or legacy VARCHARs.
+    order_type = next(c['type'] for c in inspect(connection).get_columns('orders') if c['name'] == 'order_type')
+    enum_values = getattr(order_type, 'enums', None)
+    if enum_values and 'CITY_PARTNER_ORDER' not in enum_values:
+        values = ','.join("'" + value.replace("'", "''") + "'" for value in [*enum_values, 'CITY_PARTNER_ORDER'])
+        connection.execute(text(f'ALTER TABLE orders MODIFY COLUMN order_type ENUM({values}) NOT NULL'))
+
     order_columns = _column_names('orders')
     for column_name, column_type in {
         'commission_mode': "VARCHAR(32) NOT NULL DEFAULT 'ORIGINAL'",
@@ -334,6 +341,15 @@ def _ensure_city_partner_schema(connection: Connection) -> None:
 
     for statement in CITY_PARTNER_TABLE_SQL:
         connection.execute(text(statement))
+    seat_columns = _column_names('city_partner_seats')
+    if 'rule_version' not in seat_columns:
+        connection.execute(text("ALTER TABLE city_partner_seats ADD COLUMN rule_version VARCHAR(64) NOT NULL DEFAULT 'city-partner-v1'"))
+    flow_columns = _column_names('city_partner_commission_flows')
+    if 'calculation_precision_known' not in flow_columns:
+        connection.execute(text('ALTER TABLE city_partner_commission_flows ADD COLUMN calculation_precision_known TINYINT(1) NOT NULL DEFAULT 0'))
+    calculated_type = next(c['type'] for c in inspect(connection).get_columns('city_partner_commission_flows') if c['name'] == 'calculated_amount')
+    if getattr(calculated_type, 'scale', 0) < 26:
+        connection.execute(text('ALTER TABLE city_partner_commission_flows MODIFY COLUMN calculated_amount DECIMAL(48,26) NOT NULL'))
 
 
 def apply_schema_migrations() -> None:
@@ -369,6 +385,14 @@ def apply_schema_migrations() -> None:
             connection.execute(text('ALTER TABLE users ADD COLUMN admin_role_id BIGINT NULL'))
 
         user_indexes = _index_names('users')
+        if 'uq_users_system_account_type' not in user_indexes:
+            duplicates = connection.execute(text(
+                'SELECT system_account_type FROM users WHERE system_account_type IS NOT NULL '
+                'GROUP BY system_account_type HAVING COUNT(*) > 1 LIMIT 1'
+            )).first()
+            if duplicates:
+                raise RuntimeError('Duplicate internal settlement accounts must be reconciled before migration')
+            connection.execute(text('CREATE UNIQUE INDEX uq_users_system_account_type ON users (system_account_type)'))
         if 'ix_users_member_level' not in user_indexes:
             connection.execute(text('CREATE INDEX ix_users_member_level ON users (member_level)'))
         if 'ix_users_admin_role_id' not in user_indexes:

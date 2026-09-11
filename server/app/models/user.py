@@ -9,6 +9,7 @@ from app.models.enums import GlobalRole, MemberLevel, UserStatus
 
 class User(TimestampMixin, Base):
     __tablename__ = 'users'
+    __table_args__ = (UniqueConstraint('system_account_type', name='uq_users_system_account_type'),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     phone: Mapped[str | None] = mapped_column(String(20), unique=True, index=True, nullable=True)

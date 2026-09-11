@@ -1,0 +1,33 @@
+name: excellent-localtest
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: excellentlocal2026
+      MYSQL_DATABASE: excellent_local_test
+      MYSQL_USER: excellent
+      MYSQL_PASSWORD: excellentlocal2026
+    ports:
+      - "127.0.0.1:13306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-time-zone=+00:00
+    volumes:
+      - mysql_localtest:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  mysql_localtest:

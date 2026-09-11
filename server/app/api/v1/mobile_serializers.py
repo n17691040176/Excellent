@@ -187,8 +187,6 @@ def _product_items(product: Product) -> list[str]:
         items.append(_truncate(_plain_text(product.detail), 120))
     if product.hehuoren_price is not None:
         items.append(f'合伙人价 {money(product.hehuoren_price):.2f}')
-    if product.xiaofeijin_price is not None:
-        items.append(f'消费金 {money(product.xiaofeijin_price):.2f}')
     if product.sales_volume is not None:
         items.append(f'历史销量 {product.sales_volume}')
     return [item for item in items if item][:4] or ['暂无更多说明']
@@ -554,12 +552,25 @@ def serialize_address(address: UserAddress) -> dict[str, Any]:
 
 
 def serialize_commission_flow(flow: CommissionFlow) -> dict[str, Any]:
+    if hasattr(flow, 'commission_role'):
+        from app.services.commission_service import CommissionService
+        title = CommissionService.flow_role_label(flow.commission_role, flow.level)
+        return {'id': f'CITY_PARTNER:{flow.id}', 'beneficiary_user_id': flow.beneficiary_user_id,
+                'source_user_id': flow.source_user_id, 'order_id': flow.order_id, 'order_no': flow.order_no,
+                'commission_mode': 'CITY_PARTNER', 'commission_mode_text': '新分润', 'commission_role': flow.commission_role,
+                'level': flow.level, 'level_label': title, 'rate': 0, 'base_amount': money(flow.profit_pool_amount),
+                'commission_amount': money(flow.commission_amount), 'amount': money(flow.commission_amount),
+                'status': enum_value(flow.status), 'status_text': enum_value(flow.status),
+                'settled_at': iso_datetime(flow.settled_at), 'created_at': iso_datetime(flow.created_at),
+                'title': title, 'biz_name': title}
     return {
         'id': flow.id,
         'beneficiary_user_id': flow.beneficiary_user_id,
         'source_user_id': flow.source_user_id,
         'order_id': flow.order_id,
         'team_id': flow.team_id,
+        'commission_mode': 'ORIGINAL',
+        'commission_mode_text': '原分润',
         'level': flow.level,
         'rate': money(flow.rate),
         'base_amount': money(flow.base_amount),
@@ -649,6 +660,8 @@ def _payment_combo(order: Order, deductions: list[OrderAssetDeduction] | None = 
 
 def _order_channel(order: Order) -> tuple[str, str]:
     order_type = enum_value(order.order_type)
+    if order_type == OrderType.CITY_PARTNER_ORDER.value:
+        return 'city_partner', '城市合伙人'
     if order_type == OrderType.LOCAL_LIFE_ORDER.value:
         return 'local_life', '本地生活'
     if order_type == OrderType.PACKAGE_ORDER.value:
@@ -672,6 +685,8 @@ def _order_pay_channel_options(
     if order_type == OrderType.PACKAGE_ORDER.value:
         return ['BALANCE']
     external_channels = list(enabled_external_payment_channels())
+    if order_type == OrderType.CITY_PARTNER_ORDER.value:
+        return external_channels
     if db is not None:
         items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
         if items:
@@ -758,6 +773,8 @@ def _effective_order_pay_channel(
 
 def _order_title(db: Session, order: Order) -> str:
     order_type = enum_value(order.order_type)
+    if order_type == OrderType.CITY_PARTNER_ORDER.value:
+        return f'{order.province or ""}{order.city or ""}城市合伙人席位'
     if order_type == OrderType.PACKAGE_ORDER.value and order.source_ref_id:
         package = db.get(Package, order.source_ref_id)
         if package:
@@ -788,6 +805,9 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
     payable_amount = money(order.payable_amount)
     requires_shipping = _order_requires_shipping(db, order)
     can_pay = not is_local_life and pay_status != enum_value(PayStatus.PAID) and status not in {enum_value(OrderStatus.COMPLETED), enum_value(OrderStatus.REFUND)}
+    if can_pay and order.order_type == OrderType.CITY_PARTNER_ORDER:
+        from app.services.city_partner_service import CityPartnerService
+        can_pay = CityPartnerService.mobile_enabled(db)
     can_confirm = not is_local_life and pay_status == enum_value(PayStatus.PAID) and status == enum_value(OrderStatus.SHIPPED)
     can_cancel = not is_local_life and pay_status == enum_value(PayStatus.UNPAID) and status == enum_value(OrderStatus.PENDING_PAYMENT)
     can_refund = not is_local_life and pay_status == enum_value(PayStatus.PAID) and status in {
@@ -828,6 +848,17 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         transaction_pay_channel,
         transaction_is_paid,
     )
+    seat_purchase = None
+    if order.order_type == OrderType.CITY_PARTNER_ORDER:
+        from app.models.city_partner import CityPartnerPurchase
+        seat_purchase = db.get(CityPartnerPurchase, order.id)
+        can_refund = False
+        can_confirm = False
+    elif can_refund and getattr(order, 'city_partner_user_id', None) is not None:
+        from app.models.city_partner import CityPartnerRotationFlow
+        can_refund = not db.query(CityPartnerRotationFlow.id).filter(
+            CityPartnerRotationFlow.order_id == order.id, CityPartnerRotationFlow.status == 'SUCCESS',
+        ).first()
     data: dict[str, Any] = {
         'id': order.id,
         'order_id': order.id,
@@ -911,6 +942,26 @@ def serialize_order(db: Session, order: Order, include_detail: bool = False) -> 
         data['shipment'] = serialize_shipment(db, order, include_detail=True) if data['requires_shipping'] else None
     else:
         data['payment_combo'] = _payment_combo(order)
+    from app.services.commission_service import CommissionService
+    pending_review = pay_status == enum_value(PayStatus.PAID) and bool(CommissionService.settlement_failure(order))
+    data['commission_pending_review'] = pending_review
+    if pending_review:
+        data['status_text'] = '已付款，待平台处理'
+        data['payment_message'] = ('支付已成功，订单待平台处理。可申请退款或联系管理员。'
+                                   if can_refund else '支付已成功，订单待平台处理。请联系管理员。')
+        data['can_confirm'] = False
+    if include_detail:
+        data['order']['commission_pending_review'] = pending_review
+        if pending_review:
+            data['order'].update({key: data[key] for key in ('status_text', 'can_confirm')})
+    if seat_purchase:
+        data['seat_settled'] = seat_purchase.settled_at is not None
+        data['seat_settlement_error'] = seat_purchase.settlement_error
+        if seat_purchase.settlement_error and pay_status == enum_value(PayStatus.PAID):
+            data['status_text'] = '席位未取得，待平台处理'
+            data['payment_message'] = '支付已成功，但席位未取得。请联系管理员处理。'
+        if include_detail:
+            data['order'].update({key: data[key] for key in ('seat_settled', 'seat_settlement_error', 'status_text')})
     return data
 
 
@@ -1139,6 +1190,7 @@ def serialize_shipment(db: Session, order: Order, include_detail: bool = False) 
 
 
 def serialize_admin_order(db: Session, order: Order, include_detail: bool = False) -> dict[str, Any]:
+    from app.services.order_commission_display import order_commission_fields
     user = db.get(User, order.user_id)
     team = db.get(Team, order.team_id) if order.team_id else None
     items = _shipment_items(db, order)
@@ -1149,6 +1201,7 @@ def serialize_admin_order(db: Session, order: Order, include_detail: bool = Fals
     shipment = serialize_shipment(db, order, include_detail=include_detail) if requires_shipping else None
 
     data = serialize_order(db, order, include_detail=include_detail)
+    data.update(order_commission_fields(order))
     data.update(
         {
             'user_nickname': user.nickname if user else None,

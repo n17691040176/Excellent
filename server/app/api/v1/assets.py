@@ -16,6 +16,7 @@ from app.models.enums import AssetType
 from app.models.user import User
 from app.schemas.asset import AssetTransferRequest
 from app.services.asset_service import AssetService
+from app.services.commission_service import CommissionService
 from app.utils.helpers import now
 
 app_router = APIRouter(prefix='/app/assets')
@@ -24,8 +25,11 @@ app_router = APIRouter(prefix='/app/assets')
 @app_router.get('/summary')
 def summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     data = AssetService.summary(db, current_user.id)
-    payload = dict(data)
-    payload.update({key.lower(): value for key, value in data.items()})
+    commission = CommissionService.summary(db, current_user.id)
+    payload = {key: data.get(key, 0) for key in ('BALANCE', 'POINTS')}
+    payload['COMMISSION'] = commission['available_amount']
+    payload['total_amount'] = round(sum(payload.values()), 2)
+    payload.update({key.lower(): value for key, value in list(payload.items())})
     return {'code': 0, 'message': 'success', 'data': payload}
 
 

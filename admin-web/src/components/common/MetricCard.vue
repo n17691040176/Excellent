@@ -7,7 +7,9 @@
 
     <div class="metric-card__content">
       <div class="metric-card__header">
-        <span class="metric-card__label">{{ label }}</span>
+        <el-tooltip :content="subtext" :disabled="!subtext" placement="top">
+          <span class="metric-card__label" :tabindex="subtext ? 0 : undefined">{{ label }}</span>
+        </el-tooltip>
         <span v-if="trend" class="metric-card__trend" :class="trendClass">
           <el-icon v-if="trend.direction === 'up'"><ArrowUp /></el-icon>
           <el-icon v-else><ArrowDown /></el-icon>
@@ -22,7 +24,6 @@
         </div>
       </div>
 
-      <div v-if="subtext" class="metric-card__subtext">{{ subtext }}</div>
     </div>
 
     <!-- 底部趋势线（可选装饰） -->

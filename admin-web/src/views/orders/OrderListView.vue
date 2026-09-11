@@ -28,6 +28,7 @@
       <!-- 统一的筛选栏 -->
       <FilterBar
         :fields="filterFields"
+        :collapsible="false"
         v-model="filters"
         @search="handleSearch"
         @reset="handleReset"
@@ -45,6 +46,11 @@
         <el-table-column label="订单类型" width="140">
           <template #default="{ row }">
             <el-tag size="small">{{ orderTypeLabel(row.order_type) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="分润模式" width="105">
+          <template #default="{ row }">
+            <el-tag :type="commissionModeTagType(row.commission_mode)" size="small">{{ row.commission_mode_text || '--' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="商品摘要" min-width="200">
@@ -111,6 +117,7 @@
                       关闭订单
                     </el-dropdown-item>
                     <el-dropdown-item
+                      v-if="row.order_type !== 'CITY_PARTNER_ORDER'"
                       v-permission="'orders:manage'"
                       command="refund"
                       :disabled="!row.can_refund"
@@ -160,7 +167,10 @@
               <el-descriptions-item label="用户">{{ detail.user?.nickname || '--' }} / {{ detail.user?.phone || '--' }}</el-descriptions-item>
               <el-descriptions-item label="团队">{{ detail.team?.name || '未绑定团队' }}</el-descriptions-item>
               <el-descriptions-item label="订单类型">{{ orderTypeLabel(detail.order_type) }}</el-descriptions-item>
+              <el-descriptions-item v-if="detail.order_type === 'CITY_PARTNER_ORDER'" label="退款规则">不支持退款</el-descriptions-item>
               <el-descriptions-item label="业务专区">{{ zoneTypeLabel(detail.zone_type) }}</el-descriptions-item>
+              <el-descriptions-item label="分润模式">{{ detail.commission_mode_text || '--' }}</el-descriptions-item>
+              <el-descriptions-item label="规则版本">{{ detail.commission_rule_version === 'legacy' ? '历史规则' : detail.commission_rule_version || '--' }}</el-descriptions-item>
               <el-descriptions-item label="支付组合">{{ detail.payment_combo || '--' }}</el-descriptions-item>
               <el-descriptions-item label="物流方式">{{ detail.delivery_mode_text || (detail.requires_shipping ? '待配置' : '无需物流') }}</el-descriptions-item>
               <el-descriptions-item label="待支付">
@@ -233,7 +243,7 @@
             关闭订单
           </el-button>
           <el-button
-            v-if="detail?.can_refund"
+            v-if="detail?.order_type !== 'CITY_PARTNER_ORDER' && detail?.can_refund"
             type="danger"
             @click="handleRefund"
           >
@@ -272,6 +282,7 @@ const filters = ref({
   order_status: '',
   pay_status: '',
   order_type: '',
+  commission_mode: '',
   zone_type: ''
 })
 
@@ -296,8 +307,19 @@ const orderTypeOptions = [
   { label: '自营订单', value: 'SELF_OPERATED_ORDER' },
   { label: '爆款订单', value: 'HOT_SALE_ORDER' },
   { label: '本地生活', value: 'LOCAL_LIFE_ORDER' },
-  { label: '供应商入驻', value: 'SUPPLIER_ENTRY_ORDER' }
+  { label: '供应商入驻', value: 'SUPPLIER_ENTRY_ORDER' },
+  { label: '城市合伙人席位', value: 'CITY_PARTNER_ORDER' }
 ]
+
+const commissionModeOptions = [
+  { label: '原分润', value: 'ORIGINAL' },
+  { label: '新分润', value: 'CITY_PARTNER' },
+  { label: '未锁定', value: 'UNLOCKED' }
+]
+
+function commissionModeTagType(mode) {
+  return { ORIGINAL: 'info', CITY_PARTNER: 'success', UNLOCKED: 'warning' }[mode] || 'info'
+}
 
 const zoneTypeOptions = [
   { label: '复购区', value: 'REPURCHASE' },
@@ -314,7 +336,8 @@ const filterFields = [
   { key: 'keyword', type: 'input', placeholder: '搜索订单号 / 用户昵称 / 手机号', width: 240 },
   { key: 'order_status', type: 'select', label: '订单状态', options: orderStatusOptions, width: 140 },
   { key: 'pay_status', type: 'select', label: '支付状态', options: payStatusOptions, width: 120 },
-  { key: 'order_type', type: 'select', label: '订单类型', options: orderTypeOptions, width: 160 }
+  { key: 'order_type', type: 'select', label: '订单类型', options: orderTypeOptions, width: 160 },
+  { key: 'commission_mode', type: 'select', label: '分润模式', options: commissionModeOptions, width: 120 }
 ]
 
 const scopeHint = computed(() =>
@@ -404,18 +427,22 @@ function buildParams() {
     order_status: filters.value.order_status || undefined,
     pay_status: filters.value.pay_status || undefined,
     order_type: filters.value.order_type || undefined,
+    commission_mode: filters.value.commission_mode || undefined,
     zone_type: filters.value.zone_type || undefined
   }
 }
 
+let latestLoad = 0
 async function loadData() {
+  const requestId = ++latestLoad
   loading.value = true
   try {
     const data = await orderApi.list(buildParams())
+    if (requestId !== latestLoad) return
     rows.value = data.items || []
     total.value = Number(data.total || 0)
   } finally {
-    loading.value = false
+    if (requestId === latestLoad) loading.value = false
   }
 }
 
@@ -525,6 +552,7 @@ function resetFilters() {
     order_status: '',
     pay_status: '',
     order_type: '',
+    commission_mode: '',
     zone_type: ''
   }
   page.value = 1

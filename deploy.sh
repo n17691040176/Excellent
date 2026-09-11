@@ -209,14 +209,25 @@ echo "步骤 4: 检查服务状态..."
 
 echo ""
 echo "步骤 5: 健康检查..."
-for i in {1..30}; do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-        echo "✓ 后端服务健康"
-        break
-    fi
-    echo "等待服务启动... ($i/30)"
-    sleep 2
-done
+check_health() {
+    local service_name="$1"
+    local health_url="$2"
+    local i
+    for i in {1..30}; do
+        if curl -fsS --connect-timeout 2 --max-time 5 "$health_url" > /dev/null 2>&1; then
+            echo "✓ $service_name 健康"
+            return 0
+        fi
+        echo "等待 $service_name 启动... ($i/30)"
+        sleep 2
+    done
+    echo "错误: $service_name 健康检查失败，部署未通过验收。" >&2
+    return 1
+}
+
+check_health '后端服务' 'http://localhost:8000/health' || exit 1
+check_health '管理后台' 'http://localhost:8081/health' || exit 1
+check_health '移动端' 'http://localhost:8082/health' || exit 1
 
 echo ""
 echo "=========================================="

@@ -10,7 +10,12 @@ from app.models.asset import (
     UserPowerBankIncomeRecord,
 )
 from app.models.bank_card import UserBankCard
-from app.models.city_partner import CityPartnerCommissionFlow, CityPartnerRotationFlow, CityPartnerSeat
+from app.models.city_partner import (
+    CityPartnerCommissionFlow,
+    CityPartnerPurchase,
+    CityPartnerRotationFlow,
+    CityPartnerSeat,
+)
 from app.models.commerce import ShoppingCartItem, UserFavoriteProduct, UserProductFootprint
 from app.models.commission import (
     CommissionAccountLedger,
@@ -20,6 +25,7 @@ from app.models.commission import (
     UserCommission,
     WithdrawRequest,
 )
+from app.models.commission_audit import CommissionRuleAudit
 from app.models.earning_rule import EarningRule
 from app.models.local_life import (
     AdRevenueFlow,
@@ -94,6 +100,8 @@ __all__ = [
     'AgentLevel',
     'AgentQualification',
     'CityPartnerSeat',
+    'CityPartnerPurchase',
+    'CommissionRuleAudit',
     'CityPartnerRotationFlow',
     'CityPartnerCommissionFlow',
     'LocalLifeMerchant',

@@ -18,27 +18,62 @@
     </div>
 
     <div class="panel-card data-card mode-card">
-      <div class="mode-card__heading">
-        <div class="section-title-lite">
-          <h3>商品分润模式</h3>
-          <p>原模式保留普通会员、经销商及区域代理规则；城市合伙人模式仅展示/读取城市合伙人商品规则。</p>
+      <div class="mode-summary">
+        <span>当前分润模式</span>
+        <el-tag :type="activeMode === 'CITY_PARTNER' ? 'success' : 'info'">{{ modeLabel(activeMode) }}</el-tag>
+        <div v-if="userStore.role === 'SUPER_ADMIN'" class="mode-actions">
+          <el-button link @click="showModeHistory">切换记录</el-button>
+          <el-button type="primary" plain @click="modeSettingsVisible = true">模式设置</el-button>
         </div>
-        <el-tag :type="activeMode === 'CITY_PARTNER' ? 'success' : 'info'" effect="dark" size="large">
-          {{ modeLabel(activeMode) }}
-        </el-tag>
       </div>
-      <el-alert
-        title="模式以接口返回的 commission_mode 为准；旧接口未返回该字段时按原模式兼容展示，不代表后台已完成全局模式切换。"
-        type="info"
-        :closable="false"
-        show-icon
-      />
     </div>
 
-    <div class="panel-card data-card">
+    <el-drawer v-model="modeSettingsVisible" title="分润模式设置" size="min(600px, 100vw)">
+      <el-form label-position="top">
+        <el-form-item label="分润模式">
+          <el-select v-model="selectedMode" aria-label="分润模式" style="width: 100%">
+            <el-option v-for="option in modeOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="切换原因"><el-input v-model="modeReason" placeholder="选填" maxlength="500" /></el-form-item>
+      </el-form>
+      <el-alert title="仅影响之后付款的商品订单" type="info" :closable="false" />
+      <div class="settings-heading"><h3>配置检查</h3><el-button link @click="loadReadiness">重新检查</el-button></div>
+      <el-table :data="readiness.checks">
+        <el-table-column prop="label" label="检查项" min-width="160" />
+        <el-table-column label="结果" width="90"><template #default="{ row }"><el-tag :type="row.passed ? 'success' : 'danger'">{{ row.passed ? '通过' : '待完善' }}</el-tag></template></el-table-column>
+        <el-table-column label="详情" min-width="160"><template #default="{ row }"><span v-if="!row.passed">{{ row.message }}</span><span v-else>—</span></template></el-table-column>
+      </el-table>
+      <el-collapse class="policy-details"><el-collapse-item title="结算与退款规则"><p v-for="policy in readiness.policies" :key="policy">{{ policy }}</p></el-collapse-item></el-collapse>
+      <template #footer><el-button @click="modeSettingsVisible = false">取消</el-button><el-button type="primary" :loading="switchingMode" :disabled="selectedMode === activeMode" @click="switchMode">确认切换</el-button></template>
+    </el-drawer>
+
+    <el-tabs v-model="sectionTab" class="section-tabs">
+      <el-tab-pane label="佣金明细" name="ledger" />
+      <el-tab-pane label="商品规则" name="rules" />
+      <el-tab-pane v-if="userStore.role === 'SUPER_ADMIN'" label="城市合伙人" name="cities" />
+      <el-tab-pane v-if="userStore.role === 'SUPER_ADMIN'" label="待处理订单" name="pending" />
+    </el-tabs>
+
+    <el-drawer v-model="modeHistoryVisible" title="模式切换记录" size="75%">
+      <el-table :data="modeHistoryRows">
+        <el-table-column label="切换时间" min-width="175"><template #default="{ row }">{{ formatDate(row.switched_at) }}</template></el-table-column>
+        <el-table-column prop="operator_name" label="操作人" />
+        <el-table-column label="模式"><template #default="{ row }">{{ modeLabel(row.from_mode) }} → {{ modeLabel(row.to_mode) }}</template></el-table-column>
+        <el-table-column prop="reason" label="原因" />
+        <el-table-column prop="pending_order_count" label="待结算订单" />
+        <el-table-column prop="frozen_commission_amount" label="冻结金额" />
+      </el-table>
+      <el-pagination v-model:current-page="modeHistoryPage" :page-size="20" :total="modeHistoryTotal" layout="total, prev, pager, next" @current-change="loadModeHistory" />
+    </el-drawer>
+    <RuleHistoryDrawer v-model="ruleHistoryVisible" :entity-id="ruleHistoryId" entity-type="PRODUCT" />
+
+    <CityPartnerPanel v-if="userStore.role === 'SUPER_ADMIN'" v-show="sectionTab === 'cities' || sectionTab === 'pending'" :pending-only="sectionTab === 'pending'" />
+    <FailedSettlementsPanel v-if="userStore.role === 'SUPER_ADMIN'" v-show="sectionTab === 'pending'" />
+
+    <div v-show="sectionTab === 'rules'" class="panel-card data-card">
       <div class="section-title-lite">
         <h3>商品分润规则</h3>
-        <p>同步商品管理中已启用的专属分润配置；城市合伙人规则与原模式规则分开展示，避免误读或混算。</p>
       </div>
       <div class="toolbar-row">
         <el-input
@@ -75,7 +110,7 @@
             <div v-if="rowMode(row) === 'CITY_PARTNER'" class="city-rule-cell">
               <div><strong>{{ cityPartnerRuleValue(row, 'city_partner_amount') }}</strong> 合伙人</div>
               <div>直推 {{ cityPartnerRuleValue(row, 'direct_reward_amount') }} · 上级起始 {{ cityPartnerRuleValue(row, 'upline_start_amount') }}</div>
-              <div>{{ cityPartnerRuleValue(row, 'upline_levels') }} · 递减 {{ cityPartnerRuleValue(row, 'upline_decay_rate') }} · {{ cityPartnerRuleValue(row, 'tail_account') }}</div>
+              <div>{{ cityPartnerRuleValue(row, 'upline_levels') }}递减 · 每层 50%</div>
             </div>
             <span v-else class="rule-value-disabled">不适用</span>
           </template>
@@ -95,6 +130,7 @@
         <el-table-column label="更新时间" min-width="170">
           <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
         </el-table-column>
+        <el-table-column label="修改记录" width="110"><template #default="{ row }"><el-button link @click="ruleHistoryId = row.product_id; ruleHistoryVisible = true">查看记录</el-button></template></el-table-column>
       </el-table>
       <el-pagination
         v-model:current-page="rulePage"
@@ -106,7 +142,7 @@
       />
     </div>
 
-    <div class="panel-card data-card">
+    <div v-show="sectionTab === 'ledger'" class="panel-card data-card">
       <div class="toolbar-row">
         <el-input
           v-model="keyword"
@@ -162,7 +198,9 @@
         </el-tab-pane>
 
         <el-tab-pane label="佣金流水" name="flows">
-          <el-table v-loading="loadingFlows" :data="commissionFlows" border>
+          <el-table v-loading="loadingFlows" :data="commissionFlows" row-key="record_key" border>
+            <el-table-column type="expand"><template #default="{ row }"><el-descriptions :column="1" border class="flow-detail"><el-descriptions-item label="取整前金额">{{ row.commission_mode === 'CITY_PARTNER' ? (row.calculated_amount ?? '历史未留存') : '不适用' }}</el-descriptions-item></el-descriptions></template></el-table-column>
+            <el-table-column label="模式" width="140"><template #default="{ row }">{{ modeLabel(row.commission_mode) }}</template></el-table-column>
             <el-table-column prop="order_no" label="订单号" min-width="180" />
             <el-table-column label="受益用户" min-width="170">
               <template #default="{ row }">
@@ -181,7 +219,7 @@
               <template #default="{ row }">¥{{ formatMoney(row.base_amount) }}</template>
             </el-table-column>
             <el-table-column label="比例" width="90">
-              <template #default="{ row }">{{ formatRate(row.rate) }}</template>
+              <template #default="{ row }">{{ row.commission_mode === 'CITY_PARTNER' ? '固定金额' : formatRate(row.rate) }}</template>
             </el-table-column>
             <el-table-column label="佣金金额" width="120">
               <template #default="{ row }">¥{{ formatMoney(row.commission_amount) }}</template>
@@ -215,10 +253,22 @@ import { computed, onMounted, ref } from 'vue'
 import { formatDateTime } from '@/utils/datetime'
 
 import { commissionApi } from '@/api/modules'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import CityPartnerPanel from './CityPartnerPanel.vue'
+import FailedSettlementsPanel from './FailedSettlementsPanel.vue'
+import RuleHistoryDrawer from './RuleHistoryDrawer.vue'
 import { PageHeader, MetricCard, StatusTag } from '@/components/common'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
+const sectionTab = ref('ledger')
+const modeSettingsVisible = ref(false)
+const readiness = ref({ checks: [], policies: [] })
+const modeHistoryVisible = ref(false), modeHistoryRows = ref([]), modeHistoryPage = ref(1), modeHistoryTotal = ref(0)
+const ruleHistoryVisible = ref(false), ruleHistoryId = ref(null)
+async function loadReadiness() { readiness.value = await commissionApi.readiness() }
+async function loadModeHistory() { const data = await commissionApi.modeHistory({ page: modeHistoryPage.value }); modeHistoryRows.value = data.items; modeHistoryTotal.value = data.total }
+async function showModeHistory() { modeHistoryPage.value = 1; await loadModeHistory(); modeHistoryVisible.value = true }
 const loadingUsers = ref(false)
 const loadingFlows = ref(false)
 const loadingRules = ref(false)
@@ -253,10 +303,32 @@ const zoneOptions = [
   { label: '本地生活', value: 'LOCAL_LIFE' }
 ]
 
-const activeMode = computed(() => {
-  const mode = productRules.value.map((row) => rowMode(row)).find(Boolean)
-  return mode || 'ORIGINAL'
-})
+const modeStatus = ref({})
+const activeMode = computed(() => modeStatus.value.mode || 'ORIGINAL')
+const selectedMode = ref('ORIGINAL')
+const modeReason = ref('')
+const switchingMode = ref(false)
+async function loadMode() {
+  modeStatus.value = await commissionApi.mode()
+  selectedMode.value = modeStatus.value.mode
+  if (userStore.role === 'SUPER_ADMIN') await loadReadiness()
+}
+async function switchMode() {
+  if (selectedMode.value === 'CITY_PARTNER') {
+    await loadReadiness()
+    if (!readiness.value.ready) { ElMessage.warning('请先完成配置检查中的待完善项'); return }
+  }
+  try {
+    await ElMessageBox.confirm(`切换为${modeLabel(selectedMode.value)}，只影响之后付款的订单。`, '确认切换')
+  } catch { return }
+  switchingMode.value = true
+  try {
+    await commissionApi.updateMode({ mode: selectedMode.value, reason: modeReason.value || null })
+    await loadData()
+    modeSettingsVisible.value = false
+    ElMessage.success('分润模式已切换')
+  } finally { switchingMode.value = false }
+}
 const hasCityPartnerRows = computed(() => productRules.value.some((row) => rowMode(row) === 'CITY_PARTNER'))
 
 const commissionMemberLevels = [
@@ -306,10 +378,10 @@ function cityPartnerRuleValue(row, key) {
   const aliases = {
     city_partner_amount: ['city_partner_amount', 'city_partner_commission_amount', 'new_mode_city_partner_amount'],
     direct_reward_amount: ['direct_reward_amount', 'city_partner_direct_reward_amount', 'new_mode_direct_reward_amount'],
-    upline_start_amount: ['upline_start_amount', 'city_partner_upline_start_amount', 'new_mode_upline_start_amount'],
-    upline_levels: ['upline_levels', 'city_partner_upline_levels', 'new_mode_upline_levels'],
+    upline_start_amount: ['city_partner_upline_initial_amount', 'upline_start_amount', 'city_partner_upline_start_amount', 'new_mode_upline_start_amount'],
+    upline_levels: ['city_partner_upline_max_levels', 'upline_levels', 'city_partner_upline_levels', 'new_mode_upline_levels'],
     upline_decay_rate: ['upline_decay_rate', 'city_partner_upline_decay_rate', 'new_mode_upline_decay_rate'],
-    tail_account: ['tail_account', 'city_partner_tail_account', 'new_mode_tail_account']
+    tail_account: ['city_partner_remainder_account', 'tail_account', 'city_partner_tail_account', 'new_mode_tail_account']
   }
   const sourceKey = aliases[key]?.find((item) => row[item] !== undefined && row[item] !== null)
   const value = sourceKey ? row[sourceKey] : null
@@ -387,6 +459,7 @@ async function loadRules(nextPage = rulePage.value) {
 }
 
 async function loadData() {
+  await loadMode()
   await Promise.all([fetchUsers(1), fetchFlows(1), loadRules(1)])
 }
 
@@ -401,12 +474,20 @@ onMounted(loadData)
   gap: var(--space-4);
 }
 
-.mode-card__heading {
+.mode-summary {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
 }
+
+.mode-summary { align-items: center; justify-content: flex-start; }
+.mode-actions { display: flex; gap: 12px; align-items: center; margin-left: auto; }
+.settings-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; }
+.settings-heading h3 { font-size: 16px; }
+.policy-details { margin-top: 24px; }
+.section-tabs :deep(.el-tabs__header) { margin: 0; }
+.flow-detail { margin: 12px 24px; }
 
 .city-rule-cell {
   line-height: 1.7;

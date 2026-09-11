@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -404,6 +404,15 @@ def admin_zone_config(
     return {'code': 0, 'message': 'success', 'data': ProductService.get_zone_config_for_admin(db, product_id, current_user)}
 
 
+@admin_router.get('/products/{product_id}/commission-rule-history')
+def product_commission_history(product_id: int, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+                               db: Session = Depends(get_db),
+                               current_user: User = Depends(require_roles(GlobalRole.SUPER_ADMIN, GlobalRole.TEAM_ADMIN))):
+    from app.services.commission_audit import list_rule_changes
+    ProductService._ensure_product_visible_for_admin(db, product_id, current_user)
+    return {'code': 0, 'message': 'success', 'data': list_rule_changes(db, 'PRODUCT', product_id, page, page_size)}
+
+
 @admin_router.put('/products/{product_id}/zone-config')
 def update_admin_zone_config(
     product_id: int,
@@ -414,5 +423,5 @@ def update_admin_zone_config(
     return {
         'code': 0,
         'message': 'success',
-        'data': ProductService.update_zone_config_for_admin(db, product_id, current_user, payload.model_dump()),
+        'data': ProductService.update_zone_config_for_admin(db, product_id, current_user, payload.model_dump(exclude_unset=True)),
     }

@@ -260,3 +260,9 @@ export const categoryApi = {
     return request.get('/api/v1/app/categories', { hideLoading: true });
   }
 };
+
+export const cityPartnerApi = {
+  availability() { return request.get('/api/v1/city-partners/availability', { hideLoading: true, silentError: true, timeout: 10000 }); },
+  seats() { return request.get('/api/v1/city-partners/seats'); },
+  createOrder(id, priceVersion) { return request.post(`/api/v1/city-partners/seats/${id}/orders`, { price_version: priceVersion }); }
+};

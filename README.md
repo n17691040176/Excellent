@@ -55,6 +55,16 @@ npm run dev:h5
 
 ## Docker Compose
 
+本地完整容器启动（API、管理端、移动端、MySQL、Redis）：
+
+```powershell
+.\tools\start-local-docker.ps1
+```
+
+管理端 `http://127.0.0.1:5173`，移动端 `http://127.0.0.1:5174`，API `http://127.0.0.1:8000/docs`。复用独立的 `excellent_local_test` 测试库，使用模拟支付和短信。Docker Hub 拉取超时时可加 `-UseRegistryMirror`，使用 Google 的 Docker Hub 缓存。详见 [本地 Docker 说明](docs/docker_local_20260910.md)。
+
+下面的根目录编排包含部署域名和外部支付配置，面向部署环境；本地测试使用上面的启动脚本。
+
 ```powershell
 cd D:\Excellent
 docker compose up -d --build

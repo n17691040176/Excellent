@@ -107,6 +107,7 @@ def _refund_response(refund, tx, *, status='SUCCESS'):
 
 def test_mock_wechat_refund_creates_provider_style_success_without_network():
     db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
     order = _order()
     tx = _transaction(provider_trade_no=None)
     refund = _refund()
@@ -140,6 +141,7 @@ def test_mock_wechat_refund_creates_provider_style_success_without_network():
 
 def test_real_wechat_refund_keeps_processing_result_for_later_sync():
     db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
     order = _order()
     tx = _transaction()
     refund = _refund()
@@ -168,6 +170,7 @@ def test_real_wechat_refund_keeps_processing_result_for_later_sync():
 )
 def test_wechat_refund_request_distinguishes_terminal_and_retryable_provider_errors(http_status, retryable):
     db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
     order = _order()
     tx = _transaction()
     refund = _refund()

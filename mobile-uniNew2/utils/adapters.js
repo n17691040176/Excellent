@@ -1,14 +1,11 @@
 import { formatDateTime, formatMoney } from './format.js';
 
 function sumVisibleAssets(assetSummary = {}) {
-  const total = Number(assetSummary.total_amount);
-  if (!Number.isNaN(total)) return total;
-
   const balance = Number(assetSummary.BALANCE ?? assetSummary.balance ?? 0);
-  const voucher = Number(assetSummary.VOUCHER ?? assetSummary.voucher ?? 0);
+  const commission = Number(assetSummary.COMMISSION ?? assetSummary.commission ?? 0);
   const points = Number(assetSummary.POINTS ?? assetSummary.points ?? 0);
 
-  return [balance, voucher, points].reduce((sum, item) => (
+  return [balance, commission, points].reduce((sum, item) => (
     sum + (Number.isNaN(item) ? 0 : item)
   ), 0);
 }
@@ -128,8 +125,9 @@ export function toAssetLogs(rows = []) {
 export function toCommissionFlows(rows = []) {
   return rows.map((item, index) => ({
     id: item.id || `cm-${index}`,
-    name: item.biz_name || item.title || '佣金收益',
-    status: item.status_text || item.status || '待结算',
+    modeLabel: item.commission_mode_text || { ORIGINAL: '原分润', CITY_PARTNER: '新分润' }[item.commission_mode] || '',
+    name: (item.biz_name || item.title || '佣金收益').replace(/^Commission order (\d+)$/, '订单 $1 佣金'),
+    status: { FROZEN: '待结算', SETTLED: '已结算', CANCELED: '已撤销' }[item.status] || item.status_text || item.status || '待结算',
     time: formatDateTime(item.created_at || item.time),
     amount: formatMoney(item.amount ?? item.commission_amount ?? 0)
   }));

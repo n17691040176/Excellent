@@ -1,6 +1,7 @@
-from typing import Any
+from decimal import Decimal
+from typing import Any, Literal
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from app.models.enums import ProductOwnerType, ProductStatus, ProductType, ZoneType
 from app.schemas.common import AppBaseModel
@@ -66,6 +67,7 @@ class OrderRefundStatusRequest(AppBaseModel):
 
 class ProductZoneConfigUpdateRequest(AppBaseModel):
     model_config = ConfigDict(extra='forbid')
+    change_reason: str | None = Field(default=None, max_length=500)
 
     points_purchase_enabled: bool = False
     balance_purchase_enabled: bool = True
@@ -96,12 +98,9 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     custom_commission_city_agent_amount: float = 0
     city_partner_commission_enabled: bool = False
     city_partner_commission_rule_version: str = 'v1'
-    city_partner_amount: float = 0
-    city_partner_direct_reward_amount: float = 0
-    city_partner_upline_initial_amount: float = 0
-    city_partner_upline_max_levels: int = 7
-    city_partner_upline_decay_rate: float = 50
-    city_partner_remainder_account: str = 'COMPANY'
+    city_partner_amount: Decimal = Field(default=Decimal(0), ge=0, max_digits=18, decimal_places=2)
+    city_partner_direct_reward_amount: Decimal = Field(default=Decimal(0), ge=0, max_digits=18, decimal_places=2)
+    city_partner_remainder_account: Literal['COMPANY'] = 'COMPANY'
 
 
 class ProductCategoryCreateRequest(AppBaseModel):
@@ -129,8 +128,8 @@ class AdminProductPayload(AppBaseModel):
     owner_type: ProductOwnerType = ProductOwnerType.SELF_OPERATED
     owner_id: int | None = None
     market_price: float | None = None
-    sale_price: float
-    cost_price: float | None = None
+    sale_price: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    cost_price: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=2)
     stock: int = 0
     main_image: str | None = None
     cover: str | None = None
