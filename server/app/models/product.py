@@ -148,6 +148,8 @@ class ProductZoneConfig(TimestampMixin, Base):
     custom_commission_city_agent_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     # 城市合伙人商品分润配置；仅由新模式结算器读取。
     city_partner_commission_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    city_partner_upline_mode: Mapped[str] = mapped_column(String(16), default='AUTO', server_default='AUTO', nullable=False)
+    city_partner_upline_amounts: Mapped[list | None] = mapped_column(JSON, nullable=True)
     city_partner_commission_rule_version: Mapped[str] = mapped_column(String(64), default='v1', nullable=False)
     city_partner_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)
     city_partner_direct_reward_amount: Mapped[Decimal] = mapped_column(DECIMAL(18, 2), default=0, nullable=False)

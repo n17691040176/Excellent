@@ -255,6 +255,8 @@ CREATE TABLE IF NOT EXISTS product_zone_configs (
     custom_commission_county_agent_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
     custom_commission_city_agent_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
     city_partner_commission_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    city_partner_upline_mode VARCHAR(16) NOT NULL DEFAULT 'AUTO',
+    city_partner_upline_amounts JSON NULL,
     city_partner_commission_rule_version VARCHAR(64) NOT NULL DEFAULT 'v1',
     city_partner_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
     city_partner_direct_reward_amount DECIMAL(18,2) NOT NULL DEFAULT 0,

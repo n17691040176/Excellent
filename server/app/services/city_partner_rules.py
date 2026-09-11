@@ -5,6 +5,8 @@ from app.utils.helpers import quantize_amount
 
 CITY_PARTNER_DEFAULTS = {
     'city_partner_commission_enabled': False,
+    'city_partner_upline_mode': 'AUTO',
+    'city_partner_upline_amounts': ['0.00'] * 7,
     'city_partner_commission_rule_version': 'v1',
     'city_partner_amount': 0,
     'city_partner_direct_reward_amount': 0,
@@ -36,6 +38,24 @@ def city_partner_rule_values(config) -> dict:
     values['city_partner_upline_max_levels'] = 7
     values['city_partner_upline_decay_rate'] = Decimal('50')
     values['city_partner_calculation_policy'] = 'DIRECT_HALVING_7_V2'
+    if values['city_partner_upline_mode'] not in {'AUTO', 'MANUAL'}:
+        raise ConflictError('Upline mode must be AUTO or MANUAL')
+    manual = values['city_partner_upline_amounts']
+    if not isinstance(manual, list | tuple) or len(manual) != 7:
+        raise ConflictError('Manual upline amounts must contain exactly seven amounts')
+    try:
+        amounts = [Decimal(str(amount)) for amount in manual]
+        if any(not amount.is_finite() or amount < 0 or amount > Decimal('9999999999999999.99')
+               or amount != amount.quantize(Decimal('0.01')) for amount in amounts):
+            raise ValueError
+    except (ValueError, ArithmeticError) as exc:
+        raise ConflictError('Manual upline amounts must be non-negative money with at most two decimal places') from exc
+    # Store exact decimal strings in JSON, including snapshots and audit records.
+    values['city_partner_upline_amounts'] = [str(amount.quantize(Decimal('0.01'))) for amount in amounts]
+    if values['city_partner_upline_mode'] == 'MANUAL':
+        values['city_partner_upline_initial_amount'] = amounts[0]
+        values['city_partner_upline_decay_rate'] = Decimal('0')
+        values['city_partner_calculation_policy'] = 'MANUAL_7_V1'
     return values
 
 
@@ -45,6 +65,9 @@ def upline_amounts(config) -> list[Decimal]:
 
 def upline_calculations(config, quantity=1) -> list[tuple[Decimal, Decimal]]:
     values = city_partner_rule_values(config)
+    if values['city_partner_upline_mode'] == 'MANUAL':
+        return [(Decimal(amount) * quantity, Decimal(amount) * quantity)
+                for amount in values['city_partner_upline_amounts']]
     with localcontext() as context:
         context.prec = 60
         amount = Decimal(str(values['city_partner_direct_reward_amount'])) / 2

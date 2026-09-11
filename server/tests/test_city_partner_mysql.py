@@ -108,3 +108,51 @@ def test_mysql_retains_raw_fractional_cents_and_audit_history():
             assert db.get(CityPartnerCommissionFlow, flow.id).calculated_amount == Decimal('3.125')
     finally:
         engine.dispose()
+
+
+@pytest.mark.skipif(not os.getenv('CITY_PARTNER_MYSQL_TEST_URL'), reason='Requires an explicit local MySQL test database')
+def test_mysql_manual_upline_exact_amounts_and_snapshot():
+    from test_city_partner import product_order
+
+    from app.models.city_partner import CityPartnerCommissionFlow
+    from app.models.enums import CommissionMode, GlobalRole
+    from app.schemas.product import ProductZoneConfigUpdateRequest
+    from app.services.catalog_service import ProductService
+    from app.services.commission_service import CommissionService
+
+    url = make_url(os.environ['CITY_PARTNER_MYSQL_TEST_URL'])
+    assert url.host in {'127.0.0.1', 'localhost'} and url.database.endswith('_test')
+    engine = create_engine(url)
+    try:
+        with Session(engine, autoflush=False, expire_on_commit=False) as db:
+            parent = None
+            for level in range(9):
+                buyer = User(nickname=f'manual-upline-test-{level}', invite_code=uuid4().hex,
+                             password_hash='!', parent_id=parent.id if parent else None)
+                db.add(buyer)
+                db.flush()
+                parent = buyer
+            product, config, order = product_order(db, buyer, quantity=3)
+            product.product_name = f'manual-upline-test-{uuid4().hex[:8]}'
+            admin = db.query(User).filter(User.global_role == GlobalRole.SUPER_ADMIN).first()
+            assert admin is not None
+            ProductService.update_zone_config_for_admin(db, product.id, admin,
+                ProductZoneConfigUpdateRequest(city_partner_upline_mode='MANUAL',
+                    city_partner_upline_amounts=['0.20'] * 7).model_dump(exclude_unset=True))
+            db.expire_all()
+            assert config.city_partner_upline_mode == 'MANUAL'
+            assert config.city_partner_upline_amounts == ['0.20'] * 7
+            order.commission_mode = CommissionMode.CITY_PARTNER
+            order.pay_status = PayStatus.PAID
+            db.flush()
+            CommissionService.freeze_for_order(db, order, buyer)
+            db.commit()
+            db.expire_all()
+            flows = db.query(CityPartnerCommissionFlow).filter_by(order_id=order.id, commission_role='UPLINE').all()
+            assert len(flows) == 7
+            assert all(f.commission_amount == f.calculated_amount == Decimal('0.60') for f in flows)
+            snapshot = order.city_partner_rule_snapshot['items'][0]['rule']
+            assert snapshot['city_partner_calculation_policy'] == 'MANUAL_7_V1'
+            assert snapshot['city_partner_upline_amounts'] == ['0.20'] * 7
+    finally:
+        engine.dispose()

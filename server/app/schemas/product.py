@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field
 
@@ -97,6 +97,10 @@ class ProductZoneConfigUpdateRequest(AppBaseModel):
     custom_commission_county_agent_amount: float = 0
     custom_commission_city_agent_amount: float = 0
     city_partner_commission_enabled: bool = False
+    city_partner_upline_mode: Literal['AUTO', 'MANUAL'] = 'AUTO'
+    city_partner_upline_amounts: list[Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]] = Field(
+        default_factory=lambda: [Decimal('0.00')] * 7, min_length=7, max_length=7,
+    )
     city_partner_commission_rule_version: str = 'v1'
     city_partner_amount: Decimal = Field(default=Decimal(0), ge=0, max_digits=18, decimal_places=2)
     city_partner_direct_reward_amount: Decimal = Field(default=Decimal(0), ge=0, max_digits=18, decimal_places=2)

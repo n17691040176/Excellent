@@ -462,7 +462,19 @@
                 <span class="field-suffix">元/件</span>
               </el-form-item>
             </div>
-            <details class="rule-details">
+            <el-form-item label="七级分润">
+              <el-radio-group v-model="zoneConfigForm.city_partner_upline_mode" :disabled="!cityPartnerRulesSupported">
+                <el-radio value="AUTO">按 50% 递减</el-radio>
+                <el-radio value="MANUAL">手动设置</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <div v-if="zoneConfigForm.city_partner_upline_mode === 'MANUAL'" class="form-split">
+              <el-form-item v-for="level in 7" :key="level" :label="`第 ${level} 级`">
+                <el-input-number v-model="zoneConfigForm.city_partner_upline_amounts[level - 1]" :min="0" :precision="2" :step="0.1" controls-position="right" />
+                <span class="field-suffix">元/件</span>
+              </el-form-item>
+            </div>
+            <details v-else class="rule-details">
               <summary>七层分润明细</summary>
               <p>从直推上级的上级起，每层减半；剩余归公司。</p>
               <div v-for="(amount, index) in cityPartnerLayers" :key="index" class="layer-row"><span>第 {{ index + 1 }} 层</span><strong>¥{{ amount.toFixed(2) }}</strong></div>
@@ -596,6 +608,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 import { productApi, supplierApi, categoryApi } from '@/api/modules'
+import { cityPartnerUplineAmounts } from '@/utils/cityPartnerRules'
 import RuleHistoryDrawer from '@/views/commission/RuleHistoryDrawer.vue'
 import { useUserStore } from '@/stores/user'
 import { hasPermission } from '@/utils/permission'
@@ -717,6 +730,8 @@ function createDefaultZoneConfig() {
     merchant_commission_rule_id: null,
     device_revenue_enabled: false,
     city_partner_commission_enabled: false,
+    city_partner_upline_mode: 'AUTO',
+    city_partner_upline_amounts: Array(7).fill(0),
     city_partner_amount: 0,
     city_partner_direct_reward_amount: 0,
     city_partner_upline_initial_amount: 0,
@@ -872,10 +887,7 @@ const cityPartnerProfitPool = computed(() => {
   const costPrice = Number(zoneConfigProduct.value.cost_price)
   return Number.isFinite(salePrice) && Number.isFinite(costPrice) ? Math.max(0, salePrice - costPrice) : null
 })
-const cityPartnerLayers = computed(() => {
-  const directCents = Math.round(Number(zoneConfigForm.value.city_partner_direct_reward_amount || 0) * 100)
-  return Array.from({ length: 7 }, (_, index) => Math.floor(directCents / (2 ** (index + 1))) / 100)
-})
+const cityPartnerLayers = computed(() => cityPartnerUplineAmounts(zoneConfigForm.value))
 const cityPartnerRuleTotal = computed(() => (
   Math.round(Number(zoneConfigForm.value.city_partner_amount || 0) * 100)
   + Math.round(Number(zoneConfigForm.value.city_partner_direct_reward_amount || 0) * 100)
@@ -1157,6 +1169,8 @@ function normalizeZoneConfig(data = {}) {
     per_user_limit: data.per_user_limit ?? null,
     merchant_commission_rule_id: data.merchant_commission_rule_id ?? null,
     city_partner_commission_enabled: Boolean(data.city_partner_commission_enabled),
+    city_partner_upline_mode: data.city_partner_upline_mode || 'AUTO',
+    city_partner_upline_amounts: Array.from({ length: 7 }, (_, index) => Number(data.city_partner_upline_amounts?.[index] || 0)),
     city_partner_amount: Number(data.city_partner_amount || 0),
     city_partner_direct_reward_amount: Number(data.city_partner_direct_reward_amount || 0),
     city_partner_upline_initial_amount: Number(data.city_partner_upline_initial_amount || 0),
@@ -1373,7 +1387,7 @@ async function openZoneConfig(row) {
     cityPartnerRulesSupported.value = ['city_partner_commission_enabled', 'city_partner_amount', 'city_partner_direct_reward_amount', 'city_partner_upline_initial_amount', 'city_partner_upline_max_levels', 'city_partner_upline_decay_rate', 'city_partner_remainder_account']
       .some((key) => Object.prototype.hasOwnProperty.call(data || {}, key))
     zoneConfigForm.value = normalizeZoneConfig(data)
-    loadedZoneConfig.value = { ...zoneConfigForm.value }
+    loadedZoneConfig.value = { ...zoneConfigForm.value, city_partner_upline_amounts: [...zoneConfigForm.value.city_partner_upline_amounts] }
   } catch (error) {
     zoneConfigVisible.value = false
     ElMessage.error('商品规则加载失败，请重新打开后再试')
@@ -1448,6 +1462,8 @@ async function saveZoneConfig() {
     if (cityPartnerRulesSupported.value) {
       Object.assign(payload, {
         city_partner_commission_enabled: zoneConfigForm.value.city_partner_commission_enabled,
+        city_partner_upline_mode: zoneConfigForm.value.city_partner_upline_mode,
+        city_partner_upline_amounts: zoneConfigForm.value.city_partner_upline_amounts,
         city_partner_amount: zoneConfigForm.value.city_partner_amount,
         city_partner_direct_reward_amount: zoneConfigForm.value.city_partner_direct_reward_amount,
         city_partner_remainder_account: zoneConfigForm.value.city_partner_remainder_account
@@ -1456,7 +1472,9 @@ async function saveZoneConfig() {
     // Only send edited fields so another administrator's changes to the other
     // commission mode survive an already-open drawer being saved.
     const changes = Object.fromEntries(Object.entries(payload).filter(
-      ([key, value]) => value !== loadedZoneConfig.value[key]
+      ([key, value]) => Array.isArray(value)
+        ? JSON.stringify(value) !== JSON.stringify(loadedZoneConfig.value[key])
+        : value !== loadedZoneConfig.value[key]
     ))
     await productApi.updateZoneConfig(zoneConfigProduct.value.id, { ...changes, change_reason: zoneChangeReason.value || null })
     ElMessage.success('专区规则已保存')

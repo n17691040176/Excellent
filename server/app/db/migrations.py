@@ -296,6 +296,8 @@ def _ensure_city_partner_schema(connection: Connection) -> None:
     zone_columns = _column_names('product_zone_configs')
     for column_name, column_type in {
         'city_partner_commission_enabled': 'TINYINT(1) NOT NULL DEFAULT 0',
+        'city_partner_upline_mode': "VARCHAR(16) NOT NULL DEFAULT 'AUTO'",
+        'city_partner_upline_amounts': 'JSON NULL',
         'city_partner_commission_rule_version': "VARCHAR(64) NOT NULL DEFAULT 'v1'",
         'city_partner_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
         'city_partner_direct_reward_amount': 'DECIMAL(18,2) NOT NULL DEFAULT 0',
