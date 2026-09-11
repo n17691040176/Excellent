@@ -478,7 +478,8 @@ async function initialize() {
 }
 
 function goBack() {
-  if (returnedFromPayment.value) {
+  // H5 navigateBack reports success even when a direct entry has no page to return to.
+  if (returnedFromPayment.value || getCurrentPages().length <= 1) {
     uni.reLaunch({ url: '/pages/orders/list' });
     return;
   }
