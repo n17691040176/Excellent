@@ -62,7 +62,10 @@ const out = path.resolve(__dirname, '../logs/local-test');
     await page.screenshot({ path: path.join(out, 'availability-closed-page.png') });
 
     await mode('CITY_PARTNER');
-    await page.locator('.seat-card').first().waitFor({ timeout: 22000 });
+    await page.locator('.province-card').first().waitFor({ timeout: 22000 });
+    assert.equal(await page.locator('.seat-card').count(), 0);
+    await page.locator('.province-card').first().click();
+    await page.locator('.seat-card').first().waitFor();
     await mode('ORIGINAL');
     await page.getByText('暂未开放', { exact: true }).waitFor({ timeout: 22000 });
     assert.equal(await page.locator('.seat-card, .seat-toolbar, .header-action').count(), 0);
@@ -71,6 +74,7 @@ const out = path.resolve(__dirname, '../logs/local-test');
     await page.goto(mobileUrl + '/pages/profile/index');
     await entry.waitFor();
     await entry.click();
+    await page.locator('.province-card').first().click();
     await page.locator('.seat-card').first().waitFor();
     assert.deepEqual(errors, []);
     const result = { profile_follows_mode_without_reload: true, direct_page_closed: true,

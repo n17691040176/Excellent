@@ -5,8 +5,25 @@
       <h3>城市合伙人席位</h3>
       <div><el-button @click="load">刷新</el-button><el-button type="primary" @click="edit()">创建席位</el-button></div>
     </div>
-    <el-input v-model="cityKeyword" placeholder="搜索城市或合伙人" clearable class="city-search" />
-    <el-table v-loading="loading" :data="pagedSeats" row-key="id" empty-text="暂无城市席位">
+    <div class="region-toolbar">
+      <div class="region-heading">
+        <el-button v-if="province" link type="primary" @click="selectProvince('')">‹ 全部省份</el-button>
+        <h4>{{ province || '选择省份' }}</h4>
+      </div>
+      <el-input v-model="cityKeyword" :placeholder="province ? '搜索省内城市或合伙人' : '搜索省份'" clearable class="city-search" />
+    </div>
+    <div v-if="failed" class="region-error"><el-empty description="加载失败"><el-button @click="load">重试</el-button></el-empty></div>
+    <div v-else-if="!province" v-loading="loading" class="province-list">
+      <div v-if="provinces.length" class="province-grid">
+        <button v-for="item in provinces" :key="item.name" class="province-card" @click="selectProvince(item.name)">
+          <span class="province-name">{{ item.name }}</span>
+          <span class="province-footer"><span>{{ item.count }} 个城市</span><span class="province-arrow">›</span></span>
+        </button>
+      </div>
+      <el-empty v-else-if="!loading" :description="cityKeyword.trim() ? '未找到该省份' : '暂无城市席位'" />
+    </div>
+    <template v-else>
+    <el-table v-loading="loading" :data="pagedSeats" row-key="id" :empty-text="cityKeyword.trim() ? '未找到匹配的城市或合伙人' : '暂无城市席位'">
       <el-table-column type="expand">
         <template #default="{ row }">
           <el-descriptions :column="2" border class="seat-detail">
@@ -17,7 +34,7 @@
           </el-descriptions>
         </template>
       </el-table-column>
-      <el-table-column label="城市" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.province }} / {{ row.city }}</template></el-table-column>
+      <el-table-column prop="city" label="城市" min-width="180" show-overflow-tooltip />
       <el-table-column label="当前合伙人" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ row.current_user_nickname || '空缺' }}</template></el-table-column>
       <el-table-column label="购买价格" min-width="130"><template #default="{ row }">¥{{ money(row.current_price) }}</template></el-table-column>
       <el-table-column label="涨幅" width="90"><template #default="{ row }">{{ row.price_growth_rate }}%</template></el-table-column>
@@ -26,6 +43,7 @@
       <el-table-column label="操作" width="240" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="edit(row)">配置</el-button><el-button link type="primary" @click="history(row)">结算记录</el-button><el-button link @click="historyId = row.id; auditVisible = true">修改记录</el-button></template></el-table-column>
     </el-table>
     <el-pagination v-model:current-page="seatPage" :page-size="10" :total="filteredSeats.length" layout="total, prev, pager, next" />
+    </template>
     </template>
     <el-dialog v-model="visible" :title="editingId ? '配置席位' : '创建席位'" width="520px">
       <el-form label-width="130px">
@@ -63,7 +81,6 @@
       <el-table-column prop="city" label="城市" />
       <el-table-column prop="paid_amount" label="已付金额" />
       <el-table-column prop="settlement_error" label="原因" min-width="240" show-overflow-tooltip />
-      <el-table-column label="处理" width="120"><template #default="{ row }"><el-button :loading="refundingId === row.order_id" :disabled="refundingId !== null" @click="refund(row)">申请退款</el-button></template></el-table-column>
     </el-table>
     <el-pagination v-model:current-page="unsettledPage" :page-size="20" :total="unsettledTotal" layout="total, prev, pager, next" @current-change="loadUnsettled" />
     </template>
@@ -71,22 +88,30 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { cityPartnerApi, orderApi } from '@/api/modules'
+import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { cityPartnerApi } from '@/api/modules'
 import { formatDateTime } from '@/utils/datetime'
 import { regionOptions } from '@/utils/region-options'
 import RuleHistoryDrawer from './RuleHistoryDrawer.vue'
-defineProps({ pendingOnly: Boolean })
+const props = defineProps({ pendingOnly: Boolean })
 function money(value) { return Number(value || 0).toFixed(2) }
 const cityOptions = regionOptions.map(p => ({ ...p, children: p.children.map(c => ({ label: c.label, value: c.value })) }))
 const regionPath = ref([]), changeReason = ref(''), auditVisible = ref(false), historyId = ref(null)
-const unsettled = ref([]), unsettledPage = ref(1), unsettledTotal = ref(0), refundingId = ref(null)
+const unsettled = ref([]), unsettledPage = ref(1), unsettledTotal = ref(0)
 const seats = ref([])
 const cityKeyword = ref(''), seatPage = ref(1)
-const filteredSeats = computed(() => seats.value.filter(row => `${row.province}${row.city}${row.current_user_nickname || ''}`.includes(cityKeyword.value.trim())))
+const province = ref(''), failed = ref(false)
+const provinces = computed(() => {
+  const groups = new Map()
+  for (const seat of seats.value) groups.set(seat.province, (groups.get(seat.province) || 0) + 1)
+  return Array.from(groups, ([name, count]) => ({ name, count })).filter(item => item.name.includes(cityKeyword.value.trim()))
+})
+const filteredSeats = computed(() => seats.value.filter(row => row.province === province.value && `${row.city}${row.current_user_nickname || ''}`.includes(cityKeyword.value.trim())))
 const pagedSeats = computed(() => filteredSeats.value.slice((seatPage.value - 1) * 10, seatPage.value * 10))
-watch(cityKeyword, () => { seatPage.value = 1 })
+function selectProvince(value) { province.value = value; cityKeyword.value = ''; seatPage.value = 1 }
+watch([cityKeyword, province], () => { seatPage.value = 1 })
+watch(() => filteredSeats.value.length, length => { seatPage.value = Math.min(seatPage.value, Math.max(1, Math.ceil(length / 10))) })
 const loading = ref(false)
 const visible = ref(false)
 const editingId = ref(null)
@@ -96,8 +121,13 @@ const form = ref({})
 const rotations = ref([])
 const historyVisible = ref(false)
 async function load() {
+  if (loading.value) return
   loading.value = true
-  try { seats.value = (await cityPartnerApi.list()).items } finally { loading.value = false }
+  failed.value = false
+  try {
+    seats.value = (await cityPartnerApi.list()).items || []
+    if (province.value && !seats.value.some(seat => seat.province === province.value)) selectProvince('')
+  } catch { failed.value = true } finally { loading.value = false }
 }
 function edit(row) {
   regionPath.value = row ? [row.province, row.city] : []
@@ -124,25 +154,24 @@ async function history(row) {
   historyVisible.value = true
 }
 async function loadUnsettled() { const data = await cityPartnerApi.unsettled({ page: unsettledPage.value }); unsettled.value = data.items; unsettledTotal.value = data.total }
-async function refund(row) {
-  try { await ElMessageBox.confirm(`为订单 ${row.order_no} 申请退款 ¥${row.paid_amount}？`, '确认未履约订单退款') } catch { return }
-  refundingId.value = row.order_id
-  try {
-    const result = await orderApi.refund(row.order_id)
-    if (result.completed) ElMessage.success('订单已退款')
-    else if (['FAILED', 'CLOSED', 'ABNORMAL'].includes(result.provider_status)) ElMessage.error('退款未成功，请到订单管理核对渠道结果')
-    else ElMessage.info('退款申请已提交，等待渠道处理')
-    await loadUnsettled()
-  } finally { refundingId.value = null }
-}
-onMounted(() => Promise.all([load(), loadUnsettled()]))
+watch(() => props.pendingOnly, value => value ? loadUnsettled() : load(), { immediate: true })
 </script>
 
 <style scoped>
 .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .panel-heading h3 { margin: 0; font-size: 18px; color: var(--text-primary); }
 .seat-detail { margin: 12px 24px; }
-.city-search { max-width: 300px; margin-bottom: 20px; }
+.region-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.region-heading { display: flex; align-items: center; gap: 20px; }
+.region-heading h4 { margin: 0; font-size: 16px; color: var(--text-primary); }
+.city-search { max-width: 300px; }
+.province-list { min-height: 160px; }
+.province-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+.province-card { display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 20px; min-width: 0; text-align: left; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-surface); color: var(--text-primary); font: inherit; cursor: pointer; transition: background .2s, border-color .2s; }
+.province-card:hover, .province-card:focus-visible { background: var(--primary-50); border-color: var(--primary-mid); }
+.province-name { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.province-footer { display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: var(--text-secondary); }
+.province-arrow { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--primary-deep); background: var(--primary-50); font-size: 22px; }
 .edit-notice { margin-bottom: 20px; }
 .el-pagination { margin-top: 20px; justify-content: flex-end; }
 </style>

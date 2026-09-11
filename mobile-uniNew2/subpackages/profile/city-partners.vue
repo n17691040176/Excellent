@@ -12,14 +12,27 @@
         <button :class="{ active: !mineOnly }" @click="mineOnly = false">全部城市</button>
         <button :class="{ active: mineOnly }" @click="mineOnly = true">我的城市</button>
       </view>
-      <input v-model="keyword" class="city-search" placeholder="搜索城市" confirm-type="search" />
+      <view class="region-heading">
+        <button v-if="province" class="region-back" @click="selectProvince('')">‹ 全部省份</button>
+        <text class="region-title">{{ province || '选择省份' }}</text>
+      </view>
+      <input :key="province" v-model="keyword" class="city-search" :placeholder="province ? '搜索省内城市' : '搜索省份'" confirm-type="search" />
     </view>
     <view v-if="loading" class="state-card">加载中...</view>
     <view v-else-if="failed" class="state-card"><text>加载失败</text><button class="retry-button" @click="load">重试</button></view>
-    <view v-else-if="!visibleSeats.length" class="state-card">{{ keyword ? '未找到该城市' : mineOnly ? '暂无持有城市' : '暂无城市席位' }}</view>
+    <template v-else-if="!province">
+      <view v-if="provinces.length" class="province-grid">
+        <button v-for="item in provinces" :key="item.name" class="province-card" @click="selectProvince(item.name)">
+          <text class="province-name">{{ item.name }}</text>
+          <view class="province-footer"><text>{{ item.count }} 个城市</text><text class="province-arrow">›</text></view>
+        </button>
+      </view>
+      <view v-else class="state-card">{{ keyword.trim() ? '未找到该省份' : mineOnly ? '暂无持有城市' : '暂无城市席位' }}</view>
+    </template>
+    <view v-else-if="!visibleSeats.length" class="state-card">{{ keyword.trim() ? '未找到该城市' : mineOnly ? '该省暂无持有城市' : '暂无城市席位' }}</view>
     <view v-else class="seat-list">
       <view v-for="seat in visibleSeats" :key="seat.id" class="seat-card">
-        <view class="seat-heading"><text class="seat-title">{{ seat.city }}</text><text class="seat-province">{{ seat.province }}</text></view>
+        <view class="seat-heading"><text class="seat-title">{{ seat.city }}</text><text v-if="seat.is_current_holder" class="seat-owned">已持有</text></view>
         <view class="seat-holder"><text>当前合伙人</text><text>{{ seat.current_user_nickname || '空缺' }}</text></view>
         <view class="seat-footer">
           <text class="seat-price">¥{{ Number(seat.current_price).toFixed(2) }}</text>
@@ -32,7 +45,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { cityPartnerApi } from '@/api/modules';
 import { useCityPartnerAvailability } from '@/composables/useCityPartnerAvailability';
 const { enabled, refresh } = useCityPartnerAvailability();
@@ -42,8 +55,24 @@ const failed = ref(false);
 const buying = ref(false);
 const keyword = ref('');
 const mineOnly = ref(false);
-const visibleSeats = computed(() => seats.value.filter(seat => (!mineOnly.value || seat.is_current_holder) && `${seat.province}${seat.city}`.includes(keyword.value.trim())));
+const province = ref('');
+const scopedSeats = computed(() => seats.value.filter(seat => !mineOnly.value || seat.is_current_holder));
+const provinces = computed(() => {
+  const groups = new Map();
+  for (const seat of scopedSeats.value) groups.set(seat.province, (groups.get(seat.province) || 0) + 1);
+  return Array.from(groups, ([name, count]) => ({ name, count }))
+    .filter(item => item.name.includes(keyword.value.trim()));
+});
+const visibleSeats = computed(() => scopedSeats.value.filter(seat => seat.province === province.value && seat.city.includes(keyword.value.trim())));
+function selectProvince(value) {
+  province.value = value;
+  keyword.value = '';
+  nextTick(() => uni.pageScrollTo({ scrollTop: 0, duration: 0 }));
+}
+watch(mineOnly, () => selectProvince(''));
+let loadVersion = 0;
 function goBack() {
+  if (province.value) { selectProvince(''); return; }
   if (getCurrentPages().length > 1) uni.navigateBack();
   else uni.switchTab({ url: '/pages/profile/index' });
 }
@@ -51,15 +80,18 @@ function showRules() {
   uni.showModal({ title: '城市合伙人规则', content: '每个城市仅一名合伙人，不可自己接替自己。成交后按该城市涨幅调整价格，达到上限后停止接替。城市合伙人订单不支持退款。', showCancel: false });
 }
 async function load() {
+  const version = ++loadVersion;
   loading.value = true;
   failed.value = false;
   try {
     const result = await cityPartnerApi.seats();
+    if (version !== loadVersion || !enabled.value) return;
     if (result.enabled === false) enabled.value = false;
     seats.value = enabled.value ? result.items || [] : [];
+    if (province.value && !seats.value.some(seat => seat.province === province.value)) selectProvince('');
   }
-  catch { failed.value = true; }
-  finally { loading.value = false; }
+  catch { if (version === loadVersion) failed.value = true; }
+  finally { if (version === loadVersion) loading.value = false; }
 }
 async function buy(seat) {
   if (buying.value || !seat.purchasable || !(await refresh())) return;
@@ -79,7 +111,9 @@ async function buy(seat) {
   });
 }
 watch(enabled, (value) => {
+  loadVersion++;
   seats.value = [];
+  loading.value = false;
   if (value) load();
 });
 </script>
@@ -87,11 +121,20 @@ watch(enabled, (value) => {
 <style scoped>
 @import '@/styles/elegant.css';
 .seat-page { min-height: 100vh; padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); background: var(--bg); color: var(--text); }
-.page-header { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 32rpx; padding-top: calc(24rpx + env(safe-area-inset-top)); background: var(--card); border-bottom: 1rpx solid var(--border-light); }
+.page-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 24rpx 32rpx; padding-top: calc(24rpx + env(safe-area-inset-top)); background: var(--card); border-bottom: 1rpx solid var(--border-light); }
 .header-title { font-size: 32rpx; font-weight: 700; }
 .header-action { width: 64rpx; margin: 0; padding: 0; background: transparent; color: var(--primary); font-size: 28rpx; line-height: 64rpx; }
 button::after { border: 0; }
 .seat-toolbar { padding: 24rpx; }
+.region-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 20rpx; margin-bottom: 24rpx; }
+.region-title { font-size: 34rpx; font-weight: 700; line-height: 1.5; overflow-wrap: anywhere; }
+.region-back { margin: 0; padding: 0; background: transparent; color: var(--primary); font-size: 28rpx; line-height: 64rpx; }
+.province-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20rpx; padding: 0 24rpx; }
+.province-card { display: flex; flex-direction: column; justify-content: space-between; width: 100%; min-width: 0; min-height: 180rpx; margin: 0; padding: 28rpx; text-align: left; background: var(--card); border: 1rpx solid var(--border-light); border-radius: var(--radius-xl); line-height: 1.5; }
+.province-card:active { background: var(--primary-bg); }
+.province-name { font-size: 30rpx; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.province-footer { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; margin-top: 20rpx; color: var(--text-muted); font-size: 26rpx; }
+.province-arrow { display: flex; align-items: center; justify-content: center; width: 44rpx; height: 44rpx; border-radius: 50%; background: var(--primary-bg); color: var(--primary); font-size: 32rpx; }
 .seat-tabs { display: flex; gap: 32rpx; margin-bottom: 24rpx; }
 .seat-tabs button { padding: 8rpx 0; margin: 0; border-radius: 0; background: transparent; color: var(--text-muted); font-size: 28rpx; line-height: 1.8; border-bottom: 4rpx solid transparent; }
 .seat-tabs button.active { color: var(--primary); font-weight: 600; border-color: var(--primary); }
@@ -101,7 +144,7 @@ button::after { border: 0; }
 .seat-heading, .seat-holder, .seat-footer { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
 .seat-heading { align-items: baseline; }
 .seat-title { font-size: 32rpx; font-weight: 700; overflow-wrap: anywhere; }
-.seat-province { flex-shrink: 0; font-size: 26rpx; color: var(--text-muted); }
+.seat-owned { flex-shrink: 0; padding: 6rpx 16rpx; border-radius: var(--radius-full); font-size: 26rpx; color: var(--primary); background: var(--primary-bg); }
 .seat-holder { margin-top: 24rpx; font-size: 26rpx; color: var(--text-muted); }
 .seat-holder text:last-child { color: var(--text); text-align: right; overflow-wrap: anywhere; }
 .seat-footer { margin-top: 24rpx; padding-top: 24rpx; border-top: 1rpx solid var(--border-light); flex-wrap: wrap; }
